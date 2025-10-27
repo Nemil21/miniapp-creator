@@ -9,7 +9,7 @@ import {
   getStage0ContextGathererPrompt,
   executeFollowUpPipeline
 } from './llmOptimizer';
-import { applyDiffHunks, validateDiff, validateDiffHunksAgainstFile } from './diffUtils';
+import { applyDiffHunks, validateDiff } from './diffUtils';
 import { executeToolCalls } from './toolExecutionService';
 
 export interface DiffBasedResult {
@@ -26,6 +26,7 @@ export interface DiffBasedResult {
     }>;
     contextSummary: string;
   };
+  validationResult?: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> };
 }
 
 export interface DiffBasedOptions {
@@ -105,10 +106,17 @@ export async function executeDiffBasedPipeline(
     userPrompt,
     currentFiles,
     callLLM,
-    projectId
+    projectId,
+    projectDir
   );
 
   const generatedFilesFromPipeline = pipelineResult.files;
+  const validationResult = pipelineResult.validationResult;
+  
+  // Extract diffs from pipeline result to track what was applied
+  if (pipelineResult.diffs && pipelineResult.diffs.length > 0) {
+    diffs.push(...pipelineResult.diffs);
+  }
 
   // Process the generated files and extract diffs
   for (const file of generatedFilesFromPipeline) {
@@ -142,12 +150,19 @@ export async function executeDiffBasedPipeline(
   // Files will be validated by TypeScript compiler during build/preview
   console.log('✅ Diff-Based Pipeline Complete');
   console.log(`Generated ${generatedFiles.length} files with ${diffs.length} diffs`);
+  
+  if (validationResult) {
+    console.log(`✅ Validation Success: ${validationResult.success}`);
+    console.log(`❌ Validation Errors: ${validationResult.errors.length}`);
+    console.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
+  }
 
   return {
     files: generatedFiles,
     diffs,
     patchPlan: { patches: [] },
-    contextGathered
+    contextGathered,
+    validationResult
   };
 }
 
@@ -172,40 +187,9 @@ export function applyDiffsToFiles(
     console.log('Processing diff for:', diff.filename);
     
     if (currentContent[diff.filename] !== undefined) {
-      // File exists - validate diff before applying
-      const validation = validateDiffHunksAgainstFile(
-        diff.filename,
-        currentContent[diff.filename],
-        diff.hunks
-      );
-      
-        if (!validation.isValid) {
-          console.warn(`⚠️ Diff validation failed for ${diff.filename}:`);
-          validation.errors.forEach(error => console.warn(`   - ${error}`));
-          console.warn(`   Attempting to apply diff with warnings...`);
-
-          // Try to apply diff anyway but catch errors
-          try {
-            const newContent = applyDiffHunks(currentContent[diff.filename], diff.hunks);
-            console.log('✅ Diff applied successfully despite validation warnings');
-            result.push({
-              filename: diff.filename,
-              content: newContent
-            });
-            modifiedFiles.add(diff.filename);
-            continue;
-          } catch (error) {
-            console.warn(`❌ Diff application failed: ${error instanceof Error ? error.message : String(error)}`);
-            console.warn(`   Using original content as fallback`);
-            // Add original content without changes as fallback
-            result.push({
-              filename: diff.filename,
-              content: currentContent[diff.filename]
-            });
-            modifiedFiles.add(diff.filename);
-            continue;
-          }
-        }
+      // File exists - apply diff with fuzzy matching for line number corrections
+      // Skip pre-validation since fuzzy matching in applyDiffHunks handles misalignments
+      console.log(`Applying diff to existing file: ${diff.filename}`);
       
       // Apply diff to current content
       try {
@@ -245,9 +229,8 @@ export function applyDiffsToFiles(
         const contentLines = diffLines
           .filter(line => line.startsWith('+') && !line.startsWith('+++'))
           .map(line => line.substring(1))
-          .join('\n');
         
-        const newContent = contentLines;
+        const newContent = contentLines.join('\n');
         result.push({
           filename: diff.filename,
           content: newContent

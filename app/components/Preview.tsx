@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ProjectList } from './ProjectList';
 
 interface GeneratedProject {
@@ -13,6 +13,7 @@ interface GeneratedProject {
     aliasSuccess?: boolean;
     isNewDeployment?: boolean;
     hasPackageChanges?: boolean;
+    lastUpdated?: number; // Timestamp to track when project was last updated
 }
 
 interface Project {
@@ -35,6 +36,16 @@ export function Preview({ currentProject, onProjectSelect, onNewProject }: Previ
     const [iframeError, setIframeError] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [iframeKey, setIframeKey] = useState(0);
+
+    // Force iframe refresh when project is updated (after edits)
+    useEffect(() => {
+        if (currentProject?.lastUpdated) {
+            console.log('🔄 Project updated, refreshing iframe at:', new Date(currentProject.lastUpdated).toISOString());
+            setIframeKey(prev => prev + 1);
+            setIsLoading(true);
+            setIframeError(false);
+        }
+    }, [currentProject?.lastUpdated]);
 
     if (!currentProject) {
         return (

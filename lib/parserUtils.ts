@@ -234,6 +234,28 @@ export function parseStage2PatchResponse(responseText: string): PatchPlan {
 }
 
 /**
+ * Sanitize Stage 3 response by removing unexpected fields that may have been included by mistake
+ */
+function sanitizeStage3Response(parsed: Array<{ filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }>): { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }[] {
+  return parsed.map(item => {
+    const sanitized: { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] } = {
+      filename: item.filename,
+      operation: item.operation || 'modify'
+    };
+    
+    // Only include valid Stage 3 fields
+    if (item.content !== undefined) sanitized.content = item.content;
+    if (item.unifiedDiff !== undefined) sanitized.unifiedDiff = item.unifiedDiff;
+    if (item.diffHunks !== undefined) sanitized.diffHunks = item.diffHunks;
+    
+    // Remove unexpected fields like: changes, implementationNotes, intentSpec, dependencies, etc.
+    // These are Stage 2 fields that sometimes leak into Stage 3 responses
+    
+    return sanitized;
+  });
+}
+
+/**
  * Parse Stage 3 Code Generator response with robust JSON parsing
  */
 export function parseStage3CodeResponse(responseText: string): { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }[] {
@@ -245,7 +267,8 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
   if (startMarkIdx !== -1 && endMarkIdx !== -1) {
     const candidate = responseText.slice(startMarkIdx + startMarker.length, endMarkIdx).trim();
     try {
-      return tryParseJsonText(candidate) as { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }[];
+      const parsed = tryParseJsonText(candidate);
+      return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
     } catch (e) {
       console.warn('Stage 3: Parsing between markers failed, attempting repairs:', e);
       
@@ -253,7 +276,8 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
       const repaired = repairJsonArray(candidate);
       if (repaired) {
         try {
-          return tryParseJsonText(repaired) as { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }[];
+          const parsed = tryParseJsonText(repaired);
+          return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
         } catch (repairError) {
           console.warn('Stage 3: JSON repair also failed:', repairError);
         }
@@ -265,7 +289,8 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
   const balanced = findFirstBalancedJson(responseText);
   if (balanced) {
     try {
-      return tryParseJsonText(balanced) as { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }[];
+      const parsed = tryParseJsonText(balanced);
+      return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
     } catch (e) {
       console.warn('Stage 3: Parsing balanced JSON failed:', e);
     }
@@ -273,7 +298,8 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
 
   // 3) Fallback: try direct parsing
   try {
-    return JSON.parse(responseText) as { filename: string; content?: string; unifiedDiff?: string; operation?: string; diffHunks?: DiffHunk[] }[];
+    const parsed = JSON.parse(responseText);
+    return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
   } catch {
     throw new Error('Stage 3: All JSON parsing strategies failed');
   }

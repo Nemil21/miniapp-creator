@@ -199,9 +199,17 @@ async function callClaudeWithLogging(
   console.log("  Max Tokens:", modelConfig.maxTokens);
   console.log("  Reason:", modelConfig.reason);
   
-  // Warn about large prompts that might cause rate limiting
+  // Warn about large prompts that might cause rate limiting or truncation
   if (systemPrompt.length > 50000) {
-    console.warn(`⚠️ Large system prompt (${systemPrompt.length} chars) may cause rate limiting`);
+    const estimatedTokens = Math.ceil(systemPrompt.length / 3.5); // Rough estimate
+    console.warn(`⚠️ Large system prompt: ${systemPrompt.length} chars (~${estimatedTokens} tokens)`);
+    console.warn(`   This may cause:`);
+    console.warn(`   - Rate limiting from API`);
+    console.warn(`   - Response truncation if input + output exceeds context window`);
+    console.warn(`   - Higher costs per request`);
+    if (stageType === 'STAGE_2_PATCH_PLANNER') {
+      console.warn(`   💡 Stage 2 now filters to target files only - check targetFiles in Intent Spec`);
+    }
   }
 
   const body = {
@@ -898,13 +906,13 @@ export async function POST(request: NextRequest) {
 
       // Create a fallback preview data object
       previewData = {
-        url: `http://localhost:8080/p/${projectId}`,
+        url: `${PREVIEW_API_BASE}/p/${projectId}`,
         status: "error",
         port: 3000,
-        previewUrl: `http://localhost:8080/p/${projectId}`,
+        previewUrl: `${PREVIEW_API_BASE}/p/${projectId}`,
       };
 
-      projectUrl = `http://localhost:8080/p/${projectId}`;
+      projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
 
       console.log("⚠️ Using fallback preview URL:", projectUrl);
       console.log("⚠️ Continuing with project creation despite preview error");
@@ -1293,18 +1301,111 @@ export async function PATCH(request: NextRequest) {
 
       console.log(`✅ Generated ${result.files.length} files with ${result.diffs.length} diffs`);
 
-      // Write changes to generated directory
-      await writeFilesToDir(userDir, result.files);
+      // Check validation result and retry with LLM if there are errors
+      let finalResult = result;
+      const maxRetries = 2;
+      let retryCount = 0;
+      
+      while (finalResult.validationResult && !finalResult.validationResult.success && retryCount < maxRetries) {
+        retryCount++;
+        console.log(`\n⚠️  Validation failed on attempt ${retryCount}. Sending errors to LLM for fixing...`);
+        console.log(`❌ Errors: ${finalResult.validationResult.errors.length}`);
+        console.log(`⚠️  Warnings: ${finalResult.validationResult.warnings.length}`);
+        
+        // Format validation errors with file content for better context
+        const errorsByFile = new Map<string, Array<{ file: string; line?: number; column?: number; message: string; severity: string }>>();
+        for (const err of finalResult.validationResult.errors) {
+          if (!errorsByFile.has(err.file)) {
+            errorsByFile.set(err.file, []);
+          }
+          errorsByFile.get(err.file)!.push(err);
+        }
+        
+        // Build detailed error context with full file content
+        const errorDetails: string[] = [];
+        for (const [filename, errors] of errorsByFile.entries()) {
+          const file = finalResult.files.find(f => f.filename === filename);
+          if (file) {
+            errorDetails.push(`\n### ${filename}\n`);
+            errorDetails.push(`Errors in this file:`);
+            errors.forEach(err => {
+              errorDetails.push(`  - Line ${err.line}:${err.column}: ${err.message}`);
+            });
+            errorDetails.push(`\nFull file content (errors marked with >>>):\n`);
+            
+            // Send the complete file with error lines marked
+            const lines = file.content.split('\n');
+            const errorLines = new Set(errors.map(e => (e.line ?? 1) - 1));
+            lines.forEach((line, idx) => {
+              const marker = errorLines.has(idx) ? '>>> ' : '    ';
+              errorDetails.push(`${marker}${idx + 1}: ${line}`);
+            });
+          } else {
+            errorDetails.push(`\n### ${filename}\n`);
+            errorDetails.push(`Errors: ${errors.map(e => `Line ${e.line ?? '?'}: ${e.message}`).join(', ')}`);
+          }
+        }
+        
+        const errorContext = errorDetails.join('\n');
+        
+        // Create retry prompt with detailed error context
+        const retryPrompt = `${prompt}\n\n⚠️  VALIDATION ERRORS DETECTED - PLEASE FIX:\n\nThe previous generation had ${finalResult.validationResult.errors.length} compilation errors. Here are the errors with code context:\n${errorContext}\n\nPlease analyze these errors carefully and fix them. Common issues to check:\n- Missing type imports\n- Incorrect type definitions\n- JSX syntax errors (use {{'>'}} instead of > in JSX)\n- Type mismatches\n\nRegenerate the corrected code with all errors fixed.`;
+        
+        console.log(`🔄 Retry ${retryCount}/${maxRetries}: Calling LLM with error context...`);
+        
+        // Retry with error context
+        try {
+          finalResult = await executeDiffBasedPipeline(
+            retryPrompt,
+            currentFiles,
+            callClaudeWithLogging,
+            {
+              enableContextGathering: true,
+              enableDiffValidation: true,
+              enableLinting: true
+            },
+            projectId,
+            userDir
+          );
+          
+          console.log(`✅ Retry ${retryCount} generated ${finalResult.files.length} files`);
+          
+          if (finalResult.validationResult?.success) {
+            console.log(`🎉 Validation passed on retry ${retryCount}!`);
+            break;
+          }
+        } catch (retryError) {
+          console.error(`❌ Retry ${retryCount} failed:`, retryError);
+          break; // Stop retrying on errors
+        }
+      }
+      
+      // If still failing after retries, log but continue (save best attempt)
+      if (finalResult.validationResult && !finalResult.validationResult.success) {
+        console.error(`❌ Validation still failing after ${retryCount} retries`);
+        console.error(`❌ Final error count: ${finalResult.validationResult.errors.length}`);
+        console.log(`📝 Saving best attempt to database with validation warnings...`);
+      }
 
-      // Update files in the preview (optional - may not be supported on Railway)
+      // Write changes to generated directory
+      await writeFilesToDir(userDir, finalResult.files);
+
+      // Update files in the preview - only deploy if validation passed
       try {
         console.log("Updating files in preview...");
-        await updatePreviewFiles(projectId, result.files, accessToken);
+        await updatePreviewFiles(projectId, finalResult.files, accessToken, finalResult.validationResult);
         console.log("Preview files updated successfully");
       } catch (previewError) {
-        console.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
-        console.log("📁 Files have been saved locally and to database");
-        // Don't fail the request - preview updates are optional
+        // Check if this is a validation failure (400 status)
+        const errorMessage = previewError instanceof Error ? previewError.message : String(previewError);
+        if (errorMessage.includes('400') && errorMessage.includes('Validation failed')) {
+          console.error("❌ Validation failed - preview deployment blocked");
+          // Continue to save to database even if preview blocked
+        } else {
+          // For other errors (network, Railway issues), treat as optional
+          console.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
+        }
+        console.log("📁 Files will be saved to database");
       }
 
       // Update project files in database
@@ -1383,7 +1484,7 @@ export async function PATCH(request: NextRequest) {
         files: result.files,
         diffs: result.diffs,
         changed: result.files.map(f => f.filename), // Add changedFiles for frontend compatibility
-        previewUrl: updatedPreviewUrl || `http://localhost:8080/p/${projectId}`,
+        previewUrl: updatedPreviewUrl || `${PREVIEW_API_BASE}/p/${projectId}`,
         vercelUrl: updatedPreviewUrl, // Include Vercel URL
         message: "Project updated with diff-based changes",
         patchId: savedPatch?.id, // Include patch ID for tracking
@@ -1409,7 +1510,7 @@ export async function PATCH(request: NextRequest) {
       console.log(
         "🔄 Starting enhanced pipeline with context gathering..."
       );
-      const enhancedResult = await executeEnhancedPipeline(
+      let enhancedResult = await executeEnhancedPipeline(
         prompt,
         currentFiles,
         projectId,
@@ -1423,6 +1524,93 @@ export async function PATCH(request: NextRequest) {
         throw new Error(enhancedResult.error || "Enhanced pipeline failed");
       }
 
+      // Check validation result and retry with LLM if there are errors
+      const maxRetries = 2;
+      let retryCount = 0;
+      
+      while (enhancedResult.validationResult && !enhancedResult.validationResult.success && retryCount < maxRetries) {
+        retryCount++;
+        console.log(`\n⚠️  Validation failed on attempt ${retryCount}. Sending errors to LLM for fixing...`);
+        console.log(`❌ Errors: ${enhancedResult.validationResult.errors.length}`);
+        console.log(`⚠️  Warnings: ${enhancedResult.validationResult.warnings.length}`);
+        
+        // Format validation errors with file content for better context
+        const errorsByFile = new Map<string, Array<{ file: string; line?: number; column?: number; message: string; severity: string }>>();
+        for (const err of enhancedResult.validationResult.errors) {
+          if (!errorsByFile.has(err.file)) {
+            errorsByFile.set(err.file, []);
+          }
+          errorsByFile.get(err.file)!.push(err);
+        }
+        
+        // Build detailed error context with full file content
+        const errorDetails: string[] = [];
+        for (const [filename, errors] of errorsByFile.entries()) {
+          const file = enhancedResult.files.find(f => f.filename === filename);
+          if (file) {
+            errorDetails.push(`\n### ${filename}\n`);
+            errorDetails.push(`Errors in this file:`);
+            errors.forEach(err => {
+              errorDetails.push(`  - Line ${err.line}:${err.column}: ${err.message}`);
+            });
+            errorDetails.push(`\nFull file content (errors marked with >>>):\n`);
+            
+            // Send the complete file with error lines marked
+            const lines = file.content.split('\n');
+            const errorLines = new Set(errors.map(e => (e.line ?? 1) - 1));
+            lines.forEach((line, idx) => {
+              const marker = errorLines.has(idx) ? '>>> ' : '    ';
+              errorDetails.push(`${marker}${idx + 1}: ${line}`);
+            });
+          } else {
+            errorDetails.push(`\n### ${filename}\n`);
+            errorDetails.push(`Errors: ${errors.map(e => `Line ${e.line ?? '?'}: ${e.message}`).join(', ')}`);
+          }
+        }
+        
+        const errorContext = errorDetails.join('\n');
+        
+        // Create retry prompt with detailed error context
+        const retryPrompt = `${prompt}\n\n⚠️  VALIDATION ERRORS DETECTED - PLEASE FIX:\n\nThe previous generation had ${enhancedResult.validationResult.errors.length} compilation errors. Here are the errors with code context:\n${errorContext}\n\nPlease analyze these errors carefully and fix them. Common issues to check:\n- Missing type imports\n- Incorrect type definitions\n- JSX syntax errors (use {{'>'}} instead of > in JSX)\n- Type mismatches\n\nRegenerate the corrected code with all errors fixed.`;
+        
+        console.log(`🔄 Retry ${retryCount}/${maxRetries}: Calling LLM with error context...`);
+        
+        // Retry with error context
+        try {
+          enhancedResult = await executeEnhancedPipeline(
+            retryPrompt,
+            currentFiles,
+            projectId,
+            accessToken,
+            callLLM,
+            false,
+            userDir
+          );
+          
+          if (!enhancedResult.success) {
+            console.error(`❌ Retry ${retryCount} pipeline failed`);
+            break;
+          }
+          
+          console.log(`✅ Retry ${retryCount} generated ${enhancedResult.files.length} files`);
+          
+          if (enhancedResult.validationResult?.success) {
+            console.log(`🎉 Validation passed on retry ${retryCount}!`);
+            break;
+          }
+        } catch (retryError) {
+          console.error(`❌ Retry ${retryCount} failed:`, retryError);
+          break; // Stop retrying on errors
+        }
+      }
+      
+      // If still failing after retries, log but continue (save best attempt)
+      if (enhancedResult.validationResult && !enhancedResult.validationResult.success) {
+        console.error(`❌ Validation still failing after ${retryCount} retries`);
+        console.error(`❌ Final error count: ${enhancedResult.validationResult.errors.length}`);
+        console.log(`📝 Saving best attempt to database with validation warnings...`);
+      }
+
       const generatedFiles = enhancedResult.files.map(f => ({
         filename: f.filename,
         content: f.content
@@ -1431,15 +1619,22 @@ export async function PATCH(request: NextRequest) {
       // Write changes to generated directory
       await writeFilesToDir(userDir, generatedFiles);
 
-      // Update files in the preview (optional - may not be supported on Railway)
+      // Update files in the preview - only deploy if validation passed
       try {
         console.log("Updating files in preview...");
-        await updatePreviewFiles(projectId, generatedFiles, accessToken);
+        await updatePreviewFiles(projectId, generatedFiles, accessToken, enhancedResult.validationResult);
         console.log("Preview files updated successfully");
       } catch (previewError) {
-        console.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
-        console.log("📁 Files have been saved locally and to database");
-        // Don't fail the request - preview updates are optional
+        // Check if this is a validation failure (400 status)
+        const errorMessage = previewError instanceof Error ? previewError.message : String(previewError);
+        if (errorMessage.includes('400') && errorMessage.includes('Validation failed')) {
+          console.error("❌ Validation failed - preview deployment blocked");
+          // Continue to save to database even if preview blocked
+        } else {
+          // For other errors (network, Railway issues), treat as optional
+          console.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
+        }
+        console.log("📁 Files will be saved to database");
       }
 
       // Update project files in database
@@ -1485,7 +1680,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({
         success: true,
         changed: generatedFiles.map((f) => f.filename),
-        previewUrl: updatedPreviewUrl || `http://localhost:8080/p/${projectId}`,
+        previewUrl: updatedPreviewUrl || `${PREVIEW_API_BASE}/p/${projectId}`,
         vercelUrl: updatedPreviewUrl, // Include Vercel URL
       });
     }

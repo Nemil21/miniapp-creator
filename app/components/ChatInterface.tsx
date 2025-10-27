@@ -16,6 +16,7 @@ interface GeneratedProject {
     aliasSuccess?: boolean;
     isNewDeployment?: boolean;
     hasPackageChanges?: boolean;
+    lastUpdated?: number; // Timestamp to trigger iframe refresh after edits
 }
 
 interface ChatMessage {
@@ -45,6 +46,9 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
 
     // Timeout ref for cleanup to prevent duplicate calls
     const generationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    
+    // Flag to prevent chat state overwrites during message sending
+    const isSendingMessageRef = useRef(false);
 
 
     // Chat session state - persist chatSessionId in sessionStorage to survive re-mounts
@@ -76,8 +80,15 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                 currentProject: currentProject?.projectId,
                 sessionToken: !!sessionToken,
                 currentPhase,
+                isSendingMessage: isSendingMessageRef.current,
                 timestamp: new Date().toISOString()
             });
+
+            // Skip loading if we're currently sending a message to prevent state overwrites
+            if (isSendingMessageRef.current) {
+                console.log('⏭️ Skipping chat load - message sending in progress');
+                return;
+            }
 
             if (currentProject?.projectId && sessionToken) {
                 // Set phase to 'editing' when an existing project is loaded
@@ -176,7 +187,11 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
 
     const handleSendMessage = async (userMessage: string) => {
         if (!chatSessionId || !sessionToken) return;
-        // setPrompt('');
+        
+        // Set flag to prevent chat state overwrites during message sending
+        isSendingMessageRef.current = true;
+        
+        setPrompt(''); // Clear input immediately
         setAiLoading(true);
 
 
@@ -218,21 +233,41 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                 console.log('🔄 Directly applying changes to existing project...');
 
                 try {
-                    // Add processing message
-                    setChat(prev => [
-                        ...prev,
-                        {
-                            role: 'ai',
-                            content: 'Processing your request and updating the project...',
-                            phase: 'editing',
-                            timestamp: Date.now()
+                    // Save user message to database first
+                    if (currentProject?.projectId) {
+                        try {
+                            await fetch(`/api/projects/${currentProject.projectId}/chat`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                                body: JSON.stringify({
+                                    role: 'user',
+                                    content: userMessage,
+                                    phase: 'editing'
+                                })
+                            });
+                            console.log('💾 User message saved to database');
+                        } catch (error) {
+                            console.warn('Failed to save user message to database:', error);
                         }
-                    ]);
+                    }
 
-                    // Directly call the multi-stage pipeline for updates
+                    // Add processing message
+                    const processingMessage = {
+                        role: 'ai' as const,
+                        content: 'Processing your request and updating the project...',
+                        phase: 'editing' as const,
+                        timestamp: Date.now()
+                    };
+                    setChat(prev => [...prev, processingMessage]);
+
+                    // Use async job polling for edits (like initial generation)
                     const updateResponse = await fetch('/api/generate', {
                         method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'Authorization': `Bearer ${sessionToken}`,
+                            'X-Use-Async-Processing': 'true' // Enable async mode for background processing
+                        },
                         body: JSON.stringify({
                             projectId: currentProject?.projectId,
                             prompt: userMessage,
@@ -240,31 +275,117 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                         }),
                     });
 
-                    if (updateResponse.ok) {
-                        const updateData = await updateResponse.json();
-                        console.log('✅ Changes applied successfully:', updateData.changed);
+                    // Check if async job was created (202 Accepted)
+                    if (updateResponse.status === 202) {
+                        const jobData = await updateResponse.json();
+                        console.log('🔄 Async edit job created:', jobData.jobId);
 
-                        // Update currentProject with new preview URL to refresh iframe
+                        // Update processing message to show polling
+                        setChat(prev => {
+                            const newChat = [...prev];
+                            if (newChat.length > 0 && newChat[newChat.length - 1].role === 'ai') {
+                                newChat[newChat.length - 1].content = `Processing your changes... This may take 2-5 minutes. Job ID: ${jobData.jobId.substring(0, 8)}...`;
+                            }
+                            return newChat;
+                        });
+
+                        // Poll for job completion
+                        const result = await pollJobStatus(jobData.jobId);
+                        console.log('✅ Edit job completed:', result);
+
+                        // Update project with new URLs and timestamp to trigger iframe refresh
+                        if (currentProject) {
+                            const updatedProject: GeneratedProject = {
+                                ...currentProject,
+                                previewUrl: result.previewUrl || currentProject.previewUrl,
+                                vercelUrl: result.vercelUrl || currentProject.vercelUrl,
+                                url: result.previewUrl || result.vercelUrl || currentProject.url,
+                                lastUpdated: Date.now(), // Add timestamp to force iframe refresh
+                            };
+                            console.log('🔄 Updating project with timestamp:', updatedProject.lastUpdated);
+                            onProjectGenerated(updatedProject);
+                        }
+
+                        // Show success message with actual file count
+                        const changedFiles = result.generatedFiles || [];
+                        const successContent = `Changes applied successfully! I've updated ${changedFiles.length} files. The preview should reflect your changes shortly.`;
+                        
+                        setChat(prev => {
+                            const newChat = [...prev];
+                            if (newChat.length > 0 && newChat[newChat.length - 1].role === 'ai') {
+                                newChat[newChat.length - 1].content = successContent;
+                                newChat[newChat.length - 1].changedFiles = changedFiles;
+                            }
+                            return newChat;
+                        });
+
+                        // Save AI success message to database
+                        if (currentProject?.projectId) {
+                            try {
+                                await fetch(`/api/projects/${currentProject.projectId}/chat`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                                    body: JSON.stringify({
+                                        role: 'ai',
+                                        content: successContent,
+                                        phase: 'editing',
+                                        changedFiles: changedFiles
+                                    })
+                                });
+                                console.log('💾 AI success message saved to database');
+                            } catch (error) {
+                                console.warn('Failed to save AI message to database:', error);
+                            }
+                        }
+                    } else if (updateResponse.ok) {
+                        // Fallback: synchronous response (shouldn't happen with async mode)
+                        const updateData = await updateResponse.json();
+                        console.log('✅ Changes applied successfully (sync mode):', updateData.changed);
+
+                        // Update currentProject with new preview URL and timestamp to refresh iframe
                         if (currentProject) {
                             const updatedProject: GeneratedProject = {
                                 ...currentProject,
                                 previewUrl: updateData.previewUrl || currentProject.previewUrl,
                                 vercelUrl: updateData.vercelUrl || currentProject.vercelUrl,
                                 url: updateData.previewUrl || updateData.vercelUrl || currentProject.url,
+                                lastUpdated: Date.now(), // Add timestamp to force iframe refresh
                             };
-                            console.log('🔄 Updating preview URL:', updatedProject.previewUrl);
+                            console.log('🔄 Updating project with timestamp:', updatedProject.lastUpdated);
                             onProjectGenerated(updatedProject);
                         }
 
+                        // Prepare success message
+                        const successContent = `Changes applied successfully! I've updated ${updateData.changed?.length || 0} files. The preview should reflect your changes shortly.`;
+                        
                         // Update the last AI message with success
                         setChat(prev => {
                             const newChat = [...prev];
                             if (newChat.length > 0 && newChat[newChat.length - 1].role === 'ai') {
-                                newChat[newChat.length - 1].content = `Changes applied successfully! I've updated ${updateData.changed?.length || 0} files. The preview should reflect your changes shortly.`;
+                                newChat[newChat.length - 1].content = successContent;
                                 newChat[newChat.length - 1].changedFiles = updateData.changed || [];
                             }
                             return newChat;
                         });
+
+                        // Save AI success message to database
+                        if (currentProject?.projectId) {
+                            try {
+                                await fetch(`/api/projects/${currentProject.projectId}/chat`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                                    body: JSON.stringify({
+                                        role: 'ai',
+                                        content: successContent,
+                                        phase: 'editing',
+                                        changedFiles: updateData.changed || []
+                                    })
+                                });
+                                console.log('💾 AI success message saved to database');
+                            } catch (error) {
+                                console.warn('Failed to save AI message to database:', error);
+                            }
+                        }
                     } else {
                         const errorData = await updateResponse.json();
                         throw new Error(errorData.error || 'Failed to apply changes');
@@ -272,18 +393,40 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                 } catch (updateError) {
                     console.error('Failed to apply changes:', updateError);
 
+                    const errorContent = '❌ Sorry, I encountered an error while applying the changes. Please try again.';
+                    
                     // Update the last AI message with error
                     setChat(prev => {
                         const newChat = [...prev];
                         if (newChat.length > 0 && newChat[newChat.length - 1].role === 'ai') {
-                            newChat[newChat.length - 1].content = '❌ Sorry, I encountered an error while applying the changes. Please try again.';
+                            newChat[newChat.length - 1].content = errorContent;
                         }
                         return newChat;
                     });
+
+                    // Save error message to database
+                    if (currentProject?.projectId) {
+                        try {
+                            await fetch(`/api/projects/${currentProject.projectId}/chat`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                                body: JSON.stringify({
+                                    role: 'ai',
+                                    content: errorContent,
+                                    phase: 'editing'
+                                })
+                            });
+                            console.log('💾 AI error message saved to database');
+                        } catch (error) {
+                            console.warn('Failed to save AI error message to database:', error);
+                        }
+                    }
                 } finally {
                     // IMPORTANT: Reset aiLoading before early return
                     setAiLoading(false);
                     setPrompt('');
+                    // Clear the sending flag
+                    isSendingMessageRef.current = false;
                 }
 
                 return; // Skip the rest of the function since we handled the editing phase
@@ -383,6 +526,8 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
         } finally {
             setAiLoading(false);
             setPrompt('');
+            // Clear the sending flag
+            isSendingMessageRef.current = false;
         }
     };
 
@@ -846,7 +991,7 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                         value={prompt}
                         onChange={handleInputChange}
                         placeholder="Ask Minidev"
-                        className="w-full max-w-full max-h-[100px] overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium max-h-[100px]"
+                        className="w-full max-w-full max-h-[100px] overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium"
                         disabled={aiLoading || isGenerating}
                         rows={1}
                         onKeyDown={(e) => {

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getGenerationJobById, updateGenerationJobStatus, getPendingGenerationJobs } from "../../../../lib/database";
 import { executeGenerationJob } from "../../../../lib/generationWorker";
 
+// Extend function timeout to 5 minutes (max for Vercel Pro)
+// This allows long-running generation jobs to complete
+export const maxDuration = 600; // 10 minutes in seconds
+
 /**
  * Background worker endpoint for processing generation jobs
  * This endpoint should be called periodically (e.g., via a cron job or polling)

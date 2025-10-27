@@ -317,24 +317,66 @@ export function applyDiffHunks(
         }
       }
 
-      // Find the actual start position by matching the first context line
-      const firstContextLine = parsedLines.find(p => p.type === 'context');
-      if (firstContextLine) {
-        // Search for the first context line within a wider range for better fuzzy matching
-        const searchStart = Math.max(0, startLineIndex - 50);
-        const searchEnd = Math.min(result.length, startLineIndex + 50);
+      // AGGRESSIVE FUZZY SEARCH: Find the correct position by matching ALL context lines in the entire file
+      // This handles cases where LLM generates wrong line numbers despite having numbered context
+      const contextLines = parsedLines.filter(p => p.type === 'context');
+      
+      if (contextLines.length >= 2) {
+        // Use as many context lines as possible for a unique match
+        const searchContextLines = contextLines.slice(0, Math.min(5, contextLines.length));
+        let bestMatch = -1;
+        let bestMatchScore = 0;
 
-        for (let i = searchStart; i < searchEnd; i++) {
-          if (result[i] && result[i].trim() === firstContextLine.line.trim()) {
-            startLineIndex = i;
-            break;
+        // Search ENTIRE file, not just a narrow window
+        for (let i = 0; i <= result.length - searchContextLines.length; i++) {
+          let matchScore = 0;
+          let consecutiveMatches = true;
+          
+          // Try to match the sequence of context lines starting from position i
+          for (let j = 0; j < searchContextLines.length; j++) {
+            const fileLineIndex = i + j;
+            const fileLine = result[fileLineIndex];
+            const contextLine = searchContextLines[j].line;
+            
+            if (fileLine !== undefined && fileLine.trim() === contextLine.trim()) {
+              matchScore++;
+            } else {
+              consecutiveMatches = false;
+              break;
+            }
           }
+          
+          // If we matched all context lines consecutively, this is the position
+          if (consecutiveMatches && matchScore === searchContextLines.length) {
+            bestMatch = i;
+            bestMatchScore = matchScore;
+            // Found perfect match, use it
+            console.log(`🎯 Found exact match at line ${i + 1} (diff said ${hunk.oldStart}, offset: ${Math.abs(i + 1 - hunk.oldStart)})`);
+            break;
+          } else if (matchScore > bestMatchScore) {
+            // Keep track of best partial match
+            bestMatch = i;
+            bestMatchScore = matchScore;
+          }
+        }
+        
+        // Use the best match found (require at least 50% of context lines to match)
+        if (bestMatchScore >= Math.ceil(searchContextLines.length / 2)) {
+          startLineIndex = bestMatch;
+          if (bestMatch + 1 !== hunk.oldStart) {
+            console.log(`📍 Corrected line number: ${hunk.oldStart} → ${bestMatch + 1} (matched ${bestMatchScore}/${searchContextLines.length} context lines)`);
+          }
+        } else {
+          console.warn(`⚠️ Could not find good match for hunk at line ${hunk.oldStart} (best: ${bestMatchScore}/${searchContextLines.length})`);
         }
       }
 
       // Build operations with corrected indices
+      // CRITICAL: Use the corrected startLineIndex from fuzzy search, not the line from diff header
       const operations: Array<{ type: 'remove' | 'add' | 'context'; line: string; index: number }> = [];
-      let currentLineIndex = startLineIndex;
+      let currentLineIndex = startLineIndex; // This is already corrected by fuzzy search above
+
+      console.log(`Building operations starting at corrected line ${startLineIndex + 1} (diff header said ${hunk.oldStart})`);
 
       for (const parsed of parsedLines) {
         if (parsed.type === 'remove') {
@@ -349,24 +391,55 @@ export function applyDiffHunks(
       }
 
       // Verify context lines match before applying changes
-      // Skip validation if hunk has no context lines (pure insertions)
+      // Use lenient matching: allow some mismatches, especially for whitespace
       const hasContextLines = operations.some(op => op.type === 'context');
-      let contextMatches = true;
+      let contextMatchCount = 0;
+      let contextTotalCount = 0;
+      const mismatchedLines: Array<{index: number; expected: string; got: string}> = [];
 
       if (hasContextLines) {
         for (const op of operations) {
           if (op.type === 'context') {
-            if (result[op.index] !== undefined && result[op.index].trim() !== op.line.trim()) {
-              contextMatches = false;
-              console.warn(`Context mismatch at line ${op.index + 1}: expected "${op.line.trim()}", got "${result[op.index].trim()}"`);
-              break;
+            contextTotalCount++;
+            const fileLine = result[op.index];
+            const expectedLine = op.line;
+            
+            if (fileLine !== undefined) {
+              const fileLineTrimmed = fileLine.trim();
+              const expectedLineTrimmed = expectedLine.trim();
+              
+              // Count as match if:
+              // 1. Both are empty/whitespace, OR
+              // 2. Trimmed content matches
+              if ((fileLineTrimmed === '' && expectedLineTrimmed === '') || 
+                  fileLineTrimmed === expectedLineTrimmed) {
+                contextMatchCount++;
+              } else {
+                mismatchedLines.push({
+                  index: op.index + 1,
+                  expected: expectedLineTrimmed,
+                  got: fileLineTrimmed
+                });
+              }
             }
           }
         }
 
-        if (!contextMatches) {
-          console.warn(`Skipping hunk at line ${hunk.oldStart} due to context mismatch`);
+        // Use tolerance: require at least 70% of context lines to match
+        const matchRatio = contextTotalCount > 0 ? contextMatchCount / contextTotalCount : 0;
+        const hasEnoughMatches = matchRatio >= 0.7;
+
+        if (!hasEnoughMatches) {
+          console.warn(`Skipping hunk at line ${hunk.oldStart}: insufficient context match (${contextMatchCount}/${contextTotalCount} = ${(matchRatio * 100).toFixed(0)}%)`);
+          if (mismatchedLines.length > 0) {
+            console.warn('Mismatched lines:');
+            mismatchedLines.slice(0, 3).forEach(m => {
+              console.warn(`  Line ${m.index}: expected "${m.expected}", got "${m.got}"`);
+            });
+          }
           continue;
+        } else if (mismatchedLines.length > 0) {
+          console.log(`Applying hunk at line ${hunk.oldStart} with ${contextMatchCount}/${contextTotalCount} context matches (${(matchRatio * 100).toFixed(0)}%)`);
         }
       }
 
@@ -429,14 +502,50 @@ export function validateDiff(diff: FileDiff): boolean {
       return false;
     }
 
-    // Validate each hunk
-    return diff.hunks.every(hunk => 
+    // Validate each hunk structure
+    const structureValid = diff.hunks.every(hunk => 
       typeof hunk.oldStart === 'number' && hunk.oldStart > 0 &&
       typeof hunk.newStart === 'number' && hunk.newStart > 0 &&
       typeof hunk.oldLines === 'number' && hunk.oldLines >= 0 &&
       typeof hunk.newLines === 'number' && hunk.newLines >= 0 &&
       Array.isArray(hunk.lines)
     );
+
+    if (!structureValid) {
+      return false;
+    }
+
+    // Additional syntax validation: Check for code inserted inside array/object literals
+    for (const hunk of diff.hunks) {
+      for (let i = 0; i < hunk.lines.length; i++) {
+        const line = hunk.lines[i];
+        const nextLine = i + 1 < hunk.lines.length ? hunk.lines[i + 1] : null;
+        
+        // Check if this is an array/object literal opening followed by code insertion
+        if (line.match(/^[+ ]\s*const\s+\w+\s*=.*\[\s*$/) || 
+            line.match(/^[+ ]\s*const\s+\w+\s*=.*\{\s*$/)) {
+          // Next line should be array/object content, not code statements
+          if (nextLine && nextLine.match(/^\+\s*(console\.|if\s*\(|for\s*\(|while\s*\(|return\s)/)) {
+            console.error('❌ Diff validation failed: Code statement inserted inside array/object literal');
+            console.error(`   Line: ${line}`);
+            console.error(`   Next: ${nextLine}`);
+            return false;
+          }
+        }
+
+        // Check for orphaned statements that look like they're inside literals
+        if (line.match(/^\+\s*(console\.|if\s*\(|for\s*\(|while\s*\(|return\s)/) && nextLine) {
+          // If next line is an array/object element, the statement is likely misplaced
+          if (nextLine.match(/^[+ ]\s*\[.*\]|^[+ ]\s*\{.*\}|^[+ ]\s*\d+|^[+ ]\s*['"`]/)) {
+            console.warn('⚠️  Possible misplaced code statement near array/object elements');
+            console.warn(`   Line: ${line}`);
+            console.warn(`   Next: ${nextLine}`);
+          }
+        }
+      }
+    }
+
+    return true;
   } catch (error) {
     console.error('Error validating diff:', error);
     return false;

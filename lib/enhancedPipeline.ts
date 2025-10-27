@@ -14,6 +14,7 @@ export interface EnhancedPipelineResult {
   contextData?: string;
   intentSpec?: IntentSpec;
   error?: string;
+  validationResult?: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> };
 }
 
 /**
@@ -153,12 +154,23 @@ export async function executeEnhancedPipeline(
     console.log("✅ Enhanced pipeline completed successfully");
     console.log(`📁 Generated ${filesWithDiffs.length} files`);
     console.log(`🔧 Context data: ${contextData ? 'Yes' : 'No'}`);
+    
+    // validationResult only exists for follow-up changes
+    const validationResult = ('validationResult' in pipelineResult ? pipelineResult.validationResult : undefined) as 
+      { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> } | undefined;
+    
+    if (validationResult) {
+      console.log(`✅ Validation Success: ${validationResult.success}`);
+      console.log(`❌ Validation Errors: ${validationResult.errors.length}`);
+      console.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
+    }
 
     return {
       success: true,
       files: filesWithDiffs,
       contextData: contextData,
-      intentSpec: pipelineResult.intentSpec
+      intentSpec: pipelineResult.intentSpec,
+      validationResult
     };
 
   } catch (error) {

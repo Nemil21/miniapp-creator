@@ -16,6 +16,7 @@ import {
   createDeployment,
   getProjectFiles,
   savePatch,
+  updateProject,
   type GenerationJobContext,
 } from "./database";
 import { executeEnhancedPipeline } from "./enhancedPipeline";
@@ -100,7 +101,7 @@ async function writeFilesToDir(
 
 // Fetch boilerplate from GitHub API
 async function fetchBoilerplateFromGitHub(targetDir: string) {
-  const repoOwner = "chetankashetti";
+  const repoOwner = "Nemil21";
   const repoName = "minidev-boilerplate";
   
   // Fetch repository contents recursively
@@ -655,13 +656,13 @@ async function executeInitialGenerationJob(
       console.error("❌ Failed to create preview:", previewError);
 
       previewData = {
-        url: `http://localhost:8080/p/${projectId}`,
+        url: `${PREVIEW_API_BASE}/p/${projectId}`,
         status: "error",
         port: 3000,
-        previewUrl: `http://localhost:8080/p/${projectId}`,
+        previewUrl: `${PREVIEW_API_BASE}/p/${projectId}`,
       };
 
-      projectUrl = `http://localhost:8080/p/${projectId}`;
+      projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
       console.log("⚠️ Using fallback preview URL:", projectUrl);
     }
 
@@ -717,31 +718,42 @@ async function executeInitialGenerationJob(
     console.log("✅ Project files saved to database successfully");
 
     // Save deployment info to database (including contract addresses for web3 projects)
-    if (previewData && previewData.vercelUrl) {
-      try {
-        console.log("💾 Saving deployment info to database...");
+    // Always save deployment, even if vercelUrl is missing
+    try {
+      console.log("💾 Saving deployment info to database...");
+      
+      const deploymentUrl = previewData?.vercelUrl || projectUrl;
+      console.log(`🌐 Deployment URL to save: ${deploymentUrl}`);
 
-        // Use contract addresses from our deployment (already injected into files)
-        // Fall back to previewData.contractAddresses for backward compatibility
-        const deploymentContractAddresses = contractAddresses || previewData.contractAddresses;
+      // Use contract addresses from our deployment (already injected into files)
+      // Fall back to previewData.contractAddresses for backward compatibility
+      const deploymentContractAddresses = contractAddresses || previewData?.contractAddresses;
 
-        const deployment = await createDeployment(
-          project.id, // Use actual project.id from database record
-          'vercel',
-          previewData.vercelUrl,
-          'success',
-          undefined, // buildLogs
-          deploymentContractAddresses // Contract addresses (real ones from our deployment)
-        );
-        console.log(`✅ Deployment saved to database: ${deployment.id}`);
+      const deployment = await createDeployment(
+        project.id, // Use actual project.id from database record
+        'vercel',
+        deploymentUrl,
+        'success',
+        undefined, // buildLogs
+        deploymentContractAddresses // Contract addresses (real ones from our deployment)
+      );
+      console.log(`✅ Deployment saved to database: ${deployment.id}`);
 
-        if (deploymentContractAddresses && Object.keys(deploymentContractAddresses).length > 0) {
-          console.log(`📝 Contract addresses saved:`, JSON.stringify(deploymentContractAddresses, null, 2));
-        }
-      } catch (deploymentError) {
-        console.error("⚠️ Failed to save deployment info:", deploymentError);
-        // Don't fail the entire job if deployment record fails
+      if (deploymentContractAddresses && Object.keys(deploymentContractAddresses).length > 0) {
+        console.log(`📝 Contract addresses saved:`, JSON.stringify(deploymentContractAddresses, null, 2));
       }
+
+      // CRITICAL: Update the projects table with deployment URL and metadata
+      console.log("🔄 Updating projects table with deployment URL...");
+      await updateProject(project.id, {
+        previewUrl: deploymentUrl,
+        name: projectName,
+        description: `${userRequest.substring(0, 100)}...`
+      });
+      console.log(`✅ Projects table updated with URL: ${deploymentUrl}`);
+    } catch (deploymentError) {
+      console.error("⚠️ Failed to save deployment info:", deploymentError);
+      // Don't fail the entire job if deployment record fails
     }
 
     // Update job status to completed
@@ -758,9 +770,26 @@ async function executeInitialGenerationJob(
       contractAddresses: contractAddresses, // Include contract addresses in result
     };
 
-    await updateGenerationJobStatus(jobId, "completed", result);
+    console.log(`📝 Updating job ${jobId} status to completed with result:`, {
+      projectId: result.projectId,
+      vercelUrl: result.vercelUrl,
+      totalFiles: result.totalFiles
+    });
+
+    try {
+      await updateGenerationJobStatus(jobId, "completed", result);
+      console.log(`✅ Job ${jobId} status updated to completed in database`);
+    } catch (updateError) {
+      console.error(`❌ Failed to update job status to completed:`, updateError);
+      throw updateError; // Re-throw to trigger error handling
+    }
 
     console.log(`✅ Job ${jobId} completed successfully`);
+    console.log(`🎉 Final result:`, {
+      projectId: result.projectId,
+      vercelUrl: result.vercelUrl,
+      previewUrl: result.previewUrl
+    });
 }
 
 /**
@@ -934,17 +963,27 @@ async function executeFollowUpJob(
   }
 
   // Update job status to completed
+  const changedFilenames = result.files.map(f => f.filename);
   const jobResult = {
     success: true,
     projectId,
     files: result.files.map(f => ({ filename: f.filename })),
     diffs: hasDiffs ? (result as { diffs: unknown[] }).diffs : [],
-    changedFiles: result.files.map(f => f.filename),
+    changedFiles: changedFilenames,
+    generatedFiles: changedFilenames, // Add this for frontend compatibility
     previewUrl: getPreviewUrl(projectId),
     totalFiles: result.files.length,
   };
 
-  await updateGenerationJobStatus(jobId, "completed", jobResult);
+  console.log(`📝 Updating follow-up job ${jobId} status to completed`);
+
+  try {
+    await updateGenerationJobStatus(jobId, "completed", jobResult);
+    console.log(`✅ Follow-up job ${jobId} status updated to completed in database`);
+  } catch (updateError) {
+    console.error(`❌ Failed to update follow-up job status:`, updateError);
+    throw updateError;
+  }
 
   console.log(`✅ Follow-up job ${jobId} completed successfully`);
 }

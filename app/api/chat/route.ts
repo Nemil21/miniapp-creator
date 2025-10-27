@@ -138,7 +138,7 @@ async function callClaude(
   stream: boolean = false
 ): Promise<string | ReadableStream> {
   const apiKey = process.env.CLAUDE_API_KEY;
-  console.log("Claude API key:", apiKey);
+  // console.log("Claude API key:", apiKey);
   if (!apiKey) throw new Error("Claude API key not set");
 
   const requestBody = {

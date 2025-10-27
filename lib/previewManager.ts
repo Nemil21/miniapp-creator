@@ -280,7 +280,7 @@ export async function createPreview(
         url:
           apiResponse.previewUrl ||
           apiResponse.vercelUrl ||
-          `http://localhost:8080/p/${projectId}`,
+          `${PREVIEW_API_BASE}/p/${projectId}`,
         status: (apiResponse.status as string) || (apiResponse.isNewDeployment ? "deployed" : "updated"),
         port: (apiResponse.port as number) || 3000, // Use port from response or default to 3000
         previewUrl: apiResponse.previewUrl as string,
@@ -317,7 +317,8 @@ export async function createPreview(
 export async function updatePreviewFiles(
   projectId: string,
   changedFiles: { filename: string; content: string }[],
-  accessToken: string
+  accessToken: string,
+  validationResult?: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }> }
 ): Promise<void> {
   console.log(
     `🔄 Updating ${changedFiles.length} files in preview for project: ${projectId}`
@@ -342,6 +343,7 @@ export async function updatePreviewFiles(
         id: projectId,
         files: filesArray,
         wait: false, // Don't wait for readiness on updates
+        validationResult, // Pass validation result to block deployment if it failed
       }),
     });
 
@@ -369,7 +371,9 @@ export async function updatePreviewFiles(
     }
   } catch (error) {
     console.error(`❌ Failed to update preview files for ${projectId}:`, error);
-    throw error;
+    // Don't throw - just log the error. The files are already saved to database.
+    // The preview will be out of sync but the user can still access the project.
+    console.warn(`⚠️  Preview update failed for ${projectId}, but files are saved to database`);
   }
 }
 

@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseUnifiedDiff, applyDiffToContent } from './diffUtils';
 import { applyDiffsToFiles } from './diffBasedPipeline';
+import { generateDiff } from './diffUtils';
 import { 
   parseStage2PatchResponse, 
   parseStage3CodeResponse, 
@@ -81,7 +82,7 @@ export const STAGE_MODEL_CONFIG = {
   STAGE_2_PATCH_PLANNER: {
     model: ANTHROPIC_MODELS.BALANCED,
     fallbackModel: ANTHROPIC_MODELS.POWERFUL, // Use latest Sonnet if regular Sonnet is overloaded
-    maxTokens: 4000,
+    maxTokens: 16000,
     temperature: 0,
     reason: "Complex planning task, needs good reasoning and more tokens for detailed diffs",
   },
@@ -264,7 +265,14 @@ TOOL USAGE RULES:
 - ALWAYS use "src" as workingDirectory for React components
 - For grep: Use specific file paths rather than broad directory searches
 - For file paths: Use relative paths from the workingDirectory (e.g., "app/page.tsx", not "src/app/page.tsx")
-- Avoid complex patterns that might fail - keep searches simple and specific
+- Keep patterns simple and specific
+
+🚨 CRITICAL PATTERN RESTRICTIONS:
+- DO NOT use pipe character | in grep patterns (e.g., "submit|onSubmit" will FAIL)
+- DO NOT use OR patterns - make separate grep calls instead
+- ✅ CORRECT: Two calls: grep "submit" and grep "onSubmit"
+- ❌ WRONG: One call with "submit|onSubmit"
+- Avoid special shell characters: ; & | \` $ < > in patterns
 
 CRITICAL: You MUST return ONLY valid JSON. No explanations, no text, no markdown, no code fences.
 
@@ -729,11 +737,46 @@ ${currentFiles.map((f) => {
 
 TASK: Plan detailed file changes to implement the intent and generate unified diff hunks for surgical changes
 
+🚨 CRITICAL: MINIMAL FILE TARGETING 🚨
+
+BEFORE planning ANY patches, answer these questions:
+1. What is the EXACT user request? "${intentSpec.feature || 'user request'}"
+2. Which SPECIFIC files need to change to fulfill this request?
+3. Are you planning changes to files that DON'T need to change?
+
+RULES FOR FILE SELECTION:
+✅ ONLY plan patches for files that DIRECTLY implement the requested feature/fix
+✅ If user asks to "fix player 2 interface", ONLY modify the component with player interface logic
+✅ If user asks to "add a button", ONLY modify the file containing that UI section
+❌ DO NOT plan patches for files that already work correctly
+❌ DO NOT plan patches for unrelated components, utilities, or config files
+❌ DO NOT plan patches for package.json, tsconfig.json, or build config unless explicitly requested
+
+EXAMPLE - User Request: "fix player 2 interface issue"
+✅ CORRECT: Plan 1 patch for src/components/PlayerInterface.tsx (the file with the bug)
+❌ WRONG: Plan 33 patches including layout.tsx, Button.tsx, utils.ts, etc. (unrelated files)
+
+EXAMPLE - User Request: "add a new tab for settings"
+✅ CORRECT: Plan 1-2 patches for src/app/page.tsx (add tab) and maybe src/components/Settings.tsx (new component)
+❌ WRONG: Plan patches for every component file just to "ensure consistency"
+
+VALIDATION BEFORE OUTPUT:
+Count your patches. If you have more than 3 patches for a simple request, you're doing it WRONG.
+Ask yourself: "Does this file NEED to change to fulfill the user's request?"
+If the answer is NO, DELETE that patch from your plan.
+
 DIFF GENERATION REQUIREMENTS - CRITICAL:
 - For each file modification, generate unified diff hunks in VALID format: @@ -oldStart,oldLines +newStart,newLines @@
 - Use the numbered lines (e.g., "  5|import { useState }") from CURRENT FILES to determine exact line positions
 - oldLines and newLines MUST be the ACTUAL count of lines in that section (NEVER use 0)
-- Include 2-3 context lines (unchanged lines with space prefix) around changes for better accuracy
+
+🚨 SMALL HUNKS RULE - CRITICAL FOR SUCCESS:
+- Each hunk MUST be SMALL: maximum 10 total lines
+- Include ONLY 2-3 context lines (unchanged lines with space prefix) around changes
+- If a function needs multiple changes, split into MULTIPLE SMALL hunks instead of one large hunk
+- EXAMPLE: Instead of one 20-line hunk changing 3 parts of a function, create 3 separate 6-8 line hunks
+- WHY: Large hunks cause context matching failures. Small hunks have 90%+ success rate.
+
 - Use + prefix for added lines, - prefix for removed lines, space prefix for context lines
 - Generate minimal, surgical diffs rather than full file rewrites
 - Focus on precise line-by-line changes to preserve existing code structure
@@ -1105,6 +1148,25 @@ ERC721 APPS:
 🚨 "My NFTs" tab MUST display owned NFTs using available ABI functions, not placeholder text
 
 DEPLOYMENT SCRIPT (contracts/scripts/deploy.js):
+
+🚨 CRITICAL: DEPLOYMENT SCRIPTS SHOULD ONLY DEPLOY CONTRACTS
+❌ DO NOT call contract methods in deploy.js (e.g., contract.addFunds(), contract.mint(), etc.)
+❌ DO NOT send ETH to contracts during deployment
+❌ DO NOT initialize contract state beyond constructor parameters
+✅ ONLY deploy contracts and log their addresses
+✅ Contract method calls should happen in the frontend, not deploy script
+
+WRONG - This will fail:
+  const puzzle = await SudokuPuzzle.deploy();
+  await puzzle.waitForDeployment();
+  await puzzle.addFunds({ value: ethers.parseEther("0.01") }); // ❌ NO!
+
+CORRECT:
+  const puzzle = await SudokuPuzzle.deploy();
+  await puzzle.waitForDeployment();
+  console.log("✅ SudokuPuzzle:", await puzzle.getAddress()); // ✅ YES!
+  // Let frontend call addFunds() when needed
+
 🚨 MULTIPLE CONTRACTS: Add 3-second delay between deployments to prevent nonce conflicts
 Example:
   await contract1.waitForDeployment();
@@ -1139,18 +1201,66 @@ DIFF-BASED APPROACH:
 - For new files, generate complete content
 - Validate diffs are minimal and precise
 
-LINE NUMBER CALCULATION:
-- Calculate based on ACTUAL current file content (with line numbers)
-- Use numbered lines (e.g., "5|import { useState }") for exact positions
-- Include 2-3 context lines before and after changes
-- oldLines = context lines + removed lines (- prefix)
-- newLines = context lines + added lines (+ prefix)
+🚨 SMALL HUNKS RULE - CRITICAL FOR SUCCESS:
+- Each hunk MUST be SMALL: maximum 10 total lines (including context)
+- Include ONLY 2-3 context lines before and after the actual changes
+- If multiple changes are needed in one function, create MULTIPLE SMALL hunks
+- NEVER create hunks larger than 10 lines - they will fail to apply
+- EXAMPLE: To change 3 lines in a 50-line function, create 3 separate small hunks, not 1 large hunk
+
+LINE NUMBER CALCULATION FROM NUMBERED FILES:
+The files are provided with line numbers in format: "123|actual content here"
+
+IMPORTANT: When generating diff context lines:
+1. Use the NUMBER (before |) to determine line position for @@ header
+2. Use the CONTENT (after |) as the actual context line text
+3. DO NOT include the line number prefix in your diff
+
+EXAMPLE - Given numbered file:
+172|export function playerHit(gameState: GameState, playerId: number): GameState {
+173|  const newState = { ...gameState };
+174|  const player = newState.players[playerId];
+
+Your diff hunk should be:
+@@ -172,3 +172,3 @@
+ export function playerHit(gameState: GameState, playerId: number): GameState {
+-  const newState = { ...gameState };
++  const newState = JSON.parse(JSON.stringify(gameState));
+   const player = newState.players[playerId];
+
+NOTICE: Context lines are the EXACT text after the | symbol, without the line numbers.
+
+🚨 CRITICAL: ARRAY/OBJECT LITERAL BOUNDARIES:
+- NEVER insert code inside array literals: const arr = [ /* ❌ NO CODE HERE */ ]
+- NEVER insert code inside object literals: const obj = { /* ❌ NO CODE HERE */ }
+- NEVER insert code between array/object opening and first element
+- ✅ Insert BEFORE the declaration: console.log('before'); const arr = [1, 2, 3];
+- ✅ Insert AFTER the declaration: const arr = [1, 2, 3]; console.log('after');
+- ❌ WRONG: const arr = [\n  console.log();\n  1, 2, 3\n];
+
+EXAMPLE - Adding logging to array initialization:
+❌ WRONG:
+  const data = puzzle || [
+    console.log('test');
+    [1, 2, 3],
+    [4, 5, 6]
+  ];
+
+✅ CORRECT:
+  console.log('test');
+  const data = puzzle || [
+    [1, 2, 3],
+    [4, 5, 6]
+  ];
 
 DIFF VALIDATION:
 - Every hunk MUST start and end with context lines (space prefix)
 - Line counts MUST match actual number of lines in hunk
-- Context lines MUST exactly match numbered content
+- Context lines MUST be EXACT copies of file content (text after | in numbered lines)
 - NEVER use 0 for oldLines or newLines
+- NEVER add extra blank lines that don't exist in the numbered content
+- Check that insertions don't break multi-line expressions
+- Verify closing brackets/braces align correctly after changes
 
 CRITICAL: 'use client' DIRECTIVE IN DIFFS:
 - The 'use client' directive is ALREADY in the original file
@@ -1167,17 +1277,26 @@ Generate complete files as JSON array:
 __START_JSON__
 [{"filename": "path/to/file", "content": "complete file content"}]
 __END_JSON__
+
+CRITICAL: Use ONLY the fields shown above. Do NOT include:
+- "changes", "dependencies", "implementationNotes", "intentSpec", or other planning fields
+- These are Stage 2 fields and will cause parsing errors in Stage 3
 `;
   } else {
     return `
 OUTPUT FORMAT - FOLLOW-UP CHANGES:
-Generate diffs/files as JSON array:
+Generate diffs/files as JSON array with EXACTLY these fields:
 __START_JSON__
 [
   {"filename": "path", "operation": "modify", "unifiedDiff": "@@ ... @@", "diffHunks": [...]},
   {"filename": "new/path", "operation": "create", "content": "complete content"}
 ]
 __END_JSON__
+
+CRITICAL: Use ONLY the fields shown above. Do NOT include:
+- "changes", "dependencies", "implementationNotes", "intentSpec", or other planning fields
+- These are Stage 2 fields and will cause parsing errors in Stage 3
+- Each object should have ONLY: filename, operation, and either (unifiedDiff + diffHunks) OR content
 `;
   }
 }
@@ -1255,6 +1374,69 @@ BOILERPLATE CONTEXT:
 ${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
 
 TASK: Generate unified diff patches based on the detailed patch plan. Apply surgical changes using the provided diff hunks rather than rewriting entire files. For new files, generate complete content. For modifications, output only the unified diff patches.
+
+🚨 CRITICAL: FILE CLASSIFICATION AND MANDATORY REQUIREMENTS 🚨
+
+EXISTING FILES (MUST use diff format):
+${currentFiles.map(f => `  - ${f.filename} → EXISTING FILE (operation: "modify", unifiedDiff required, NO content field)`).join('\n')}
+
+FOR EXISTING FILES ABOVE:
+✅ REQUIRED: operation: "modify"
+✅ REQUIRED: unifiedDiff field with complete unified diff
+✅ REQUIRED: diffHunks array with proper hunk objects
+❌ FORBIDDEN: content field (do not regenerate entire file)
+❌ FORBIDDEN: operation: "create" (these files already exist)
+
+FOR NEW FILES ONLY (not in list above):
+✅ REQUIRED: operation: "create"
+✅ REQUIRED: content field with complete file content
+❌ FORBIDDEN: unifiedDiff or diffHunks (use content instead)
+
+🚨 VALIDATION RULES:
+BEFORE outputting each file object, CHECK:
+1. Is filename in EXISTING FILES list above?
+   - YES → MUST have: operation="modify", unifiedDiff, diffHunks, NO content
+   - NO → MUST have: operation="create", content, NO unifiedDiff/diffHunks
+2. Any file with operation="create" for an EXISTING FILE will be REJECTED
+3. Any file with content field for an EXISTING FILE will be REJECTED
+4. Any file with unifiedDiff for a NEW FILE will be REJECTED
+
+EXAMPLE OUTPUT FOR EXISTING FILE (from list above):
+{
+  "filename": "src/app/page.tsx",
+  "operation": "modify",
+  "unifiedDiff": "@@ -5,3 +5,6 @@\n import { ConnectWallet } from '@/components/wallet/ConnectWallet';\n import { Tabs } from '@/components/ui/Tabs';\n+import { useState } from 'react';\n+import { useEffect } from 'react';\n import { useUser } from '@/hooks';\n ",
+  "diffHunks": [
+    {
+      "oldStart": 5,
+      "oldLines": 3,
+      "newStart": 5,
+      "newLines": 6,
+      "lines": [
+        " import { ConnectWallet } from '@/components/wallet/ConnectWallet';",
+        " import { Tabs } from '@/components/ui/Tabs';",
+        "+import { useState } from 'react';",
+        "+import { useEffect } from 'react';",
+        " import { useUser } from '@/hooks';",
+        " "
+      ]
+    }
+  ]
+}
+
+EXAMPLE OUTPUT FOR NEW FILE (NOT in existing files list):
+{
+  "filename": "src/hooks/useNewFeature.ts",
+  "operation": "create",
+  "content": "'use client';\n\nimport { useState } from 'react';\n\nexport function useNewFeature() {\n  const [state, setState] = useState(false);\n  return { state, setState };\n}"
+}
+
+❌ WRONG OUTPUT (will be rejected):
+{
+  "filename": "src/app/page.tsx",  // This is in EXISTING FILES
+  "operation": "create",  // ❌ WRONG - should be "modify"
+  "content": "...entire file..."  // ❌ WRONG - should use unifiedDiff
+}
 
 ${getDiffGenerationRules()}
 ${getCoreGenerationRules()}
@@ -1788,11 +1970,25 @@ async function executeStage2PatchPlanner(
   console.log("📝 STAGE 2: Patch Planner");
   console.log("=".repeat(50));
 
+  // Optimize: Only include target files from intentSpec to reduce prompt size
+  const relevantFiles = !isInitialGeneration && intentSpec.targetFiles.length > 0
+    ? currentFiles.filter(f => 
+        intentSpec.targetFiles.some(targetFile => 
+          f.filename.includes(targetFile) || targetFile.includes(f.filename)
+        )
+      )
+    : currentFiles;
+  
+  console.log(`📊 Files included: ${relevantFiles.length} of ${currentFiles.length} total`);
+  if (relevantFiles.length < currentFiles.length) {
+    console.log(`   Filtered to target files: ${intentSpec.targetFiles.join(', ')}`);
+  }
+
   const patchPrompt = `USER REQUEST: ${userPrompt}`;
   console.log("📤 Sending to LLM (Stage 2):");
   console.log(
     "System Prompt Length:",
-    getStage2PatchPlannerPrompt(intentSpec, currentFiles, isInitialGeneration).length,
+    getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration).length,
     "chars"
   );
   console.log("User Prompt:", patchPrompt);
@@ -1800,7 +1996,7 @@ async function executeStage2PatchPlanner(
 
   const startTime2 = Date.now();
   const patchResponse = await callLLM(
-    getStage2PatchPlannerPrompt(intentSpec, currentFiles, isInitialGeneration),
+    getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration),
     patchPrompt,
     "Stage 2: Patch Planner",
     "STAGE_2_PATCH_PLANNER"
@@ -1810,7 +2006,7 @@ async function executeStage2PatchPlanner(
   // Log Stage 2 response for debugging
   if (projectId) {
     logStageResponse(projectId, 'stage2-patch-planner', patchResponse, {
-      systemPromptLength: getStage2PatchPlannerPrompt(intentSpec, currentFiles, isInitialGeneration).length,
+      systemPromptLength: getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration).length,
       userPromptLength: patchPrompt.length,
       responseTime: endTime2 - startTime2,
       intentSpec: intentSpec
@@ -2010,7 +2206,12 @@ export async function executeFollowUpPipeline(
   ) => Promise<string>,
   projectId?: string,
   projectDir?: string
-): Promise<{ files: { filename: string; content: string }[]; intentSpec: IntentSpec }> {
+): Promise<{ 
+  files: { filename: string; content: string }[]; 
+  diffs: FileDiff[];
+  intentSpec: IntentSpec;
+  validationResult?: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> };
+}> {
   try {
     console.log("🚀 Starting FOLLOW-UP CHANGES pipeline...");
     console.log("📝 User Prompt:", userPrompt);
@@ -2026,7 +2227,7 @@ export async function executeFollowUpPipeline(
       console.log("=".repeat(50));
       console.log("📋 Reason:", intentSpec.reason);
       console.log("📁 Returning", currentFiles.length, "unchanged files");
-      return { files: currentFiles, intentSpec };
+      return { files: currentFiles, diffs: [], intentSpec };
     }
 
     // 🎯 Filter files based on web3 requirement (after Stage 1, before Stage 2)
@@ -2047,7 +2248,7 @@ export async function executeFollowUpPipeline(
     );
 
     // Stage 3: Code Generator (Diffs) - using filtered files
-    const filesWithDiffs = await executeStage3FollowUpGeneration(
+    const stage3Result = await executeStage3FollowUpGeneration(
       userPrompt,
       patchPlan,
       intentSpec,
@@ -2055,10 +2256,11 @@ export async function executeFollowUpPipeline(
       callLLM,
       projectId
     );
+    const { files: filesWithDiffs, diffs } = stage3Result;
 
     // Stage 4: Validator (Diffs) - using ORIGINAL files for validation context
     // Note: Validator needs full file list to check imports/references correctly
-    const validatedFiles = await executeStage4FollowUpValidation(
+    const { validatedFiles, validationResult } = await executeStage4FollowUpValidation(
       filesWithDiffs,
       currentFiles, // ← Using original currentFiles for validation context
       callLLM,
@@ -2070,8 +2272,15 @@ export async function executeFollowUpPipeline(
     console.log("🎉 FOLLOW-UP PIPELINE COMPLETED!");
     console.log("=".repeat(50));
     console.log(`📁 Generated ${validatedFiles.length} files`);
+    console.log(`📝 Applied ${diffs.length} diffs`);
+    
+    if (validationResult) {
+      console.log(`✅ Validation Success: ${validationResult.success}`);
+      console.log(`❌ Validation Errors: ${validationResult.errors.length}`);
+      console.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
+    }
 
-    return { files: validatedFiles, intentSpec };
+    return { files: validatedFiles, diffs, intentSpec, validationResult };
   } catch (error) {
     console.error("❌ Follow-up pipeline failed:");
     console.error("  Error:", error);
@@ -2147,6 +2356,89 @@ async function executeStage3InitialGeneration(
     throw new Error("Stage 3 response is not an array");
   }
 
+  // 🚨 CRITICAL: Validate no new contracts are created (Web3 apps only)
+  if (intentSpec.isWeb3) {
+    const contractValidation = validateNoNewContracts(generatedFiles);
+    if (!contractValidation.isValid) {
+      console.error("\n" + "=".repeat(70));
+      console.error("❌ CONTRACT VALIDATION FAILED - NEW CONTRACTS DETECTED");
+      console.error("=".repeat(70));
+      console.error("Invalid files:", contractValidation.invalidFiles);
+      console.error("\n🚨 ONLY TEMPLATE MODIFICATIONS ALLOWED:");
+      console.error("  ✅ contracts/src/ERC20Template.sol");
+      console.error("  ✅ contracts/src/ERC721Template.sol");
+      console.error("  ✅ contracts/src/EscrowTemplate.sol");
+      console.error("  ❌ Any other .sol files are FORBIDDEN\n");
+      
+      // 🔄 RETRY: Send back to AI with strict template-only instructions
+      console.log("🔄 Retrying Stage 3 with strict template-only enforcement...\n");
+      
+      const retryPrompt = `
+USER REQUEST: ${userPrompt}
+
+🚨🚨🚨 CRITICAL ERROR - RETRY REQUIRED 🚨🚨🚨
+
+You attempted to create these INVALID contract files:
+${contractValidation.invalidFiles.map(f => `  ❌ ${f}`).join('\n')}
+
+THIS IS ABSOLUTELY FORBIDDEN. You MUST use ONLY the existing templates:
+  ✅ contracts/src/ERC20Template.sol (for tokens, rewards, points)
+  ✅ contracts/src/ERC721Template.sol (for NFTs, collectibles, badges)
+  ✅ contracts/src/EscrowTemplate.sol (for payments, escrow)
+
+🚨 YOU CANNOT CREATE NEW .sol FILES
+🚨 YOU CAN ONLY MODIFY THE EXISTING TEMPLATE FILES
+🚨 RENAME THE CONTRACT CLASS INSIDE THE TEMPLATE IF NEEDED
+
+For example, if you need a "MusicArtistToken":
+1. Use ERC20Template.sol or ERC721Template.sol
+2. Modify the contract name inside: contract MusicArtistToken is ERC20, ...
+3. Keep the filename as ERC20Template.sol or ERC721Template.sol
+4. Add any custom functions to the template
+
+Now regenerate the code using ONLY the templates above.`;
+
+      const retryResponse = await callLLM(
+        getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true) + 
+        "\n\n🚨 TEMPLATE-ONLY MODE: You previously tried to create invalid contracts. Use ONLY ERC20Template.sol, ERC721Template.sol, or EscrowTemplate.sol",
+        retryPrompt,
+        "Stage 3: Code Generator (Retry - Template Only)",
+        "STAGE_3_CODE_GENERATOR"
+      );
+      
+      const retriedFiles = parseStage3CodeResponse(retryResponse);
+      
+      // Validate again
+      const retryValidation = validateNoNewContracts(retriedFiles);
+      if (!retryValidation.isValid) {
+        console.error("\n❌ RETRY FAILED - Still generating invalid contracts:", retryValidation.invalidFiles);
+        console.error("🔧 Filtering out invalid contracts and proceeding...\n");
+        
+        // Last resort: filter out invalid files
+        const filteredFiles = retriedFiles.filter(file => 
+          !retryValidation.invalidFiles.includes(file.filename)
+        );
+        
+        const completeFiles: { filename: string; content: string }[] = filteredFiles.map(file => ({
+          filename: file.filename,
+          content: file.content || ''
+        }));
+        
+        return completeFiles;
+      }
+      
+      console.log("✅ Retry successful - All contracts are valid templates\n");
+      
+      // Use the retried files
+      const completeFiles: { filename: string; content: string }[] = retriedFiles.map(file => ({
+        filename: file.filename,
+        content: file.content || ''
+      }));
+      
+      return completeFiles;
+    }
+  }
+
   // Convert to simple format for initial generation
   const completeFiles: { filename: string; content: string }[] = generatedFiles.map(file => ({
     filename: file.filename,
@@ -2174,7 +2466,7 @@ async function executeStage3FollowUpGeneration(
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
   projectId?: string
-): Promise<{ filename: string; content: string }[]> {
+): Promise<{ files: { filename: string; content: string }[]; diffs: FileDiff[] }> {
   console.log("\n" + "=".repeat(50));
   console.log("💻 STAGE 3: Code Generator (Follow-Up Changes - Diff-Based)");
   console.log("=".repeat(50));
@@ -2213,13 +2505,138 @@ async function executeStage3FollowUpGeneration(
 
   const generatedFiles = parseStage3CodeResponse(codeResponse);
 
+  // 🚨 VALIDATION: Verify LLM is following diff-based requirements
+  console.log('\n' + '='.repeat(50));
+  console.log('🔍 STAGE 3 RESPONSE VALIDATION');
+  console.log('='.repeat(50));
+  console.log(`📊 Total files generated: ${generatedFiles.length}`);
+  console.log(`📊 Files with operation='modify': ${generatedFiles.filter(f => f.operation === 'modify').length}`);
+  console.log(`📊 Files with operation='create': ${generatedFiles.filter(f => f.operation === 'create').length}`);
+  console.log(`📊 Files with unifiedDiff: ${generatedFiles.filter(f => f.unifiedDiff).length}`);
+  console.log(`📊 Files with content: ${generatedFiles.filter(f => f.content).length}`);
+  console.log('');
+
+  // Build existing files set for validation
+  const existingFileNames = new Set(currentFiles.map(f => f.filename));
+  const validationErrors: string[] = [];
+  const validationWarnings: string[] = [];
+
+  // Detailed breakdown by file
+  console.log('📋 File-by-file analysis:');
+  generatedFiles.forEach(file => {
+    const isExisting = existingFileNames.has(file.filename);
+    const hasUnifiedDiff = !!file.unifiedDiff;
+    const hasContent = !!file.content;
+    const operation = file.operation || 'unknown';
+
+    const status = isExisting ? '🔄 EXISTING' : '🆕 NEW';
+    console.log(`  ${status} ${file.filename}:`);
+    console.log(`    - operation: ${operation}`);
+    console.log(`    - hasUnifiedDiff: ${hasUnifiedDiff}`);
+    console.log(`    - hasContent: ${hasContent}`);
+
+    // Validate existing files MUST use diff format
+    if (isExisting) {
+      if (operation !== 'modify') {
+        const error = `❌ ${file.filename}: EXISTING file has operation='${operation}' (should be 'modify')`;
+        validationErrors.push(error);
+        console.log(`    ${error}`);
+      }
+      if (!hasUnifiedDiff) {
+        const error = `❌ ${file.filename}: EXISTING file missing unifiedDiff (required for modifications)`;
+        validationErrors.push(error);
+        console.log(`    ${error}`);
+      }
+      if (hasContent) {
+        const warning = `⚠️  ${file.filename}: EXISTING file has content field (should use unifiedDiff only)`;
+        validationWarnings.push(warning);
+        console.log(`    ${warning}`);
+      }
+    } else {
+      // Validate new files MUST use content format
+      if (operation !== 'create') {
+        const error = `❌ ${file.filename}: NEW file has operation='${operation}' (should be 'create')`;
+        validationErrors.push(error);
+        console.log(`    ${error}`);
+      }
+      if (!hasContent) {
+        const error = `❌ ${file.filename}: NEW file missing content (required for new files)`;
+        validationErrors.push(error);
+        console.log(`    ${error}`);
+      }
+      if (hasUnifiedDiff) {
+        const warning = `⚠️  ${file.filename}: NEW file has unifiedDiff (should use content only)`;
+        validationWarnings.push(warning);
+        console.log(`    ${warning}`);
+      }
+    }
+  });
+
+  console.log('');
+  if (validationErrors.length > 0) {
+    console.log('❌ VALIDATION ERRORS:', validationErrors.length);
+    validationErrors.forEach(err => console.log(`  ${err}`));
+  }
+  if (validationWarnings.length > 0) {
+    console.log('⚠️  VALIDATION WARNINGS:', validationWarnings.length);
+    validationWarnings.forEach(warn => console.log(`  ${warn}`));
+  }
+  if (validationErrors.length === 0 && validationWarnings.length === 0) {
+    console.log('✅ All files passed validation - LLM followed diff-based requirements correctly!');
+  }
+  console.log('='.repeat(50) + '\n');
+
+  // 🚨 AGGRESSIVE FALLBACK: Auto-convert full content to diffs for existing files
+  if (validationErrors.length > 0) {
+    console.log('\n' + '='.repeat(50));
+    console.log('🔧 AUTO-CONVERSION: LLM violated diff requirements, forcing conversion...');
+    console.log('='.repeat(50));
+    
+    let conversionsCount = 0;
+    for (const file of generatedFiles) {
+      const isExisting = existingFileNames.has(file.filename);
+      
+      // If existing file has full content instead of diff, convert it
+      if (isExisting && file.content && !file.unifiedDiff) {
+        console.log(`🔄 Converting ${file.filename} from full content to diff...`);
+        
+        const originalFile = currentFiles.find(f => f.filename === file.filename);
+        if (originalFile) {
+          try {
+            const diff = generateDiff(originalFile.content, file.content, file.filename);
+            
+            // Replace full content with diff
+            file.operation = 'modify';
+            file.unifiedDiff = diff.unifiedDiff;
+            file.diffHunks = diff.hunks;
+            delete file.content;
+            
+            conversionsCount++;
+            console.log(`  ✅ Converted successfully (${diff.hunks.length} hunks)`);
+          } catch (error) {
+            console.error(`  ❌ Conversion failed:`, error);
+          }
+        }
+      }
+    }
+    
+    console.log(`\n🔧 Auto-conversion complete: ${conversionsCount} files converted to diffs`);
+    console.log('='.repeat(50) + '\n');
+  }
+
   // Process files: apply diffs for modifications, use content for new files
   const filesWithDiffs = generatedFiles.filter(file => file.operation === 'modify' && file.unifiedDiff);
   const filesWithContent = generatedFiles.filter(file => file.operation === 'create' && file.content);
 
   console.log(`📊 File processing breakdown:`);
-  console.log(`  Files with diffs: ${filesWithDiffs.length}`);
-  console.log(`  Files with content: ${filesWithContent.length}`);
+  console.log(`  Files with diffs (will apply): ${filesWithDiffs.length}`);
+  console.log(`  Files with content (will add): ${filesWithContent.length}`);
+  
+  if (filesWithDiffs.length === 0 && existingFileNames.size > 0) {
+    console.warn('⚠️  WARNING: No diffs to apply despite having existing files!');
+    console.warn('   This means the LLM regenerated entire files instead of creating diffs.');
+    console.warn('   Check the validation errors above to see what went wrong.');
+  }
 
   const processedFiles: { filename: string; content: string }[] = [];
 
@@ -2252,9 +2669,23 @@ async function executeStage3FollowUpGeneration(
     });
   }
 
-  console.log(`✅ Stage 3 complete - Generated ${processedFiles.length} files`);
+  // Collect the diffs that were applied
+  const appliedDiffs: FileDiff[] = [];
+  if (filesWithDiffs.length > 0) {
+    const diffs = filesWithDiffs.map(file => {
+      const hunks = parseUnifiedDiff(file.unifiedDiff!);
+      return {
+        filename: file.filename,
+        hunks: hunks,
+        unifiedDiff: file.unifiedDiff!
+      };
+    }).filter(diff => diff.hunks.length > 0);
+    appliedDiffs.push(...diffs);
+  }
+
+  console.log(`✅ Stage 3 complete - Generated ${processedFiles.length} files with ${appliedDiffs.length} diffs`);
   
-  return processedFiles;
+  return { files: processedFiles, diffs: appliedDiffs };
 }
 
 /**
@@ -2281,8 +2712,13 @@ async function executeStage4InitialValidation(
   console.log(`  - Current files: ${currentFiles.length}`);
   console.log(`  - Project ID: ${projectId || 'None'}`);
 
-  // Try Railway validation first (full validation)
-  try {
+  // Skip Railway validation in production (causes 3+ min timeouts + memory failures)
+  if (process.env.NODE_ENV === 'production') {
+    console.log("⚠️  Railway validation skipped in production - using local validation only");
+    // Jump directly to local validation
+  } else {
+    // Try Railway validation first (full validation) - development only
+    try {
     console.log("\n🚂 Attempting Railway validation (full compilation)...");
     const railwayClient = createRailwayValidationClient();
     
@@ -2316,15 +2752,16 @@ async function executeStage4InitialValidation(
         console.log("\n🎉 Railway validation successful - files are valid!");
         console.log(`📁 Returning ${railwayResult.files.length} validated files`);
         return railwayResult.files;
+      } else {
+        console.log("\n⚠️ Railway validation found errors - proceeding to error fixing...");
+        return await fixRailwayCompilationErrors(railwayResult, callLLM, projectId, true);
       }
-
-      console.log("\n⚠️ Railway validation found errors - proceeding to error fixing...");
-      return await fixRailwayCompilationErrors(railwayResult, callLLM, projectId, true);
     } else {
       console.log("⚠️ Railway validation not available - falling back to local validation");
     }
   } catch (railwayError) {
     console.warn("⚠️ Railway validation failed - falling back to local validation:", railwayError);
+  }
   }
 
   // Fallback to local validation (limited in serverless)
@@ -2379,7 +2816,10 @@ async function executeStage4FollowUpValidation(
   ) => Promise<string>,
   projectId?: string,
   projectDir?: string
-): Promise<{ filename: string; content: string }[]> {
+): Promise<{ 
+  validatedFiles: { filename: string; content: string }[];
+  validationResult: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> };
+}> {
   console.log("\n" + "=".repeat(50));
   console.log("🔍 STAGE 4: Compilation Validation (Follow-Up Changes)");
   console.log("=".repeat(50));
@@ -2422,11 +2862,28 @@ async function executeStage4FollowUpValidation(
       if (railwayResult.success) {
         console.log("\n🎉 Railway validation successful - files are valid!");
         console.log(`📁 Returning ${railwayResult.files.length} validated files`);
-        return railwayResult.files;
+        return {
+          validatedFiles: railwayResult.files,
+          validationResult: {
+            success: true,
+            errors: [],
+            warnings: railwayResult.warnings || [],
+            info: railwayResult.info || []
+          }
+        };
       }
 
       console.log("\n⚠️ Railway validation found errors - proceeding to surgical error fixing...");
-      return await fixRailwayCompilationErrors(railwayResult, callLLM, projectId, false);
+      const fixedFiles = await fixRailwayCompilationErrors(railwayResult, callLLM, projectId, false);
+      return {
+        validatedFiles: fixedFiles,
+        validationResult: {
+          success: false,
+          errors: railwayResult.errors,
+          warnings: railwayResult.warnings || [],
+          info: railwayResult.info || []
+        }
+      };
     } else {
       console.log("⚠️ Railway validation not available - falling back to local validation");
     }
@@ -2466,11 +2923,28 @@ async function executeStage4FollowUpValidation(
   if (compilationResult.success) {
     console.log("\n🎉 Local validation successful - files are valid!");
     console.log(`📁 Returning ${compilationResult.files.length} validated files`);
-    return compilationResult.files;
+    return {
+      validatedFiles: compilationResult.files,
+      validationResult: {
+        success: true,
+        errors: [],
+        warnings: compilationResult.warnings || [],
+        info: compilationResult.info || []
+      }
+    };
   }
 
   console.log("\n⚠️ Local validation found errors - proceeding to surgical error fixing...");
-  return await fixCompilationErrors(compilationResult, callLLM, projectId, false);
+  const fixedFiles = await fixCompilationErrors(compilationResult, callLLM, projectId, false);
+  return {
+    validatedFiles: fixedFiles,
+    validationResult: {
+      success: false,
+      errors: compilationResult.errors,
+      warnings: compilationResult.warnings || [],
+      info: compilationResult.info || []
+    }
+  };
 }
 
 
