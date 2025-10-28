@@ -32,6 +32,8 @@ export interface PreviewResponse {
   isNewDeployment?: boolean;
   hasPackageChanges?: boolean;
   contractAddresses?: { [contractName: string]: string }; // Deployed contract addresses
+  deploymentError?: string; // Deployment error message if build failed
+  deploymentLogs?: string; // Full deployment logs for error parsing
 }
 
 export interface PreviewFile {
@@ -226,9 +228,24 @@ export async function createPreview(
       if (!response.success) {
         console.error(`❌ Preview API returned error: ${response.status}`);
         console.error(`❌ Error details: ${response.error || 'Unknown error'}`);
-        throw new Error(
-          `Failed to create preview: ${response.status} ${response.error || 'Unknown error'}`
-        );
+        console.log(`📋 Response has logs field: ${!!response.logs}`);
+        console.log(`📋 Response has output field: ${!!response.output}`);
+        console.log(`📋 Response has details field: ${!!response.details}`);
+        
+        // Return deployment error info instead of throwing
+        // This allows the caller to parse errors and retry with fixes
+        const deploymentLogs = (response.logs as string) || (response.output as string) || (response.details as string) || '';
+        console.log(`📋 Deployment logs length: ${deploymentLogs.length} characters`);
+        
+        const errorResponse: PreviewResponse = {
+          url: `${PREVIEW_API_BASE}/p/${projectId}`,
+          status: 'deployment_failed',
+          port: 3000,
+          deploymentError: response.error as string || 'Unknown deployment error',
+          deploymentLogs,
+        };
+        
+        return errorResponse;
       }
 
       const apiResponse = response;
@@ -289,6 +306,8 @@ export async function createPreview(
         isNewDeployment: apiResponse.isNewDeployment as boolean,
         hasPackageChanges: apiResponse.hasPackageChanges as boolean,
         contractAddresses: contractAddresses || undefined,
+        deploymentError: apiResponse.error as string || undefined,
+        deploymentLogs: apiResponse.logs as string || apiResponse.output as string || undefined,
       };
 
       // Store the preview info

@@ -309,15 +309,17 @@ function FileTreeView({ nodes, selectedFile, onFileSelect }: FileTreeViewProps) 
 export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     const [selectedFile, setSelectedFile] = useState<string>('');
     const [fileContent, setFileContent] = useState<string>('');
+    const [originalContent, setOriginalContent] = useState<string>('');
     const [fileTree, setFileTree] = useState<FileNode[]>([]);
     const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
     const [monacoError, setMonacoError] = useState<boolean>(false);
     const [monacoLoadTimeout, setMonacoLoadTimeout] = useState<NodeJS.Timeout | null>(null);
     const [monacoRetryCount, setMonacoRetryCount] = useState<number>(0);
     const { sessionToken } = useAuthContext();
-    // const [isSaving, setIsSaving] = useState(false);
-    // const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-    // const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeploying, setIsDeploying] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [deploymentStatus, setDeploymentStatus] = useState<string>('');
 
     // Global error handler for Monaco Editor
     useEffect(() => {
@@ -464,15 +466,16 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                 clearTimeout(timeoutId);
                 console.log(`📄 Database content for ${selectedFile}:`, content.substring(0, 100) + '...');
                 if (content !== '// File not found or error loading content') {
-                    console.log(`✅ Setting file content from database: ${content.length} chars`);
+                    console.log(`✅ Setting file content from database: ${content.length} characters`);
                     setFileContent(content);
-                    setIsLoadingContent(false);
+                    setOriginalContent(content);
+                    setHasUnsavedChanges(false);
                 } else {
                     console.log(`⚠️ File not found in database, trying file system for: ${selectedFile}`);
                     // Fallback to file system
                     fetchFileContent(selectedFile, currentProject.projectId, sessionToken).then(fileSystemContent => {
                         console.log(`📄 File system content for ${selectedFile}:`, fileSystemContent.substring(0, 100) + '...');
-                        console.log(`✅ Setting file content from file system: ${fileSystemContent.length} chars`);
+                        console.log(`✅ Setting file content from file system: ${fileSystemContent.length} characters`);
                         setFileContent(fileSystemContent);
                         setIsLoadingContent(false);
                     });
@@ -493,44 +496,87 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
         }
     }, [selectedFile, currentProject, sessionToken]);
 
-    const handleFileChange = (newContent: string | undefined) => {
-        if (newContent !== undefined && newContent !== fileContent) {
-            setFileContent(newContent);
-            // setHasUnsavedChanges(true);
-            onFileChange?.(selectedFile, newContent);
+    const handleFileChange = (value: string | undefined) => {
+        if (value !== undefined && selectedFile) {
+            setFileContent(value);
+            setHasUnsavedChanges(value !== originalContent);
+            onFileChange?.(selectedFile, value);
         }
     };
 
-    // const handleSaveFile = async () => {
-    //     if (!currentProject || !selectedFile || !hasUnsavedChanges) return;
+    const handleSaveFile = async () => {
+        if (!selectedFile || !currentProject?.projectId) return;
+        
+        setIsSaving(true);
+        try {
+            const response = await fetch(`/api/projects/${currentProject.projectId}/files`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`
+                },
+                body: JSON.stringify({
+                    filePath: selectedFile,
+                    content: fileContent,
+                    redeploy: false
+                })
+            });
 
-    //     setIsSaving(true);
-    //     try {
-    //         let success = false;
-    //         if (onSaveFile) {
-    //             success = await onSaveFile(selectedFile, fileContent);
-    //         } else {
-    //             // Fallback to default save behavior
-    //             const response = await fetch('/api/files', {
-    //                 method: 'PUT',
-    //                 headers: { 'Content-Type': 'application/json' },
-    //                 body: JSON.stringify({ projectId: currentProject.projectId, filename: selectedFile, content: fileContent }),
-    //             });
-    //             success = response.ok;
-    //         }
+            if (!response.ok) {
+                throw new Error('Failed to save file');
+            }
 
-    //         if (success) {
-    //             setHasUnsavedChanges(false);
-    //             console.log('File saved successfully');
-    //         } else {
-    //             console.error('Failed to save file');
-    //         }
-    //     } catch (error) {
-    //         console.error('Failed to save file:', error);
-    //     } finally {
-    //         setIsSaving(false);
-    //     }
-    // };
+            setOriginalContent(fileContent);
+            setHasUnsavedChanges(false);
+            console.log('✅ File saved successfully');
+        } catch (error) {
+            console.error('❌ Error saving file:', error);
+            alert('Failed to save file');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSaveAndRedeploy = async () => {
+        if (!selectedFile || !currentProject?.projectId) return;
+        
+        setIsDeploying(true);
+        setDeploymentStatus('Saving file...');
+        try {
+            const response = await fetch(`/api/projects/${currentProject.projectId}/files`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`
+                },
+                body: JSON.stringify({
+                    filePath: selectedFile,
+                    content: fileContent,
+                    redeploy: true
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save and redeploy');
+            }
+
+            setOriginalContent(fileContent);
+            setHasUnsavedChanges(false);
+            setDeploymentStatus('✅ Deployed successfully!');
+            console.log('✅ File saved and redeployed:', data.deploymentUrl);
+            
+            // Clear status after 3 seconds
+            setTimeout(() => setDeploymentStatus(''), 3000);
+        } catch (error) {
+            console.error('❌ Error saving and redeploying:', error);
+            setDeploymentStatus('❌ Deployment failed');
+            setTimeout(() => setDeploymentStatus(''), 3000);
+        } finally {
+            setIsDeploying(false);
+        }
+    };
 
 
 
@@ -573,7 +619,29 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                     <div className="flex items-center justify-between p-3 border-b border-black-10">
                         <div className="text-sm font-medium text-black">
                             {selectedFile ? selectedFile : 'Select a file'}
+                            {hasUnsavedChanges && <span className="ml-2 text-xs text-orange-500">● Unsaved</span>}
                         </div>
+                        {selectedFile && (
+                            <div className="flex items-center gap-2">
+                                {deploymentStatus && (
+                                    <span className="text-xs text-gray-600">{deploymentStatus}</span>
+                                )}
+                                <button
+                                    onClick={handleSaveFile}
+                                    disabled={!hasUnsavedChanges || isSaving}
+                                    className="text-xs px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {isSaving ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                    onClick={handleSaveAndRedeploy}
+                                    disabled={isDeploying}
+                                    className="text-xs px-3 py-1.5 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {isDeploying ? 'Deploying...' : '🚀 Save & Redeploy'}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Monaco Editor */}
@@ -640,7 +708,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                 lineNumbers: 'on',
                                                 scrollBeyondLastLine: false,
                                                 automaticLayout: true,
-                                                readOnly: true,
+                                                readOnly: false,
                                                 theme: 'vs-light'
                                             }}
                                         />
@@ -673,7 +741,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                         tabSize: 2,
                                                         minHeight: '100%'
                                                     }}
-                                                    readOnly
+                                                    readOnly={false}
                                                     spellCheck={false}
                                                     placeholder="File content will appear here..."
                                                 />

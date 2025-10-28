@@ -30,6 +30,11 @@ import {
 } from "./previewManager";
 import { STAGE_MODEL_CONFIG, ANTHROPIC_MODELS } from "./llmOptimizer";
 import { updateFilesWithContractAddresses } from "./contractAddressInjector";
+import {
+  parseVercelDeploymentErrors,
+  formatErrorsForLLM,
+  getFilesToFix,
+} from "./deploymentErrorParser";
 
 const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
 
@@ -386,6 +391,152 @@ function getProjectDir(projectId: string): string {
 }
 
 /**
+ * Fix deployment errors by parsing Vercel build logs and calling LLM to fix issues
+ */
+async function fixDeploymentErrors(
+  deploymentError: string,
+  deploymentLogs: string,
+  currentFiles: { filename: string; content: string }[],
+  projectId: string
+): Promise<{ filename: string; content: string }[]> {
+  console.log("\n" + "=".repeat(70));
+  console.log("🔧 DEPLOYMENT ERROR DETECTED - ATTEMPTING TO FIX");
+  console.log("=".repeat(70));
+  console.log(`🔍 [FIX-DEBUG] Input parameters:`);
+  console.log(`🔍 [FIX-DEBUG] - deploymentError length: ${deploymentError.length}`);
+  console.log(`🔍 [FIX-DEBUG] - deploymentLogs length: ${deploymentLogs.length}`);
+  console.log(`🔍 [FIX-DEBUG] - currentFiles count: ${currentFiles.length}`);
+  console.log(`🔍 [FIX-DEBUG] - projectId: ${projectId}`);
+  console.log(`🔍 [FIX-DEBUG] First 500 chars of error:\n${deploymentError.substring(0, 500)}`);
+
+  // Parse deployment errors
+  const parsed = parseVercelDeploymentErrors(deploymentError, deploymentLogs);
+  console.log(`📊 Parsed errors: ${parsed.errors.length} total`);
+  console.log(`   - TypeScript: ${parsed.hasTypeScriptErrors ? 'YES' : 'NO'}`);
+  console.log(`   - ESLint: ${parsed.hasESLintErrors ? 'YES' : 'NO'}`);
+  console.log(`   - Build: ${parsed.hasBuildErrors ? 'YES' : 'NO'}`);
+  console.log(`🔍 [FIX-DEBUG] Parsed error details:`, JSON.stringify(parsed.errors.slice(0, 3), null, 2));
+
+  if (parsed.errors.length === 0) {
+    console.log("⚠️ No parseable errors found in deployment logs");
+    console.log(`🔍 [FIX-DEBUG] Returning ${currentFiles.length} original files unchanged`);
+    return currentFiles;
+  }
+
+  // Get files that need fixing
+  const filesToFix = getFilesToFix(parsed, currentFiles);
+  console.log(`📝 Files to fix: ${filesToFix.length}`);
+  filesToFix.forEach(f => console.log(`   - ${f.filename}`));
+
+  if (filesToFix.length === 0) {
+    console.log("⚠️ No files identified for fixing");
+    return currentFiles;
+  }
+
+  // Format errors for LLM
+  const errorMessage = formatErrorsForLLM(parsed);
+  console.log("\n📋 Error summary for LLM:");
+  console.log(errorMessage);
+
+  // Import getStage4ValidatorPrompt from llmOptimizer
+  const { getStage4ValidatorPrompt } = await import('./llmOptimizer');
+  
+  // Create LLM prompt to fix errors
+  const fixPrompt = getStage4ValidatorPrompt(
+    filesToFix,
+    [errorMessage],
+    false // Use diff-based fixes, not complete file rewrites
+  );
+
+  console.log(`\n🤖 Calling LLM to fix deployment errors...`);
+  console.log(`🔍 [FIX-DEBUG] LLM prompt length: ${fixPrompt.length} chars`);
+  console.log(`🔍 [FIX-DEBUG] Using diff-based fixes: true`);
+  
+  const fixResponse = await callClaudeWithLogging(
+    fixPrompt,
+    "",
+    "Stage 4: Deployment Error Fixes",
+    "STAGE_4_VALIDATOR"
+  );
+
+  console.log(`🔍 [FIX-DEBUG] LLM response received, length: ${fixResponse.length} chars`);
+  console.log(`🔍 [FIX-DEBUG] Response preview (first 500 chars):\n${fixResponse.substring(0, 500)}`);
+
+  // Log the response for debugging
+  const { logStageResponse } = await import('./logger');
+  logStageResponse(projectId, 'stage4-deployment-error-fixes', fixResponse, {
+    errorCount: parsed.errors.length,
+    filesToFix: filesToFix.length,
+  });
+  console.log(`🔍 [FIX-DEBUG] Response logged to stage4-deployment-error-fixes`);
+
+  // Parse LLM response
+  const { parseStage4ValidatorResponse } = await import('./parserUtils');
+  const { applyDiffsToFiles } = await import('./diffBasedPipeline');
+  
+  try {
+    const fixes = parseStage4ValidatorResponse(fixResponse);
+    console.log(`✅ Parsed ${fixes.length} fixes from LLM`);
+    
+    // Log what we got from the LLM
+    fixes.forEach((fix, idx) => {
+      console.log(`\n📄 Fix ${idx + 1}: ${fix.filename}`);
+      console.log(`   - Has unifiedDiff: ${!!fix.unifiedDiff}`);
+      console.log(`   - Has diffHunks: ${!!fix.diffHunks}`);
+      console.log(`   - Has content: ${!!fix.content}`);
+      if (fix.unifiedDiff) {
+        console.log(`   - Diff length: ${fix.unifiedDiff.length} chars`);
+        console.log(`   - Diff preview: ${fix.unifiedDiff.substring(0, 200)}...`);
+      }
+      if (fix.diffHunks) {
+        console.log(`   - Number of hunks: ${fix.diffHunks.length}`);
+      }
+    });
+
+    // Convert to FileDiff format (diffHunks -> hunks)
+    const fileDiffs = fixes
+      .filter(f => f.unifiedDiff && f.diffHunks)
+      .map(f => ({
+        filename: f.filename,
+        hunks: f.diffHunks!,
+        unifiedDiff: f.unifiedDiff!,
+      }));
+
+    console.log(`\n🔍 Filtered to ${fileDiffs.length} files with valid diffs (from ${fixes.length} total)`);
+
+    if (fileDiffs.length === 0) {
+      console.log("⚠️ No diff-based fixes found, returning original files");
+      console.log("💡 LLM may have returned full file content instead of diffs");
+      
+      // Fallback: If LLM returned full content instead of diffs, use that
+      const fullContentFixes = fixes.filter(f => f.content && !f.unifiedDiff);
+      if (fullContentFixes.length > 0) {
+        console.log(`📝 Found ${fullContentFixes.length} full-content fixes, applying those instead`);
+        const updatedFiles = currentFiles.map(currentFile => {
+          const fix = fullContentFixes.find(f => f.filename === currentFile.filename);
+          return fix ? { ...currentFile, content: fix.content! } : currentFile;
+        });
+        return updatedFiles;
+      }
+      
+      return currentFiles;
+    }
+
+    // Apply fixes to current files
+    console.log(`\n🔧 Applying diffs to files...`);
+    const fixedFiles = applyDiffsToFiles(currentFiles, fileDiffs);
+    console.log(`✅ Applied fixes to ${fixedFiles.length} files`);
+
+    return fixedFiles;
+  } catch (parseError) {
+    console.error("❌ Failed to parse LLM fix response:", parseError);
+    console.error("Stack trace:", parseError instanceof Error ? parseError.stack : 'No stack trace');
+    console.log("📋 Returning original files");
+    return currentFiles;
+  }
+}
+
+/**
  * Main worker function to execute a generation job
  */
 export async function executeGenerationJob(jobId: string): Promise<void> {
@@ -634,36 +785,132 @@ async function executeInitialGenerationJob(
 
     // Create preview (now with real contract addresses injected if Web3)
     console.log("🚀 Creating preview...");
-    let previewData;
-    let projectUrl;
+    let previewData: Awaited<ReturnType<typeof createPreview>> | undefined;
+    let projectUrl: string = `${PREVIEW_API_BASE}/p/${projectId}`; // Default fallback URL
+    const maxDeploymentRetries = 2; // Allow 1 retry with fixes
+    let deploymentAttempt = 0;
 
-    try {
-      // Skip contract deployment in /deploy endpoint if we already deployed them
-      const skipContractsInDeploy = !!contractAddresses; // true if we already deployed contracts
+    while (deploymentAttempt < maxDeploymentRetries) {
+      deploymentAttempt++;
+      console.log(`\n📦 Deployment attempt ${deploymentAttempt}/${maxDeploymentRetries}...`);
+      console.log(`🔍 [RETRY-DEBUG] Starting deployment attempt ${deploymentAttempt}`);
+      console.log(`🔍 [RETRY-DEBUG] maxDeploymentRetries: ${maxDeploymentRetries}`);
+      console.log(`🔍 [RETRY-DEBUG] Files count: ${generatedFiles.length}`);
 
-      previewData = await createPreview(
-        projectId,
-        generatedFiles, // Already contains real addresses if Web3
-        accessToken,
-        enhancedResult.intentSpec?.isWeb3, // Pass isWeb3 flag to preview API
-        skipContractsInDeploy // Skip contracts if we already deployed them
-      );
-      console.log("✅ Preview created successfully");
+      try {
+        // Skip contract deployment in /deploy endpoint if we already deployed them
+        const skipContractsInDeploy = !!contractAddresses; // true if we already deployed contracts
+        console.log(`🔍 [RETRY-DEBUG] skipContractsInDeploy: ${skipContractsInDeploy}`);
 
-      projectUrl = getPreviewUrl(projectId) || `https://${projectId}.${PREVIEW_API_BASE}`;
-      console.log(`🎉 Project ready at: ${projectUrl}`);
-    } catch (previewError) {
-      console.error("❌ Failed to create preview:", previewError);
+        previewData = await createPreview(
+          projectId,
+          generatedFiles, // Already contains real addresses if Web3
+          accessToken,
+          enhancedResult.intentSpec?.isWeb3, // Pass isWeb3 flag to preview API
+          skipContractsInDeploy // Skip contracts if we already deployed them
+        );
 
-      previewData = {
-        url: `${PREVIEW_API_BASE}/p/${projectId}`,
-        status: "error",
-        port: 3000,
-        previewUrl: `${PREVIEW_API_BASE}/p/${projectId}`,
-      };
+        console.log(`🔍 [RETRY-DEBUG] Preview data received:`, {
+          status: previewData.status,
+          hasError: !!previewData.deploymentError,
+          hasLogs: !!previewData.deploymentLogs,
+          errorLength: previewData.deploymentError?.length || 0,
+          logsLength: previewData.deploymentLogs?.length || 0
+        });
 
-      projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
-      console.log("⚠️ Using fallback preview URL:", projectUrl);
+        // Check if deployment failed with errors
+        if (previewData.status === 'deployment_failed' && previewData.deploymentError) {
+          console.error(`❌ Deployment failed on attempt ${deploymentAttempt}`);
+          console.log(`📋 Deployment error: ${previewData.deploymentError}`);
+          console.log(`📋 Deployment logs available: ${previewData.deploymentLogs ? 'YES' : 'NO'}`);
+          console.log(`🔍 [RETRY-DEBUG] Deployment failed, checking if retry is possible...`);
+          console.log(`🔍 [RETRY-DEBUG] deploymentAttempt < maxDeploymentRetries: ${deploymentAttempt < maxDeploymentRetries}`);
+          
+          // Log to database for visibility
+          await updateGenerationJobStatus(jobId, 'processing', {
+            status: 'deployment_retry',
+            attempt: deploymentAttempt,
+            maxAttempts: maxDeploymentRetries,
+            error: previewData.deploymentError.substring(0, 500), // Truncate for DB
+            hasLogs: !!previewData.deploymentLogs
+          });
+          console.log(`🔍 [RETRY-DEBUG] Database status updated with deployment_retry`);
+          
+          // If this is not the last attempt, try to fix errors
+          if (deploymentAttempt < maxDeploymentRetries) {
+            console.log(`🔧 Attempting to fix deployment errors...`);
+            console.log(`🔍 [RETRY-DEBUG] Calling fixDeploymentErrors with:`);
+            console.log(`🔍 [RETRY-DEBUG] - Error length: ${previewData.deploymentError.length}`);
+            console.log(`🔍 [RETRY-DEBUG] - Logs length: ${previewData.deploymentLogs?.length || 0}`);
+            console.log(`🔍 [RETRY-DEBUG] - Files count: ${generatedFiles.length}`);
+            console.log(`🔍 [RETRY-DEBUG] - Project ID: ${projectId}`);
+            
+            const fixedFiles = await fixDeploymentErrors(
+              previewData.deploymentError,
+              previewData.deploymentLogs || '', // Use empty string if logs not available
+              generatedFiles,
+              projectId
+            );
+
+            console.log(`🔍 [RETRY-DEBUG] fixDeploymentErrors returned ${fixedFiles.length} files`);
+            console.log(`🔍 [RETRY-DEBUG] Files changed: ${fixedFiles.length !== generatedFiles.length ? 'YES (count changed)' : 'checking content...'}`);
+
+            // Update generatedFiles with fixes
+            generatedFiles = fixedFiles;
+
+            // Write fixed files back to disk
+            console.log(`🔍 [RETRY-DEBUG] Writing ${fixedFiles.length} fixed files to disk...`);
+            await writeFilesToDir(userDir, generatedFiles);
+            await saveFilesToGenerated(projectId, generatedFiles);
+            console.log("✅ Fixed files saved, retrying deployment...");
+            
+            // Log retry to database
+            await updateGenerationJobStatus(jobId, 'processing', {
+              status: 'deployment_retrying',
+              attempt: deploymentAttempt + 1,
+              maxAttempts: maxDeploymentRetries,
+              fixesApplied: true
+            });
+            console.log(`🔍 [RETRY-DEBUG] Database updated with deployment_retrying status`);
+            console.log(`🔍 [RETRY-DEBUG] Continuing to next deployment attempt...`);
+            
+            // Continue to next iteration to retry deployment
+            continue;
+          } else {
+            // Last attempt failed, log error and break
+            console.error("❌ All deployment attempts failed");
+            await updateGenerationJobStatus(jobId, 'processing', {
+              status: 'deployment_failed_all_attempts',
+              attempts: deploymentAttempt,
+              finalError: previewData.deploymentError.substring(0, 500)
+            });
+            projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
+            break;
+          }
+        }
+
+        // Deployment succeeded
+        console.log("✅ Preview created successfully");
+        projectUrl = getPreviewUrl(projectId) || `https://${projectId}.${PREVIEW_API_BASE}`;
+        console.log(`🎉 Project ready at: ${projectUrl}`);
+        break; // Exit retry loop on success
+
+      } catch (previewError) {
+        console.error(`❌ Failed to create preview on attempt ${deploymentAttempt}:`, previewError);
+
+        // If this is the last attempt, use fallback
+        if (deploymentAttempt >= maxDeploymentRetries) {
+          previewData = {
+            url: `${PREVIEW_API_BASE}/p/${projectId}`,
+            status: "error",
+            port: 3000,
+            previewUrl: `${PREVIEW_API_BASE}/p/${projectId}`,
+          };
+
+          projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
+          console.log("⚠️ Using fallback preview URL:", projectUrl);
+        }
+      }
     }
 
     // Save project to database
@@ -760,12 +1007,12 @@ async function executeInitialGenerationJob(
     const result = {
       projectId,
       url: projectUrl,
-      port: previewData.port || 3000,
+      port: previewData?.port || 3000,
       success: true,
       generatedFiles: generatedFiles.map((f) => f.filename),
       totalFiles: generatedFiles.length,
-      previewUrl: previewData.previewUrl || projectUrl,
-      vercelUrl: previewData.vercelUrl,
+      previewUrl: previewData?.previewUrl || projectUrl,
+      vercelUrl: previewData?.vercelUrl,
       projectName,
       contractAddresses: contractAddresses, // Include contract addresses in result
     };

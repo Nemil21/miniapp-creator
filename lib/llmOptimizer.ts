@@ -57,10 +57,10 @@ export const ANTHROPIC_MODELS = {
   // Fast, cost-effective for simple tasks
   FAST: "claude-3-5-haiku-20241022",
   // Balanced performance for most tasks
-  BALANCED: "claude-3-7-sonnet-20250219",
+  BALANCED: "claude-sonnet-4-20250514",
   // High performance for complex tasks
   // POWERFUL: "claude-3-7-sonnet-20250219",
-  POWERFUL: "claude-sonnet-4-20250514",
+  POWERFUL: "claude-sonnet-4-5-20250929",
 } as const;
 
 // Model selection strategy for each stage with fallbacks
@@ -355,6 +355,15 @@ AVAILABLE FEATURES:
 - For Web3 apps: Modify wagmi.ts to import CHAIN from contractConfig. For non-Web3 apps: Do not modify wagmi.ts
 - Do not modify package.json unless absolutely necessary
 
+🚨 CRITICAL TEMPLATE ENFORCEMENT:
+- ONLY use the boilerplate template files provided
+- DO NOT create new API routes unless absolutely necessary
+- ALWAYS use wagmi hooks (useReadContract, useWriteContract) directly in components
+- DO NOT create wrapper API routes for contract interactions
+- ONLY modify src/app/page.tsx and create components in src/components/
+- For Web3: ONLY modify contracts/src/ for smart contracts
+- NEVER create src/app/api/contract/ or similar API wrappers
+
 CRITICAL: You MUST return ONLY valid JSON. No explanations, no text, no markdown, no code fences.
 
 CURRENT PACKAGE.JSON:
@@ -588,6 +597,16 @@ INITIAL GENERATION APPROACH:
 
 BOILERPLATE CONTEXT:
 ${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+
+🚨 CRITICAL TEMPLATE ENFORCEMENT:
+- ONLY use the boilerplate template files provided
+- DO NOT create new API routes (src/app/api/*) unless absolutely necessary
+- ALWAYS use wagmi hooks (useReadContract, useWriteContract) directly in components
+- DO NOT create wrapper API routes for contract interactions (e.g., src/app/api/contract/read/route.ts)
+- ONLY modify src/app/page.tsx and create components in src/components/
+- For Web3: ONLY modify contracts/src/ for smart contracts and contracts/scripts/deploy.js
+- Use existing boilerplate patterns: Tabs component, Button, Input, ConnectWallet
+- NEVER deviate from boilerplate structure to avoid TypeScript errors
 
 CRITICAL: Return ONLY valid JSON. Surround the JSON with EXACT markers:
 __START_JSON__
