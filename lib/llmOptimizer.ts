@@ -673,6 +673,8 @@ PLANNING RULES:
 - ALWAYS use Tabs component from @/components/ui/Tabs for navigation
 - ALWAYS target tab content areas for feature implementation (Tab1, Tab2, etc.)
 - Specify exact operations (create/modify/delete) and clear purposes
+- 🚨 CRITICAL: NEVER PLAN TO CREATE src/app/api/ ROUTES FOR CONTRACT INTERACTIONS
+- 🚨 CRITICAL: USE wagmi hooks (useReadContract, useWriteContract) DIRECTLY IN COMPONENTS
 - Target specific sections with detailed descriptions:
   * "imports" - what imports to add/modify
   * "tab-content" - which tab content to modify and how
@@ -912,6 +914,8 @@ PLANNING RULES:
 - ALWAYS use Tabs component from @/components/ui/Tabs for navigation
 - ALWAYS target tab content areas for feature implementation (Tab1, Tab2, etc.)
 - Specify exact operations (create/modify/delete) and clear purposes
+- 🚨 CRITICAL: NEVER PLAN TO CREATE src/app/api/ ROUTES FOR CONTRACT INTERACTIONS
+- 🚨 CRITICAL: USE wagmi hooks (useReadContract, useWriteContract) DIRECTLY IN COMPONENTS
 - Target specific sections with detailed descriptions:
   * "imports" - what imports to add/modify
   * "tab-content" - which tab content to modify and how
