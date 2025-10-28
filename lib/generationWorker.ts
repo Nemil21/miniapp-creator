@@ -897,9 +897,32 @@ async function executeInitialGenerationJob(
 
       } catch (previewError) {
         console.error(`❌ Failed to create preview on attempt ${deploymentAttempt}:`, previewError);
-
-        // If this is the last attempt, use fallback
-        if (deploymentAttempt >= maxDeploymentRetries) {
+        
+        // Check if it's a timeout error that should trigger retry
+        const errorMessage = previewError instanceof Error ? previewError.message : String(previewError);
+        const isTimeoutError = errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT') || errorMessage.includes('ECONNRESET');
+        
+        console.log(`🔍 [RETRY-DEBUG] Error type: ${isTimeoutError ? 'TIMEOUT' : 'OTHER'}`);
+        console.log(`🔍 [RETRY-DEBUG] Error message: ${errorMessage}`);
+        console.log(`🔍 [RETRY-DEBUG] Should retry: ${isTimeoutError && deploymentAttempt < maxDeploymentRetries}`);
+        
+        // Convert timeout errors to deployment_failed status so retry logic can handle them
+        if (isTimeoutError && deploymentAttempt < maxDeploymentRetries) {
+          console.log(`⏱️ Timeout detected, treating as deployment failure and retrying...`);
+          
+          // Log to database
+          await updateGenerationJobStatus(jobId, 'processing', {
+            status: 'deployment_timeout',
+            attempt: deploymentAttempt,
+            maxAttempts: maxDeploymentRetries,
+            error: errorMessage
+          });
+          
+          // For timeout errors, just retry without trying to fix
+          console.log(`🔄 Retrying deployment after timeout...`);
+          continue;
+        } else if (deploymentAttempt >= maxDeploymentRetries) {
+          // If this is the last attempt, use fallback
           previewData = {
             url: `${PREVIEW_API_BASE}/p/${projectId}`,
             status: "error",
@@ -909,6 +932,11 @@ async function executeInitialGenerationJob(
 
           projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
           console.log("⚠️ Using fallback preview URL:", projectUrl);
+          break;
+        } else {
+          // Non-timeout error on non-final attempt - retry
+          console.log(`🔧 Non-timeout error, retrying...`);
+          continue;
         }
       }
     }

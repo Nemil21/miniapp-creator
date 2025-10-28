@@ -11,6 +11,83 @@ const activePreviews = new Map<string, PreviewResponse>();
 // Preview API configuration
 const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
 
+/**
+ * Poll for deployment status when orchestrator returns "in_progress"
+ */
+async function pollDeploymentStatus(
+  projectId: string,
+  accessToken: string,
+  maxAttempts: number = 30, // 30 attempts * 10 seconds = 5 minutes max
+  pollInterval: number = 10000 // 10 seconds
+): Promise<{ status: string; deploymentUrl?: string; error?: string; logs?: string }> {
+  console.log(`🔄 Polling deployment status for ${projectId} (max ${maxAttempts} attempts, ${pollInterval}ms interval)`);
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`📊 Poll attempt ${attempt}/${maxAttempts}...`);
+    
+    try {
+      const response = await fetch(`${PREVIEW_API_BASE}/deploy/status/${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ Status poll failed: ${response.status}`);
+        if (response.status === 404) {
+          return {
+            status: 'failed',
+            error: 'Deployment job not found',
+          };
+        }
+        throw new Error(`Status poll failed: ${response.status}`);
+      }
+      
+      const statusData = await response.json();
+      console.log(`📊 Status: ${statusData.status}, Duration: ${Math.round(statusData.duration / 1000)}s`);
+      
+      // Check if deployment completed or failed
+      if (statusData.status === 'completed') {
+        console.log(`✅ Deployment completed! URL: ${statusData.deploymentUrl}`);
+        return {
+          status: 'completed',
+          deploymentUrl: statusData.deploymentUrl,
+        };
+      } else if (statusData.status === 'failed') {
+        console.error(`❌ Deployment failed: ${statusData.error}`);
+        return {
+          status: 'failed',
+          error: statusData.error,
+          logs: statusData.logs,
+        };
+      }
+      
+      // Still in progress, wait before next poll
+      if (attempt < maxAttempts) {
+        console.log(`⏳ Still in progress, waiting ${pollInterval}ms before next poll...`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+    } catch (error) {
+      console.error(`❌ Error polling status:`, error);
+      if (attempt === maxAttempts) {
+        return {
+          status: 'failed',
+          error: `Failed to poll status: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+  }
+  
+  // Max attempts reached
+  console.error(`❌ Polling timeout after ${maxAttempts} attempts`);
+  return {
+    status: 'failed',
+    error: `Deployment status polling timeout after ${maxAttempts * pollInterval / 1000} seconds`,
+  };
+}
+
 // Helper functions for path resolution
 function getProjectBaseDir(projectId: string): string {
   return process.env.NODE_ENV === 'production'
@@ -146,16 +223,12 @@ export async function createPreview(
     console.log(`📤 Request body keys: ${Object.keys(requestBody)}`);
 
     // Make API request to create preview with extended timeout for Vercel deployment
-    // Vercel deployments can take 5-10 minutes
-    // Note: Using keepalive and no timeout on fetch itself since we want to wait
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.log(`⏱️ Request timeout after 10 minutes, aborting...`);
-      controller.abort();
-    }, 600000); // 10 minute timeout
+    // Set to 7 minutes to allow first deployment to complete (typical: 4-5 min)
+    // Still short enough to retry before Vercel function's 10-minute limit
+    let timeoutId: NodeJS.Timeout | undefined;
 
     try {
-      console.log(`⏱️ Starting long-running Vercel deployment request (max 10 min)...`);
+      console.log(`⏱️ Starting deployment request (timeout: 7 min)...`);
 
       // Use native http module for better timeout control
       const http = await import('http');
@@ -171,7 +244,7 @@ export async function createPreview(
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        timeout: 600000, // 10 minutes
+        timeout: 420000, // 7 minutes
       };
 
       const requestData = JSON.stringify(requestBody);
@@ -179,11 +252,18 @@ export async function createPreview(
       const response: { success: boolean; error?: string; previewUrl?: string; vercelUrl?: string; [key: string]: unknown } = await new Promise((resolve, reject) => {
         const protocol = url.protocol === 'https:' ? https : http;
         const req = protocol.request(options, (res) => {
+          console.log(`📥 Response received - Status: ${res.statusCode}, Headers:`, res.headers);
           let data = '';
+          let dataChunks = 0;
           res.on('data', (chunk) => {
             data += chunk;
+            dataChunks++;
+            if (dataChunks % 10 === 0) {
+              console.log(`📥 Received ${dataChunks} chunks, ${data.length} bytes so far...`);
+            }
           });
           res.on('end', () => {
+            console.log(`📥 Response complete - Total size: ${data.length} bytes from ${dataChunks} chunks`);
             clearTimeout(timeoutId);
             const success = res.statusCode! >= 200 && res.statusCode! < 300;
             try {
@@ -207,14 +287,23 @@ export async function createPreview(
 
         req.on('error', (error) => {
           clearTimeout(timeoutId);
+          console.error(`❌ Request error:`, error);
           reject(error);
         });
 
         req.on('timeout', () => {
           clearTimeout(timeoutId);
           req.destroy();
-          reject(new Error('Request timeout'));
+          console.error(`❌ Request timeout after 7 minutes`);
+          reject(new Error('Request timeout after 7 minutes'));
         });
+
+        // Set up our own timeout to destroy the request
+        timeoutId = setTimeout(() => {
+          console.log(`⏱️ Manual timeout after 7 minutes, destroying request...`);
+          req.destroy();
+          reject(new Error('Request timeout after 7 minutes'));
+        }, 420000); // 7 minute timeout
 
         req.write(requestData);
         req.end();
@@ -251,6 +340,35 @@ export async function createPreview(
       const apiResponse = response;
 
       console.log("📦 API Response:", JSON.stringify(apiResponse, null, 2));
+      
+      // Check if deployment is still in progress (hybrid approach)
+      if (apiResponse.status === 'in_progress') {
+        console.log(`⏳ Deployment in progress, starting polling...`);
+        console.log(`📊 Message: ${apiResponse.message}`);
+        console.log(`⏱️  Estimated time: ${apiResponse.estimatedTime}`);
+        
+        // Poll for deployment status
+        const pollResult = await pollDeploymentStatus(projectId, accessToken);
+        
+        if (pollResult.status === 'completed' && pollResult.deploymentUrl) {
+          console.log(`✅ Polled deployment completed successfully`);
+          // Update apiResponse with completed deployment data
+          apiResponse.previewUrl = pollResult.deploymentUrl;
+          apiResponse.vercelUrl = pollResult.deploymentUrl;
+          apiResponse.status = 'completed';
+          apiResponse.success = true;
+        } else if (pollResult.status === 'failed') {
+          console.error(`❌ Polled deployment failed: ${pollResult.error}`);
+          // Return deployment failure
+          return {
+            url: `${PREVIEW_API_BASE}/p/${projectId}`,
+            status: 'deployment_failed',
+            port: 3000,
+            deploymentError: pollResult.error || 'Deployment failed during polling',
+            deploymentLogs: pollResult.logs || '',
+          };
+        }
+      }
 
       // Parse contract addresses from deployment response
       const contractAddresses = parseContractAddressesFromDeployment(apiResponse);
