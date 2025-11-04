@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 import { CodeGenerator } from './components/CodeGenerator';
-import { ChatInterface } from './components/ChatInterface';
+import { ChatInterface, ChatInterfaceRef } from './components/ChatInterface';
+import { HoverSidebar, HoverSidebarRef } from './components/HoverSidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuthContext } from './contexts/AuthContext';
 import { useApiUtils } from '../lib/apiUtils';
+import { EarnKit } from '@earnkit/earn';
 
 
 interface GeneratedProject {
@@ -28,6 +30,48 @@ function HomeContent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const { sessionToken } = useAuthContext();
   const { apiCall } = useApiUtils();
+  const chatInterfaceRef = useRef<ChatInterfaceRef>(null);
+  const hoverSidebarRef = useRef<HoverSidebarRef>(null);
+
+  // Initialize EarnKit
+  const activeAgent = useMemo(() => {
+    const credsOff = process.env.NEXT_PUBLIC_CREDS_OFF === 'true';
+    const agentId = process.env.NEXT_PUBLIC_EARNKIT_AGENT_ID;
+    const apiKey = process.env.NEXT_PUBLIC_EARNKIT_API_KEY;
+    
+    console.log('🔧 EarnKit Initialization:', {
+      credsOff,
+      agentId: agentId ? `${agentId.substring(0, 8)}...` : 'missing',
+      apiKey: apiKey ? `${apiKey.substring(0, 8)}...` : 'missing',
+      hasAgentId: !!agentId,
+      hasApiKey: !!apiKey
+    });
+    
+    // If credits are disabled, return null to disable the credit system
+    if (credsOff) {
+      console.log('💰 Credits disabled via CREDS_OFF flag');
+      return null;
+    }
+    
+    if (!agentId || !apiKey) {
+      console.warn('⚠️ EarnKit credentials not configured');
+      return null;
+    }
+
+    console.log('✅ EarnKit instance created successfully');
+    return new EarnKit({
+      agentId,
+      apiKey,
+    });
+  }, []);
+
+  const feeModelType: "free-tier" | "credit-based" = "credit-based";
+  
+  console.log('📊 HomeContent render:', {
+    hasActiveAgent: !!activeAgent,
+    feeModelType,
+    hasCurrentProject: !!currentProject
+  });
 
   // Debug currentProject changes
   useEffect(() => {
@@ -80,7 +124,16 @@ function HomeContent() {
   const handleNewProject = () => {
     console.log('🆕 handleNewProject called - clearing current project');
     setCurrentProject(null);
-    // Focus on the chat interface for new project creation
+    
+    // Clear chat and focus input
+    if (chatInterfaceRef.current) {
+      chatInterfaceRef.current.clearChat();
+      
+      // Focus input after a short delay to ensure render is complete
+      setTimeout(() => {
+        chatInterfaceRef.current?.focusInput();
+      }, 100);
+    }
   };
 
   return (
@@ -88,9 +141,11 @@ function HomeContent() {
       {/* Left Section - Chat/Agent */}
       <section className="w-1/3 border-r border-black/10 h-[calc(100vh-40px)] flex flex-col rounded-tl-[56px] rounded-bl-[56px] bg-white">
         <ChatInterface
+          ref={chatInterfaceRef}
           currentProject={currentProject}
           onProjectGenerated={setCurrentProject}
           onGeneratingChange={setIsGenerating}
+          activeAgent={activeAgent || undefined}
         />
       </section>
 
@@ -99,10 +154,18 @@ function HomeContent() {
         <CodeGenerator
           currentProject={currentProject}
           isGenerating={isGenerating}
-          onProjectSelect={handleProjectSelect}
-          onNewProject={handleNewProject}
+          onOpenSidebar={() => hoverSidebarRef.current?.openSidebar()}
+          activeAgent={activeAgent || undefined}
+          feeModelType={feeModelType}
         />
       </section>
+
+      {/* Hover Sidebar for Projects */}
+      <HoverSidebar
+        ref={hoverSidebarRef}
+        onProjectSelect={handleProjectSelect}
+        onNewProject={handleNewProject}
+      />
     </div>
   );
 }

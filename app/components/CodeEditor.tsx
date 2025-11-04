@@ -470,6 +470,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                     setFileContent(content);
                     setOriginalContent(content);
                     setHasUnsavedChanges(false);
+                    setIsLoadingContent(false); // Stop loading when content is successfully loaded
                 } else {
                     console.log(`⚠️ File not found in database, trying file system for: ${selectedFile}`);
                     // Fallback to file system

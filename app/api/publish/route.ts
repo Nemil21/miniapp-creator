@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateGeneratedFile, updatePreviewFiles } from '../../../lib/previewManager';
+import { updateGeneratedFile } from '../../../lib/previewManager';
 import { db, projects } from '../../../db';
 import { eq } from 'drizzle-orm';
 import { getUserBySessionToken } from '../../../lib/database';
-
+import { config } from '../../../lib/config';
+import fs from 'fs/promises';
+import path from 'path';
+  
 // Validate manifest structure
 function validateManifest(manifest: unknown): { valid: boolean; error?: string } {
   if (!manifest || typeof manifest !== 'object') {
@@ -12,20 +15,22 @@ function validateManifest(manifest: unknown): { valid: boolean; error?: string }
 
   const manifestObj = manifest as Record<string, unknown>;
 
-  // Check for required top-level fields
-  if (!manifestObj.accountAssociation) {
-    return { valid: false, error: 'Missing required field: accountAssociation' };
-  }
-
   // Check for either miniapp or frame field
-  if (!manifestObj.miniapp && !manifestObj.frame) {
+  if (!manifestObj.miniapp && !manifestObj.frame) { 
     return { valid: false, error: 'Manifest must contain either "miniapp" or "frame" field' };
   }
 
-  // Validate accountAssociation structure
-  const accountAssociation = manifestObj.accountAssociation as Record<string, unknown>;
-  if (!accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
-    return { valid: false, error: 'accountAssociation must contain header, payload, and signature' };
+  // Validate accountAssociation structure if it exists and is not null
+  // accountAssociation can be null for direct publishing without Farcaster wallet signature
+  if ('accountAssociation' in manifestObj && manifestObj.accountAssociation !== null) {
+    const accountAssociation = manifestObj.accountAssociation as Record<string, unknown>;
+    // Only validate if accountAssociation is provided and not explicitly null
+    if (accountAssociation.header !== null || accountAssociation.payload !== null || accountAssociation.signature !== null) {
+      // If any field is provided, all must be provided
+      if (!accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
+        return { valid: false, error: 'accountAssociation must contain header, payload, and signature (or be null for direct publishing)' };
+      }
+    }
   }
 
   // Validate miniapp required fields if present
@@ -178,10 +183,9 @@ export async function POST(req: NextRequest) {
       console.log('✅ File saved to generated directory:', filename);
     } catch (error) {
       console.error('❌ Failed to save file locally:', error);
-      return NextResponse.json(
-        { success: false, error: 'Failed to save manifest file' },
-        { status: 500 }
-      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error details:', errorMessage);
+      // Continue anyway - file will be created in preview update
     }
 
     // Update database
@@ -203,17 +207,113 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Trigger preview update (optional - may not work on Railway)
+    // Trigger FULL redeploy to Vercel with the manifest file
     try {
-      await updatePreviewFiles(
-        projectId,
-        [{ filename, content: farcasterJsonContent }],
-        sessionToken
-      );
-      console.log('✅ Preview updated with manifest file');
+      // Use PREVIEW_AUTH_TOKEN instead of user session token for preview host authentication
+      const previewAuthToken = config.preview.authToken;
+      if (!previewAuthToken) {
+        console.warn('⚠️ PREVIEW_AUTH_TOKEN not configured, skipping preview update');
+      } else {
+        console.log('🚀 Triggering full Vercel redeploy with manifest file...');
+        
+        // Read all project files to include in redeploy
+        const outputDir = process.env.NODE_ENV === 'production' 
+          ? '/tmp/generated' 
+          : path.join(process.cwd(), 'generated');
+        const projectDir = path.join(outputDir, projectId);
+        const allFiles: { filename: string; content: string }[] = [];
+        
+        async function readDir(dir: string, baseDir: string) {
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            const relativePath = path.relative(baseDir, fullPath);
+            
+            // Skip certain directories
+            if (
+              entry.name === 'node_modules' ||
+              entry.name === '.next' ||
+              entry.name === '.vercel' ||
+              entry.name === 'dist' ||
+              entry.name === 'build' ||
+              entry.name === '.git'
+            ) {
+              continue;
+            }
+            
+            if (entry.isDirectory()) {
+              await readDir(fullPath, baseDir);
+            } else {
+              try {
+                const content = await fs.readFile(fullPath, 'utf-8');
+                allFiles.push({ filename: relativePath, content });
+              } catch (readError) {
+                console.warn(`⚠️ Failed to read file ${relativePath}:`, readError);
+              }
+            }
+          }
+        }
+        
+        await readDir(projectDir, projectDir);
+        console.log(`📦 Read ${allFiles.length} files for Vercel redeploy`);
+        
+        // Convert files to object format for direct API call
+        const filesObject: { [key: string]: string } = {};
+        allFiles.forEach((file) => {
+          filesObject[file.filename] = file.content;
+        });
+        
+        // Make direct API call to /deploy endpoint to force fresh Vercel deployment
+        const previewApiBase = config.preview.apiBase;
+        // Ensure URL has protocol
+        const baseUrl = previewApiBase.startsWith('http') 
+          ? previewApiBase 
+          : `http://${previewApiBase}`;
+        const deployUrl = `${baseUrl}/deploy`;
+        
+        console.log(`📤 Triggering fresh Vercel deployment to: ${deployUrl}`);
+        
+        const deployResponse = await fetch(deployUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${previewAuthToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            hash: projectId,
+            files: filesObject,
+            deployToExternal: 'vercel',
+            isWeb3: true,
+            skipContracts: true, // Contracts already deployed
+            wait: false, // Don't wait for completion
+          }),
+        });
+        
+        if (!deployResponse.ok) {
+          const errorText = await deployResponse.text();
+          throw new Error(`Vercel deployment failed: ${deployResponse.status} ${errorText}`);
+        }
+        
+        const previewResponse = await deployResponse.json();
+        
+        console.log('✅ Vercel redeploy triggered successfully');
+        console.log(`🌐 Vercel URL: ${previewResponse.vercelUrl || previewResponse.previewUrl}`);
+        
+        // Update the project record with the latest Vercel URL
+        if (previewResponse.vercelUrl) {
+          await db
+            .update(projects)
+            .set({ 
+              vercelUrl: previewResponse.vercelUrl,
+              previewUrl: previewResponse.vercelUrl 
+            })
+            .where(eq(projects.id, project.id));
+        }
+      }
     } catch (error) {
-      console.warn('⚠️ Failed to update preview (this is expected on Railway):', error);
-      // Don't fail the request - preview updates are optional
+      console.error('❌ Failed to trigger Vercel redeploy:', error);
+      // Don't fail the request - continue with local manifest
     }
 
     // Build manifest URL

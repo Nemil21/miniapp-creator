@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Icons } from './sections/icons';
 import { useAuthContext } from '../contexts/AuthContext';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import type { EarnKit } from '@earnkit/earn';
+import { toast } from 'react-hot-toast';
 
 interface GeneratedProject {
     projectId: string;
@@ -31,9 +35,16 @@ interface ChatInterfaceProps {
     currentProject: GeneratedProject | null;
     onProjectGenerated: (project: GeneratedProject | null) => void;
     onGeneratingChange: (isGenerating: boolean) => void;
+    activeAgent?: EarnKit;
 }
 
-export function ChatInterface({ currentProject, onProjectGenerated, onGeneratingChange }: ChatInterfaceProps) {
+export interface ChatInterfaceRef {
+    clearChat: () => void;
+    focusInput: () => void;
+}
+
+export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
+    function ChatInterface({ currentProject, onProjectGenerated, onGeneratingChange, activeAgent }, ref) {
     const [prompt, setPrompt] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     // const [error, setError] = useState<string | null>(null);
@@ -43,6 +54,29 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
     const chatBottomRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const { sessionToken } = useAuthContext();
+    const { ready: privyReady, authenticated } = usePrivy();
+    const { wallets } = useWallets();
+    const queryClient = useQueryClient();
+    const walletAddress = wallets[0]?.address;
+
+    // Check user's credit balance
+    const { data: balance } = useQuery({
+        queryKey: ["balance", "credit-based", walletAddress],
+        queryFn: async () => {
+            if (!walletAddress || !activeAgent) throw new Error("Wallet not connected");
+            return activeAgent.getBalance({ walletAddress });
+        },
+        enabled: !!walletAddress && !!activeAgent && privyReady && authenticated,
+        initialData: { eth: "0", credits: "0" },
+        staleTime: 1000 * 30,
+    });
+
+    // Check if credits are disabled via environment variable
+    const credsOff = process.env.NEXT_PUBLIC_CREDS_OFF === 'true';
+    
+    // Check if user has enough credits (need 1 credit per message)
+    const hasEnoughCredits = balance ? parseInt(balance.credits) >= 1 : true; // Default to true if no activeAgent
+    const shouldBlockChat = !credsOff && !!(activeAgent && walletAddress && !hasEnoughCredits);
 
     // Timeout ref for cleanup to prevent duplicate calls
     const generationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -72,6 +106,27 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     };
+
+    // Expose methods to parent component
+    useImperativeHandle(ref, () => ({
+        clearChat: () => {
+            setChat([]);
+            setPrompt('');
+            setCurrentPhase('requirements');
+            setChatProjectId('');
+            // Clear session storage
+            try {
+                sessionStorage.removeItem('minidev_chat_session_id');
+            } catch (e) {
+                console.error('Failed to clear session storage:', e);
+            }
+        },
+        focusInput: () => {
+            if (textareaRef.current) {
+                textareaRef.current.focus();
+            }
+        }
+    }));
 
     // Load chat messages when project changes
     useEffect(() => {
@@ -188,6 +243,12 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
     const handleSendMessage = async (userMessage: string) => {
         if (!chatSessionId || !sessionToken) return;
         
+        // Check credits BEFORE starting any UI updates
+        if (shouldBlockChat) {
+            toast.error('Insufficient credits. Please top up your balance to continue chatting.');
+            return;
+        }
+        
         // Set flag to prevent chat state overwrites during message sending
         isSendingMessageRef.current = true;
         
@@ -208,7 +269,31 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
 
         // User message will be saved to database by the chat API
 
+        // Credit tracking variables
+        let eventId: string | null = null;
+        const walletAddress = wallets[0]?.address;
+
         try {
+            // Track event - hold 1 credit before calling AI API (only if credits not disabled)
+            if (!credsOff && activeAgent && walletAddress) {
+                // Note: Some EarnKit versions may not support the 'credits' parameter
+                // If not supported, it will track with default amount (usually 1 credit)
+                const trackResponse = await activeAgent.track({
+                    walletAddress: walletAddress,
+                    credits: 1, // Each chat message costs 1 credit
+                } as { walletAddress: string; credits: number })
+
+                if (trackResponse.insufficientCredits) {
+                    toast.error('Insufficient credits. Please top up your balance to continue chatting.');
+                    setAiLoading(false);
+                    setPrompt('');
+                    isSendingMessageRef.current = false;
+                    return; // Exit early, don't proceed with AI call
+                }
+
+                eventId = trackResponse.eventId;
+                console.log('Credit tracking started (1 credit):', eventId);
+            }
             const endpoint = '/api/chat';
             const body: {
                 sessionId: string;
@@ -216,11 +301,13 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                 stream: boolean;
                 action?: string;
                 projectId?: string;
+                walletAddress?: string;
             } = {
                 sessionId: chatSessionId,
                 message: userMessage,
                 stream: false,
-                projectId: currentProject?.projectId
+                projectId: currentProject?.projectId,
+                walletAddress: walletAddress // Send wallet address for server-side validation
             };
 
             // Determine the appropriate action based on current phase
@@ -319,6 +406,20 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                             return newChat;
                         });
 
+                        // Capture event - finalize charge after successful AI call (only if credits not disabled)
+                        if (!credsOff && activeAgent && eventId) {
+                            try {
+                                await activeAgent.capture({ eventId });
+                                console.log('Credit captured successfully for editing:', eventId);
+
+                                // Invalidate balance query to refresh balance display
+                                queryClient.invalidateQueries({ queryKey: ["balance"] });
+                            } catch (captureError) {
+                                console.error('Failed to capture credits for editing:', captureError);
+                                // Continue even if capture fails
+                            }
+                        }
+
                         // Save AI success message to database
                         if (currentProject?.projectId) {
                             try {
@@ -367,6 +468,20 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                             }
                             return newChat;
                         });
+
+                        // Capture event - finalize charge after successful AI call (only if credits not disabled)
+                        if (!credsOff && activeAgent && eventId) {
+                            try {
+                                await activeAgent.capture({ eventId });
+                                console.log('Credit captured successfully for editing (sync):', eventId);
+
+                                // Invalidate balance query to refresh balance display
+                                queryClient.invalidateQueries({ queryKey: ["balance"] });
+                            } catch (captureError) {
+                                console.error('Failed to capture credits for editing (sync):', captureError);
+                                // Continue even if capture fails
+                            }
+                        }
 
                         // Save AI success message to database
                         if (currentProject?.projectId) {
@@ -453,6 +568,20 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                 console.log('📝 Chat messages stored in project:', data.projectId);
             }
 
+            // Capture event - finalize charge after successful AI call (only if credits not disabled)
+            if (!credsOff && activeAgent && eventId) {
+                try {
+                    await activeAgent.capture({ eventId });
+                    console.log('Credit captured successfully:', eventId);
+
+                    // Invalidate balance query to refresh balance display
+                    queryClient.invalidateQueries({ queryKey: ["balance"] });
+                } catch (captureError) {
+                    console.error('Failed to capture credits:', captureError);
+                    // Continue even if capture fails
+                }
+            }
+
             // Add AI message to chat
             const aiMsg: ChatMessage = {
                 role: 'ai',
@@ -513,6 +642,12 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
             }
         } catch (err) {
             console.error('Error:', err);
+            
+            // If we have an eventId but the AI call failed, we should not capture credits
+            if (eventId) {
+                console.log('AI call failed, credits will not be charged for eventId:', eventId);
+            }
+            
             // setError(err instanceof Error ? err.message : 'An error occurred');
             setChat(prev => [
                 ...prev,
@@ -947,8 +1082,25 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
 
             {/* Chat Input */}
             <div className="pb-4 px-[20px]">
+                {/* Insufficient Credits Warning */}
+                {shouldBlockChat && (
+                    <div className="mb-3">
+                        <div className="bg-red-50 border border-red-200 rounded-full px-4 py-2.5 text-sm">
+                            <div className="flex items-center gap-2">
+                                <div className="flex-shrink-0 mt-0.5">
+                                    <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div className="text-red-700">
+                                    <p className="font-normal text-xs">Insufficient credits. Please top up to continue chatting (1 credit per message).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {/* Beta Warning Message */}
-                {chat.length === 1 && hasShownWarning && (
+                {chat.length === 1 && hasShownWarning && !shouldBlockChat && (
                     <div className="mb-3">
                         <div className="bg-yellow-50 border border-yellow-200 rounded-full px-4 py-2.5 text-sm">
                             <div className="flex items-center gap-2">
@@ -967,7 +1119,7 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                 <form
                     onSubmit={e => {
                         e.preventDefault();
-                        if (prompt.trim() && !aiLoading) {
+                        if (prompt.trim() && !aiLoading && !shouldBlockChat) {
                             handleSendMessage(prompt.trim());
                         }
                     }}
@@ -990,14 +1142,14 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                         ref={textareaRef}
                         value={prompt}
                         onChange={handleInputChange}
-                        placeholder="Ask Minidev"
-                        className="w-full max-w-full max-h-[100px] overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium"
-                        disabled={aiLoading || isGenerating}
+                        placeholder={shouldBlockChat ? "Insufficient credits - Please top up" : "Ask Minidev"}
+                        className="w-full max-w-full max-h-[100px] overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={aiLoading || isGenerating || shouldBlockChat}
                         rows={1}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
-                                if (prompt.trim() && !aiLoading) {
+                                if (prompt.trim() && !aiLoading && !shouldBlockChat) {
                                     handleSendMessage(prompt.trim());
                                 }
                             }
@@ -1005,8 +1157,9 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
                     />
                     <button
                         type="submit"
-                        className="p-2 bg-black-80 rounded-full disabled:opacity-50 ml-auto"
-                        disabled={aiLoading || isGenerating || !prompt.trim()}
+                        className="p-2 bg-black-80 rounded-full disabled:opacity-50 ml-auto disabled:cursor-not-allowed"
+                        disabled={aiLoading || isGenerating || !prompt.trim() || shouldBlockChat}
+                        title={shouldBlockChat ? "Insufficient credits - Please top up" : "Send message"}
                     >
                         {aiLoading ? (
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1061,4 +1214,4 @@ export function ChatInterface({ currentProject, onProjectGenerated, onGenerating
             </div>
         </div>
     );
-} 
+}); 

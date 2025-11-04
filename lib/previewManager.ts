@@ -229,6 +229,7 @@ export async function createPreview(
 
     try {
       console.log(`⏱️ Starting deployment request (timeout: 7 min)...`);
+      console.log(`🔑 Debug - Access Token: ${accessToken ? `Bearer ${accessToken.substring(0, 20)}...` : 'MISSING'}`);
 
       // Use native http module for better timeout control
       const http = await import('http');

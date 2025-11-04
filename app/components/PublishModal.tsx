@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuthContext } from '../contexts/AuthContext';
 import { sdk } from '@farcaster/miniapp-sdk';
 
 interface PublishModalProps {
@@ -15,6 +16,30 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [manifestUrl, setManifestUrl] = useState<string | null>(null);
+    const [sdkReady, setSdkReady] = useState(false);
+    
+    // Get authentication from context
+    const { sessionToken, isAuthenticated } = useAuthContext();
+
+    // Initialize Farcaster SDK
+    useEffect(() => {
+        const initSdk = async () => {
+            try {
+                console.log('🔧 Initializing Farcaster SDK...');
+                await sdk.context;
+                setSdkReady(true);
+                console.log('✅ Farcaster SDK initialized');
+            } catch (error) {
+                console.error('❌ Failed to initialize Farcaster SDK:', error);
+                // SDK might not be available outside of Farcaster frame
+                setSdkReady(false);
+            }
+        };
+        
+        if (isOpen) {
+            initSdk();
+        }
+    }, [isOpen]);
 
     // Form fields
     const [formData, setFormData] = useState({
@@ -54,7 +79,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         return true;
     };
 
-    // Handle sign and publish
+    // Handle direct publish (without Farcaster SDK)
     const handleSignAndPublish = async () => {
         console.log('handleSignAndPublish called with:', { projectId, projectUrl, formData });
 
@@ -74,67 +99,13 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
 
         setIsLoading(true);
         setError(null);
-        setCurrentStep(2); // Move to signing step
+        setCurrentStep(2); // Move to publishing step
 
         try {
-            // Step 1: Sign with SDK
-            console.log('📝 Step 1: Extracting domain from homeUrl:', formData.homeUrl);
-            let domain;
-            try {
-                domain = new URL(formData.homeUrl).hostname;
-                console.log('✅ Domain extracted:', domain);
-            } catch (urlError) {
-                console.error('❌ Failed to parse home URL:', urlError);
-                throw new Error(`Invalid home URL format: ${formData.homeUrl}`);
-            }
-
-            console.log('🔐 Step 2: Checking Farcaster SDK context...');
-
-            // Check if SDK is available and has the required methods
-            if (!sdk || !sdk.experimental || typeof sdk.experimental.signManifest !== 'function') {
-                console.error('❌ Farcaster SDK not properly initialized');
-                throw new Error('SDK_NOT_AVAILABLE');
-            }
-
-            // Check SDK context
-            console.log('SDK context:', {
-                hasSdk: !!sdk,
-                hasExperimental: !!sdk.experimental,
-                hasSignManifest: typeof sdk.experimental?.signManifest === 'function'
-            });
-
-            console.log('🔐 Step 3: Signing manifest with Farcaster SDK...');
-            let accountAssociation;
-            try {
-                accountAssociation = await sdk.experimental.signManifest({ domain });
-                console.log('✅ Manifest signed successfully');
-                console.log('Account association:', accountAssociation);
-            } catch (sdkError: unknown) {
-                console.error('❌ SDK signing failed:', sdkError);
-
-                // Handle specific error codes from SDK
-                if (typeof sdkError === 'object' && sdkError !== null && 'code' in sdkError) {
-                    const errorWithCode = sdkError as { code: string };
-                    if (errorWithCode.code === 'RejectedByUser') {
-                        throw new Error('REJECTED_BY_USER');
-                    } else if (errorWithCode.code === 'InvalidDomain') {
-                        throw new Error('INVALID_DOMAIN');
-                    }
-                }
-
-                // Handle generic SDK errors
-                const errorMsg = sdkError instanceof Error ? sdkError.message : String(sdkError);
-                if (errorMsg.includes('result') || errorMsg.includes('undefined')) {
-                    throw new Error('SDK_NOT_AVAILABLE');
-                }
-
-                throw new Error(`Failed to sign manifest: ${errorMsg}`);
-            }
-
-            // Step 3: Build complete manifest
-            console.log('📦 Step 4: Building manifest object...');
-            const manifest = {
-                accountAssociation,
+            console.log('📦 Step 1: Building manifest object...');
+            
+            // Build base manifest structure
+            const baseManifest = {
                 miniapp: {
                     version: 'vNext',
                     name: formData.name,
@@ -148,18 +119,74 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 }
             };
 
-            console.log('✅ Manifest built:', JSON.stringify(manifest, null, 2));
+            console.log('✅ Base manifest built:', JSON.stringify(baseManifest, null, 2));
 
-            // Step 4: Send to API
-            console.log('🌐 Step 5: Retrieving session token...');
-            const sessionToken = sessionStorage.getItem('sessionToken');
-            if (!sessionToken) {
-                console.error('❌ No session token found');
+            // Sign manifest with Farcaster SDK
+            console.log('✍️ Step 2: Signing manifest with Farcaster...');
+            let manifest;
+            
+            if (!sdkReady) {
+                console.error('❌ Farcaster SDK not initialized');
+                throw new Error('Please open this app in Warpcast to publish. Visit https://warpcast.com/');
+            }
+
+            try {
+                // Extract domain from homeUrl
+                const homeUrlObj = new URL(formData.homeUrl);
+                const domain = homeUrlObj.hostname;
+                console.log('🌐 Extracted domain:', domain);
+                
+                // Use SDK to sign the domain manifest with user's FID
+                // See: https://miniapps.farcaster.xyz/docs/sdk/actions/sign-manifest
+                const accountAssociation = await sdk.experimental.signManifest({
+                    domain: domain
+                });
+                
+                console.log('✅ Manifest signed successfully:', accountAssociation);
+                
+                if (!accountAssociation || !accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
+                    throw new Error('Failed to sign manifest. Incomplete signature returned.');
+                }
+                
+                // Combine base manifest with signature
+                manifest = {
+                    accountAssociation: {
+                        header: accountAssociation.header,
+                        payload: accountAssociation.payload,
+                        signature: accountAssociation.signature
+                    },
+                    ...baseManifest
+                };
+                
+                console.log('📝 Complete signed manifest:', JSON.stringify(manifest, null, 2));
+            } catch (signError: unknown) {
+                console.error('❌ Signing error:', signError);
+                
+                // Handle specific error types from the SDK
+                const errorConstructorName = (signError as { constructor?: { name?: string } })?.constructor?.name;
+                const errorMessage = (signError as { message?: string })?.message;
+                
+                if (errorConstructorName === 'RejectedByUser') {
+                    throw new Error('You declined to sign the manifest. Please try again and approve the signing request.');
+                } else if (errorConstructorName === 'InvalidDomain') {
+                    throw new Error('Invalid domain format in your app URL. Please check the Home URL.');
+                } else if (errorConstructorName === 'GenericError') {
+                    throw new Error(`Signing failed: ${errorMessage || 'This could be due to host restrictions or network issues.'}`);
+                }
+                
+                throw new Error('Failed to sign manifest with Farcaster. Please ensure you are logged into Warpcast.');
+            }
+
+            // Send to API for server-side processing
+            console.log('🌐 Step 3: Checking authentication...');
+            if (!isAuthenticated || !sessionToken) {
+                console.error('❌ Not authenticated');
                 throw new Error('Not authenticated. Please sign in first.');
             }
-            console.log('✅ Session token retrieved');
+            console.log('✅ Authentication verified');
+            console.log('Session token available:', !!sessionToken);
 
-            console.log('📤 Step 6: Sending manifest to API...', {
+            console.log('📤 Step 4: Sending signed manifest to API...', {
                 endpoint: '/api/publish',
                 projectId,
                 hasManifest: !!manifest,
@@ -311,9 +338,31 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                     {/* Step 1: Form */}
                     {currentStep === 1 && (
                         <div className="space-y-4">
+                            {/* Farcaster SDK Warning */}
+                            {!sdkReady && (
+                                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-purple-800 font-medium mb-1">
+                                        📱 Open in Warpcast to Sign Manifest
+                                    </p>
+                                    <p className="text-xs text-purple-700">
+                                        To associate this app with your Farcaster ID, please open this app in Warpcast. 
+                                        The manifest will be signed with your FID. Visit <a href="https://warpcast.com/" target="_blank" rel="noopener noreferrer" className="underline font-medium">warpcast.com</a>
+                                    </p>
+                                </div>
+                            )}
+                            
+                            {/* Authentication Warning */}
+                            {!isAuthenticated && (
+                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-yellow-800 font-medium">
+                                        ⚠️ You need to be signed in to publish. Please authenticate first.
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-blue-800">
-                                    Fill in your app details below. The manifest will be signed with your Farcaster account and published automatically.
+                                    Fill in your app details below. The manifest will be signed with your Farcaster account and deployed to Vercel at <code className="bg-blue-100 px-1 rounded">/.well-known/farcaster.json</code>.
                                 </p>
                             </div>
 
@@ -423,7 +472,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-black mb-4"></div>
                             <h3 className="text-xl font-semibold text-black mb-2">Signing with Farcaster...</h3>
                             <p className="text-gray-600 text-center max-w-md">
-                                Please approve the signature request in your Farcaster wallet to continue.
+                                Signing your manifest with your Farcaster account and deploying to Vercel. This will associate the app with your FID.
                             </p>
                         </div>
                     )}
@@ -466,9 +515,14 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             )}
 
                             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 w-full">
-                                <p className="text-sm text-blue-800">
-                                    <strong>What&apos;s next?</strong> Users can now discover and use your app directly from Farcaster!
+                                <p className="text-sm text-blue-800 mb-3">
+                                    <strong>What&apos;s next?</strong>
                                 </p>
+                                <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                                    <li>Your manifest is now hosted at <code className="bg-blue-100 px-1 rounded">/.well-known/farcaster.json</code></li>
+                                    <li>Share your app URL on Farcaster for users to discover</li>
+                                    <li>Users can add your mini app directly from your website</li>
+                                </ol>
                             </div>
                         </div>
                     )}
@@ -486,12 +540,13 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             </button>
                             <button
                                 onClick={handleSignAndPublish}
-                                disabled={isLoading}
+                                disabled={isLoading || !isAuthenticated}
                                 className={`px-6 py-2 bg-black text-white rounded-lg font-medium transition-colors ${
-                                    isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'
+                                    isLoading || !isAuthenticated ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'
                                 }`}
+                                title={!isAuthenticated ? 'Please sign in first' : 'Publish to Farcaster'}
                             >
-                                Publish
+                                {!isAuthenticated ? 'Sign In Required' : 'Publish'}
                             </button>
                         </>
                     )}

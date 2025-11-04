@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
 
     // Basic auth protection for worker endpoint
     if (!workerToken || authHeader !== `Bearer ${workerToken}`) {
+      console.error("❌ Worker authentication failed:");
+      console.error(`   Expected token: ${workerToken ? `Bearer ${workerToken}` : 'WORKER_AUTH_TOKEN not set'}`);
+      console.error(`   Received: ${authHeader || 'No Authorization header'}`);
       return NextResponse.json(
         { error: "Unauthorized - Invalid worker token" },
         { status: 401 }

@@ -19,23 +19,12 @@ interface GeneratedProject {
     hasPackageChanges?: boolean;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  previewUrl?: string;
-  vercelUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 interface CodeEditorAndPreviewProps {
     currentProject: GeneratedProject | null;
     isGenerating?: boolean;
     onFileChange?: (filePath: string, content: string) => void;
     onSaveFile?: (filePath: string, content: string) => Promise<boolean>;
-    onProjectSelect?: (project: Project) => void;
-    onNewProject?: () => void;
+    onOpenSidebar?: () => void;
 }
 
 type ViewMode = 'code' | 'preview' | 'history';
@@ -45,8 +34,7 @@ export function CodeEditorAndPreview({
     isGenerating = false,
     onFileChange,
     onSaveFile,
-    onProjectSelect,
-    onNewProject
+    onOpenSidebar
 }: CodeEditorAndPreviewProps) {
     const [viewMode, setViewMode] = useState<ViewMode>(currentProject ? 'code' : 'preview');
     const [showLogs, setShowLogs] = useState(false);
@@ -180,70 +168,73 @@ export function CodeEditorAndPreview({
                     ))}
                 </div>
 
-                {/* Back to Projects button - only show when project is open */}
-                {currentProject && onNewProject && (
-                    <button
-                        onClick={onNewProject}
-                        className="px-3 py-2 bg-gray-100 text-black rounded hover:bg-gray-200 transition-colors text-sm font-medium flex items-center gap-2"
-                        title="Back to Projects"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        Back to Projects
-                    </button>
-                )}
-
-                {/* Right side - Project URL controls */}
-                {currentProject && (
-                    <div className="flex items-center gap-3">
-                        <div className="flex flex-col">
-                            <div className="text-xs text-black-60 font-medium">Project URL</div>
-                            <button 
-                                onClick={() => window.open(currentProject.url, '_blank')}
-                                className="text-xs text-black font-mono max-w-[300px] truncate text-left hover:text-blue-600 transition-colors" 
-                                title={`Click to open: ${currentProject.url}`}
+                {/* Right side - Project URL controls and Projects button */}
+                <div className="flex items-center gap-3">
+                    {currentProject && (
+                        <>
+                            <div className="flex flex-col">
+                                <div className="text-xs text-black-60 font-medium">Project URL</div>
+                                <button 
+                                    onClick={() => window.open(currentProject.url, '_blank')}
+                                    className="text-xs text-black font-mono max-w-[300px] truncate text-left hover:text-blue-600 transition-colors" 
+                                    title={`Click to open: ${currentProject.url}`}
+                                >
+                                    {currentProject.url}
+                                </button>
+                            </div>
+                            <button
+                                onClick={handleCopyUrl}
+                                className={`p-2 rounded transition-colors ${
+                                    copySuccess 
+                                        ? 'bg-green-600 text-white' 
+                                        : 'bg-black text-white hover:bg-black-80'
+                                }`}
+                                title={copySuccess ? "Copied!" : "Copy URL"}
                             >
-                                {currentProject.url}
+                                {copySuccess ? (
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                ) : (
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                )}
                             </button>
-                        </div>
-                        <button
-                            onClick={handleCopyUrl}
-                            className={`p-2 rounded transition-colors ${
-                                copySuccess 
-                                    ? 'bg-green-600 text-white' 
-                                    : 'bg-black text-white hover:bg-black-80'
-                            }`}
-                            title={copySuccess ? "Copied!" : "Copy URL"}
-                        >
-                            {copySuccess ? (
+                            <button
+                                onClick={() => window.open(currentProject.url, '_blank')}
+                                className="p-2 bg-black-20 text-black rounded hover:bg-black-30 transition-colors"
+                                title="Open in new tab"
+                            >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
-                            ) : (
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                            )}
-                        </button>
+                            </button>
+                            <button
+                                onClick={() => setShowPublishModal(true)}
+                                className="px-3 py-2 bg-black text-white rounded hover:bg-black-80 transition-colors text-sm font-medium cursor-pointer"
+                                title="Publish to Farcaster"
+                            >
+                                Publish
+                            </button>
+                        </>
+                    )}
+
+                    {/* Projects button - rightmost */}
+                    {onOpenSidebar && (
                         <button
-                            onClick={() => window.open(currentProject.url, '_blank')}
-                            className="p-2 bg-black-20 text-black rounded hover:bg-black-30 transition-colors"
-                            title="Open in new tab"
+                            onClick={onOpenSidebar}
+                            onMouseEnter={onOpenSidebar}
+                            className="p-2 px-3 rounded-lg bg-black-5 text-black-60 hover:text-black hover:bg-black-10 transition-colors flex items-center gap-2"
+                            title="Open Projects"
                         >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                             </svg>
+                            <span className="text-xs font-medium">Projects</span>
                         </button>
-                        <button
-                            onClick={() => setShowPublishModal(true)}
-                            className="px-3 py-2 bg-black text-white rounded hover:bg-black-80 transition-colors text-sm font-medium cursor-pointer"
-                            title="Publish to Farcaster"
-                        >
-                            Publish
-                        </button>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* Content based on view mode */}
@@ -261,8 +252,6 @@ export function CodeEditorAndPreview({
                 <div className={`h-full ${viewMode === 'preview' ? 'block' : 'hidden'}`}>
                     <Preview
                         currentProject={currentProject}
-                        onProjectSelect={onProjectSelect}
-                        onNewProject={onNewProject}
                     />
                 </div>
 

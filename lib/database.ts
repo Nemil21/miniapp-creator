@@ -89,8 +89,16 @@ export async function deleteProject(projectId: string) {
 
 // Project files management
 export async function saveProjectFiles(projectId: string, files: { filename: string; content: string }[]) {
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`💾 SAVING PROJECT FILES TO DATABASE`);
+  console.log(`📁 Project ID: ${projectId}`);
+  console.log(`📂 Total files to save: ${files.length}`);
+  console.log(`${"=".repeat(60)}\n`);
+  
   // Delete existing files for this project
-  await db.delete(projectFiles).where(eq(projectFiles.projectId, projectId));
+  console.log(`🗑️  Deleting existing files for project ${projectId}...`);
+  const deletedFiles = await db.delete(projectFiles).where(eq(projectFiles.projectId, projectId)).returning();
+  console.log(`✅ Deleted ${deletedFiles.length} existing files`);
   
   // Filter out files that might cause encoding issues
   const safeFiles = files.filter(file => {
@@ -112,13 +120,30 @@ export async function saveProjectFiles(projectId: string, files: { filename: str
     version: 1,
   }));
   
-  return await db.insert(projectFiles).values(fileRecords).returning();
+  const inserted = await db.insert(projectFiles).values(fileRecords).returning();
+  console.log(`✅ Successfully inserted ${inserted.length} files into database`);
+  console.log(`📝 Sample filenames:`, inserted.slice(0, 5).map(f => f.filename));
+  console.log(`${"=".repeat(60)}\n`);
+  
+  return inserted;
 }
 
 export async function getProjectFiles(projectId: string) {
-  return await db.select().from(projectFiles)
+  console.log(`\n📥 FETCHING PROJECT FILES FROM DATABASE`);
+  console.log(`📁 Project ID: ${projectId}`);
+  
+  const files = await db.select().from(projectFiles)
     .where(eq(projectFiles.projectId, projectId))
     .orderBy(projectFiles.filename);
+  
+  console.log(`✅ Fetched ${files.length} files from database`);
+  if (files.length > 0) {
+    console.log(`📝 Sample filenames:`, files.slice(0, 5).map(f => f.filename));
+    console.log(`📅 Last updated:`, files[0].updatedAt);
+  }
+  console.log(`${"=".repeat(60)}\n`);
+  
+  return files;
 }
 
 export async function updateProjectFile(projectId: string, filename: string, content: string) {

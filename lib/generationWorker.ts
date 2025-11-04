@@ -641,10 +641,28 @@ async function executeInitialGenerationJob(
 
     fs.mkdirSync(outputDir, { recursive: true });
 
-    // Fetch boilerplate
-    console.log("📋 Fetching boilerplate from GitHub API...");
-    await fetchBoilerplateFromGitHub(boilerplateDir);
-    console.log("✅ Boilerplate fetched successfully");
+    // Use local boilerplate in development, GitHub API in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log("📋 Fetching boilerplate from GitHub API (production mode)...");
+      try {
+        await fetchBoilerplateFromGitHub(boilerplateDir);
+        console.log("✅ Boilerplate fetched successfully");
+      } catch (error) {
+        console.error("❌ Failed to fetch boilerplate:", error);
+        throw new Error(`Failed to fetch boilerplate: ${error}`);
+      }
+    } else {
+      // Development mode: use local boilerplate
+      console.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
+      const localBoilerplatePath = path.join(process.cwd(), '..', 'minidev-boilerplate');
+      try {
+        await fs.copy(localBoilerplatePath, boilerplateDir);
+        console.log("✅ Boilerplate copied successfully from local folder");
+      } catch (error) {
+        console.error("❌ Failed to copy local boilerplate:", error);
+        throw new Error(`Failed to copy boilerplate: ${error}`);
+      }
+    }
 
     // Copy boilerplate to user directory
     console.log("📋 Copying boilerplate to user directory...");

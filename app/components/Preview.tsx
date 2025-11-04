@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ProjectList } from './ProjectList';
 
 interface GeneratedProject {
     projectId: string;
@@ -16,23 +15,11 @@ interface GeneratedProject {
     lastUpdated?: number; // Timestamp to track when project was last updated
 }
 
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  previewUrl?: string;
-  vercelUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 interface PreviewProps {
     currentProject: GeneratedProject | null;
-    onProjectSelect?: (project: Project) => void;
-    onNewProject?: () => void;
 }
 
-export function Preview({ currentProject, onProjectSelect, onNewProject }: PreviewProps) {
+export function Preview({ currentProject }: PreviewProps) {
     const [iframeError, setIframeError] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [iframeKey, setIframeKey] = useState(0);
@@ -49,10 +36,23 @@ export function Preview({ currentProject, onProjectSelect, onNewProject }: Previ
 
     if (!currentProject) {
         return (
-            <ProjectList
-                onProjectSelect={onProjectSelect || (() => {})}
-                onNewProject={onNewProject || (() => {})}
-            />
+            <div className="h-full flex flex-col bg-white overflow-y-auto">
+                <div className="flex-1 flex items-center justify-center p-4">
+                    <div className="text-center max-w-md">
+                        <div className="text-6xl mb-4">🚀</div>
+                        <h3 className="text-xl font-semibold text-black mb-2">No Project Selected</h3>
+                        <p className="text-sm text-black-60 mb-6">
+                            Hover over the right edge of the screen to access your projects, or start a new project in the chat.
+                        </p>
+                        <div className="bg-black-5 rounded-lg p-4 text-left">
+                            <p className="text-xs text-black-60 font-medium mb-2">💡 Tip:</p>
+                            <p className="text-xs text-black-60">
+                                Describe your mini app idea in the chat and Minidev will build it for you.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         );
     }
 

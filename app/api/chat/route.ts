@@ -175,7 +175,7 @@ async function callClaude(
 
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId, message, action, stream = false, projectId } = await request.json();
+    const { sessionId, message, action, stream = false, projectId, walletAddress } = await request.json();
 
     if (!sessionId || !message) {
       return NextResponse.json(
@@ -191,6 +191,38 @@ export async function POST(request: NextRequest) {
         { error: error || "Authentication required" },
         { status: 401 }
       );
+    }
+
+    // SERVER-SIDE CREDIT VALIDATION
+    // Import at runtime to avoid issues if module doesn't exist yet
+    const { validateCredits, trackCredits, captureCredits } = await import('../../../lib/creditValidation');
+    
+    let creditEventId: string | null = null;
+    
+    // Validate credits before processing (only if wallet address is provided)
+    if (walletAddress) {
+      const validation = await validateCredits(walletAddress, 1);
+      if (!validation.isValid) {
+        return NextResponse.json(
+          { 
+            error: 'Insufficient credits', 
+            details: validation.error,
+            currentCredits: validation.currentCredits
+          },
+          { status: 402 } // 402 Payment Required
+        );
+      }
+
+      // Track credits before processing
+      try {
+        creditEventId = await trackCredits(walletAddress, 1);
+        console.log('Server-side credit tracking initiated:', creditEventId);
+      } catch {
+        return NextResponse.json(
+          { error: 'Insufficient credits', details: 'Unable to reserve credits for this operation' },
+          { status: 402 }
+        );
+      }
     }
 
     // Add exponential backoff retry logic for Claude API calls
@@ -346,6 +378,11 @@ export async function POST(request: NextRequest) {
         aiResponse, 
         action === "confirm_project" ? "building" : "requirements"
       );
+
+      // Capture credits after successful operation
+      if (creditEventId) {
+        await captureCredits(creditEventId);
+      }
 
       return NextResponse.json({
         success: true,

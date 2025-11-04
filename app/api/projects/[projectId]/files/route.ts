@@ -94,15 +94,15 @@ export async function POST(
         await readDir(projectDir, projectDir);
         console.log(`📦 Read ${files.length} files for redeployment`);
 
-        // Get access token from Authorization header
-        const authHeader = req.headers.get('Authorization');
-        const accessToken = authHeader?.replace('Bearer ', '') || '';
+        // Use PREVIEW_AUTH_TOKEN to authenticate with orchestrator
+        // NOT the user's session token
+        const previewAuthToken = process.env.PREVIEW_AUTH_TOKEN || '';
 
         // Trigger deployment
         const previewData = await createPreview(
           projectId,
           files,
-          accessToken,
+          previewAuthToken,
           true, // isWeb3
           true  // skipContracts - already deployed
         );

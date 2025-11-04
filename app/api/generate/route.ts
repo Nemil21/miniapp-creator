@@ -577,6 +577,7 @@ export async function POST(request: NextRequest) {
       const workerUrl = process.env.WORKER_URL || `${request.nextUrl.origin}/api/jobs/process`;
 
       console.log(`🔧 Triggering background worker at: ${workerUrl}`);
+      console.log(`🔑 Using worker token: ${workerToken ? 'Bearer ' + workerToken.substring(0, 10) + '...' : 'NOT SET'}`);
 
       // Fire and forget - don't await this
       fetch(workerUrl, {
@@ -727,25 +728,28 @@ export async function POST(request: NextRequest) {
     console.log(`📁 User directory: ${userDir}`);
     console.log(`📁 Boilerplate directory: ${boilerplateDir}`);
 
-    // Fetch boilerplate from GitHub API instead of git clone
-    console.log("📋 Fetching boilerplate from GitHub API...");
-    try {
-      await fetchBoilerplateFromGitHub(boilerplateDir);
-      console.log("✅ Boilerplate fetched successfully");
-    } catch (error) {
-      console.error("❌ Failed to fetch boilerplate:", error);
-      throw new Error(`Failed to fetch boilerplate: ${error}`);
+    // Use local boilerplate in development, GitHub API in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log("📋 Fetching boilerplate from GitHub API (production mode)...");
+      try {
+        await fetchBoilerplateFromGitHub(boilerplateDir);
+        console.log("✅ Boilerplate fetched successfully");
+      } catch (error) {
+        console.error("❌ Failed to fetch boilerplate:", error);
+        throw new Error(`Failed to fetch boilerplate: ${error}`);
+      }
+    } else {
+      // Development mode: use local boilerplate
+      console.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
+      const localBoilerplatePath = path.join(process.cwd(), '..', 'minidev-boilerplate');
+      try {
+        await fs.copy(localBoilerplatePath, boilerplateDir);
+        console.log("✅ Boilerplate copied successfully from local folder");
+      } catch (error) {
+        console.error("❌ Failed to copy local boilerplate:", error);
+        throw new Error(`Failed to copy boilerplate: ${error}`);
+      }
     }
-
-    // Copy from local minidev-boilerplate folder instead
-    // console.log("📋 Copying from local minidev-boilerplate folder...");
-    // try {
-    //   await fs.copy("../minidev-boilerplate", boilerplateDir);
-    //   console.log("✅ Boilerplate copied successfully");
-    // } catch (error) {
-    //   console.error("❌ Failed to copy boilerplate:", error);
-    //   throw new Error(`Failed to copy boilerplate: ${error}`);
-    // }
 
     // Copy boilerplate to user directory
     console.log("📋 Copying boilerplate to user directory...");
@@ -1192,6 +1196,7 @@ export async function PATCH(request: NextRequest) {
       const workerUrl = process.env.WORKER_URL || `${request.nextUrl.origin}/api/jobs/process`;
 
       console.log(`🔧 Triggering background worker at: ${workerUrl}`);
+      console.log(`🔑 Using worker token: ${workerToken ? 'Bearer ' + workerToken.substring(0, 10) + '...' : 'NOT SET'}`);
 
       // Fire and forget - don't await this
       fetch(workerUrl, {
