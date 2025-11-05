@@ -13,7 +13,7 @@ import {
 } from "../../../lib/previewManager";
 
 // Import the API base URL
-const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
+
 const CUSTOM_DOMAIN_BASE = process.env.CUSTOM_DOMAIN_BASE || 'minidev.fun';
 import {
   // getOptimizedSystemPrompt,
