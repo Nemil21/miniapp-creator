@@ -288,9 +288,9 @@ export class CompilationValidator {
       'eslint.config.mjs',
       'eslint.config.js',
       '.eslintrc.json',
-      '.eslintrc.js',
-      'hardhat.config.js',
-      'hardhat.config.ts'
+      '.eslintrc.js'
+      // NOTE: hardhat.config.js/ts are NOT included - they should stay in contracts/ subdirectory
+      // Including them in the root causes Next.js build failures
     ];
 
     try {

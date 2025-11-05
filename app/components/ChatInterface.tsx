@@ -712,7 +712,10 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         resolve(project);
                     } else if (job.status === 'failed') {
                         clearInterval(pollInterval);
-                        reject(new Error(job.error || 'Job failed'));
+                        const errorMessage = job.error || 'Job failed';
+                        // Check if this is a deployment error with logs
+                        const isDeploymentError = errorMessage.includes('Deployment failed');
+                        reject(new Error(errorMessage));
                     } else if (attempt >= maxAttempts) {
                         clearInterval(pollInterval);
                         reject(new Error('Job polling timeout - generation is taking too long'));
@@ -915,12 +918,24 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             const errorMessage = err instanceof Error ? err.message : 'An error occurred';
 
             console.error('Generation failed:', errorMessage);
+            
+            // Format deployment errors more clearly
+            let displayMessage = errorMessage;
+            if (errorMessage.includes('Deployment failed')) {
+                // Extract the specific error from deployment failure message
+                const match = errorMessage.match(/Deployment failed after \d+ attempts: (.+)/);
+                if (match) {
+                    const deployError = match[1];
+                    displayMessage = `❌ **Deployment Failed**\n\nYour app was generated successfully, but deployment to Vercel failed with the following error:\n\n\`\`\`\n${deployError.substring(0, 500)}\n\`\`\`\n\nPlease check the error above and try again. Common issues include:\n- TypeScript errors\n- Missing dependencies\n- Configuration issues`;
+                }
+            }
+            
             // setError(errorMessage);
             setChat(prev => [
                 ...prev,
                 {
                     role: 'ai',
-                    content: `❌ ${errorMessage}`,
+                    content: displayMessage.includes('**Deployment Failed**') ? displayMessage : `❌ ${displayMessage}`,
                     phase: 'building',
                     timestamp: Date.now()
                 }

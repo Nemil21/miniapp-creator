@@ -688,6 +688,8 @@ PLANNING RULES:
   * ERC20Template.sol, ERC721Template.sol, EscrowTemplate.sol
   * DO NOT plan new contract logic - templates already have all needed functions
   * Frontend should integrate with template functions (mint, transfer, etc.)
+  * NEVER create or modify hardhat.config.js/ts in root - it stays in contracts/ subdirectory
+  * DO NOT move contract config files to root directory - they must stay in contracts/
 - Provide implementation notes for Stage 3 guidance
 - Return valid JSON only
 - Every patch must have a valid changes array with descriptions
@@ -929,6 +931,8 @@ PLANNING RULES:
   * ERC20Template.sol, ERC721Template.sol, EscrowTemplate.sol
   * DO NOT plan new contract logic - templates already have all needed functions
   * Frontend should integrate with template functions (mint, transfer, etc.)
+  * NEVER create or modify hardhat.config.js/ts in root - it stays in contracts/ subdirectory
+  * DO NOT move contract config files to root directory - they must stay in contracts/
 - Provide implementation notes for Stage 3 guidance
 - Return valid JSON only
 - Every patch must have a valid changes array with descriptions

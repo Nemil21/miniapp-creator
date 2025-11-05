@@ -896,15 +896,19 @@ async function executeInitialGenerationJob(
             // Continue to next iteration to retry deployment
             continue;
           } else {
-            // Last attempt failed, log error and break
+            // Last attempt failed, mark job as failed and throw error
             console.error("❌ All deployment attempts failed");
-            await updateGenerationJobStatus(jobId, 'processing', {
+            const errorDetails = {
               status: 'deployment_failed_all_attempts',
               attempts: deploymentAttempt,
-              finalError: previewData.deploymentError.substring(0, 500)
-            });
-            projectUrl = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
-            break;
+              deploymentError: previewData.deploymentError,
+              deploymentLogs: previewData.deploymentLogs ? previewData.deploymentLogs.substring(0, 1000) : undefined
+            };
+            
+            await updateGenerationJobStatus(jobId, 'failed', errorDetails, previewData.deploymentError);
+            
+            // Throw error to stop job execution
+            throw new Error(`Deployment failed after ${deploymentAttempt} attempts: ${previewData.deploymentError}`);
           }
         }
 
@@ -943,17 +947,19 @@ async function executeInitialGenerationJob(
           console.log(`🔄 Retrying deployment after timeout...`);
           continue;
         } else if (deploymentAttempt >= maxDeploymentRetries) {
-          // If this is the last attempt, use fallback
-          previewData = {
-            url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
-            status: "error",
-            port: 3000,
-            previewUrl: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
+          // If this is the last attempt, fail the job
+          console.error("❌ All deployment attempts failed after exception");
+          
+          const errorDetails = {
+            status: 'deployment_failed_exception',
+            attempts: deploymentAttempt,
+            errorType: isTimeoutError ? 'timeout' : 'other'
           };
-
-          projectUrl = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
-          console.log("⚠️ Using fallback preview URL:", projectUrl);
-          break;
+          
+          await updateGenerationJobStatus(jobId, 'failed', errorDetails, errorMessage);
+          
+          // Throw error to stop job execution
+          throw new Error(`Deployment failed after ${deploymentAttempt} attempts: ${errorMessage}`);
         } else {
           // Non-timeout error on non-final attempt - retry
           console.log(`🔧 Non-timeout error, retrying...`);
