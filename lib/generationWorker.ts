@@ -36,7 +36,7 @@ import {
   getFilesToFix,
 } from "./deploymentErrorParser";
 
-const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
+
 const CUSTOM_DOMAIN_BASE = process.env.CUSTOM_DOMAIN_BASE || 'minidev.fun';
 
 // Utility: Recursively read all files in a directory
