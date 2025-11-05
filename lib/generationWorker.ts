@@ -896,8 +896,10 @@ async function executeInitialGenerationJob(
             // Continue to next iteration to retry deployment
             continue;
           } else {
-            // Last attempt failed, mark job as failed and throw error
-            console.error("❌ All deployment attempts failed");
+            // Last attempt failed, mark job as failed
+            // DON'T throw here - we're inside a try block and it will be caught
+            // Instead, we'll break out of the loop and handle failure after
+            console.error("❌ All deployment attempts failed - breaking out of retry loop");
             const errorDetails = {
               status: 'deployment_failed_all_attempts',
               attempts: deploymentAttempt,
@@ -907,8 +909,9 @@ async function executeInitialGenerationJob(
             
             await updateGenerationJobStatus(jobId, 'failed', errorDetails, previewData.deploymentError);
             
-            // Throw error to stop job execution
-            throw new Error(`Deployment failed after ${deploymentAttempt} attempts: ${previewData.deploymentError}`);
+            // Set previewData to undefined to indicate failure
+            previewData = undefined;
+            break; // Exit the retry loop
           }
         }
 
@@ -968,7 +971,11 @@ async function executeInitialGenerationJob(
       }
     }
 
-    // Save project to database
+    // Track if deployment failed
+    const deploymentFailed = !previewData || previewData.status === 'deployment_failed';
+    const deploymentError = previewData?.deploymentError || 'Deployment failed';
+
+    // Save project to database (ALWAYS save, even if deployment failed)
     console.log("💾 Saving project to database...");
 
     const projectName = enhancedResult.intentSpec
@@ -1019,10 +1026,43 @@ async function executeInitialGenerationJob(
     await saveProjectFiles(project.id, safeFiles);
     console.log("✅ Project files saved to database successfully");
 
-    // Save deployment info to database (including contract addresses for web3 projects)
-    // Always save deployment, even if vercelUrl is missing
+    // If deployment failed, mark job as failed and return early
+    if (deploymentFailed) {
+      console.error("❌ Deployment failed - marking job as failed");
+      
+      // Save deployment info with 'failed' status
+      try {
+        await createDeployment(
+          project.id,
+          'vercel',
+          projectUrl,
+          'failed',
+          previewData?.deploymentLogs || deploymentError // Save logs or error
+        );
+        console.log("✅ Failed deployment info saved to database");
+      } catch (dbError) {
+        console.error("⚠️ Failed to save deployment info:", dbError);
+      }
+
+      // Update project with basic info
+      try {
+        await updateProject(project.id, {
+          previewUrl: projectUrl,
+          name: projectName,
+          description: `${userRequest.substring(0, 100)}...`
+        });
+      } catch (dbError) {
+        console.error("⚠️ Failed to update project:", dbError);
+      }
+
+      // Job was already marked as 'failed' in the deployment loop
+      // Throw error to prevent marking as completed
+      throw new Error(`Deployment failed: ${deploymentError}`);
+    }
+
+    // Deployment succeeded - save deployment info
     try {
-      console.log("💾 Saving deployment info to database...");
+      console.log("💾 Saving successful deployment info to database...");
       
       const deploymentUrl = previewData?.vercelUrl || projectUrl;
       console.log(`🌐 Deployment URL to save: ${deploymentUrl}`);
@@ -1054,12 +1094,12 @@ async function executeInitialGenerationJob(
         description: `${userRequest.substring(0, 100)}...`
       });
       console.log(`✅ Projects table updated with URL: ${deploymentUrl}`);
-    } catch (deploymentError) {
-      console.error("⚠️ Failed to save deployment info:", deploymentError);
+    } catch (deploymentDbError) {
+      console.error("⚠️ Failed to save deployment info:", deploymentDbError);
       // Don't fail the entire job if deployment record fails
     }
 
-    // Update job status to completed
+    // Update job status to completed (only reached if deployment succeeded)
     const result = {
       projectId,
       url: projectUrl,

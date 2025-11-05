@@ -1865,6 +1865,8 @@ export function filterProtectedConfigFiles(
     'package-lock.json',
     'pnpm-lock.yaml',
     'yarn.lock',
+    'hardhat.config.js',          // Block root-level hardhat config
+    'hardhat.config.ts',          // Block root-level hardhat config
     'contracts/hardhat.config.js',
     'contracts/hardhat.config.ts',
     'contracts/package.json',
