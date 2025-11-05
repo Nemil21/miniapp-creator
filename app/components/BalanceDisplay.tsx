@@ -13,9 +13,13 @@ interface BalanceDisplayProps {
 }
 
 export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDisplayProps) {
-    const { ready, authenticated } = usePrivy();
+    const { ready, authenticated, linkWallet } = usePrivy();
     const { wallets } = useWallets();
     const walletAddress = wallets[0]?.address;
+
+    // Check if user only has embedded wallet
+    const hasOnlyEmbeddedWallet = wallets.length > 0 && 
+        wallets.every(w => w.walletClientType === 'privy');
 
     console.log('💰 BalanceDisplay render:', {
         ready,
@@ -23,7 +27,8 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
         hasWallet: !!wallets[0],
         walletAddress: walletAddress ? `${walletAddress.substring(0, 6)}...` : 'none',
         feeModelType,
-        hasActiveAgent: !!activeAgent
+        hasActiveAgent: !!activeAgent,
+        hasOnlyEmbeddedWallet
     });
 
     // Balance fetching with React Query (only if activeAgent exists)
@@ -57,6 +62,17 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
     // Show balance and top-up when authenticated and credits enabled
     return (
         <div className="flex items-center gap-3">
+            {hasOnlyEmbeddedWallet && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={linkWallet}
+                    className="px-3 py-1.5 text-xs font-medium text-black-60 transition-colors cursor-pointer rounded-3xl"
+                    title="Currently using temporary wallet. Click to connect your own wallet (MetaMask, Coinbase, etc.)"
+                >
+                    Connect Wallet
+                </Button>
+            )}
             <div className="flex items-center gap-2">
                 <span className="text-sm text-black-60">
                     Balance: {loading ? "..." : balance ? `${balance.credits} Credits` : "0 Credits"}

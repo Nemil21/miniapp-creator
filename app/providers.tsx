@@ -21,11 +21,17 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                 appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
                 clientId={process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID || ''}
                 config={{
-                    // Create embedded wallets for users who don't have a wallet
+                    // Login methods - prioritize external wallets
+                    loginMethods: ['wallet', 'email', 'sms'],
+                    // Create embedded wallets only if explicitly requested
                     embeddedWallets: {
                         ethereum: {
-                            createOnLogin: 'users-without-wallets'
+                            createOnLogin: 'off'  // Changed from 'users-without-wallets' to 'off'
                         }
+                    },
+                    // Require wallet connection
+                    appearance: {
+                        showWalletLoginFirst: true
                     }
                 }}
             >

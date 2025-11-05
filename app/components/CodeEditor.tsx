@@ -508,6 +508,12 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     const handleSaveFile = async () => {
         if (!selectedFile || !currentProject?.projectId) return;
         
+        if (!sessionToken) {
+            console.error('❌ No session token available');
+            alert('Authentication required. Please refresh the page and log in again.');
+            return;
+        }
+        
         setIsSaving(true);
         try {
             const response = await fetch(`/api/projects/${currentProject.projectId}/files`, {
@@ -524,7 +530,8 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to save file');
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || `Failed to save file: ${response.status}`);
             }
 
             setOriginalContent(fileContent);
@@ -532,7 +539,8 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
             console.log('✅ File saved successfully');
         } catch (error) {
             console.error('❌ Error saving file:', error);
-            alert('Failed to save file');
+            const message = error instanceof Error ? error.message : 'Failed to save file';
+            alert(message);
         } finally {
             setIsSaving(false);
         }
@@ -540,6 +548,12 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
 
     const handleSaveAndRedeploy = async () => {
         if (!selectedFile || !currentProject?.projectId) return;
+        
+        if (!sessionToken) {
+            console.error('❌ No session token available');
+            alert('Authentication required. Please refresh the page and log in again.');
+            return;
+        }
         
         setIsDeploying(true);
         setDeploymentStatus('Saving file...');
@@ -572,8 +586,9 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
             setTimeout(() => setDeploymentStatus(''), 3000);
         } catch (error) {
             console.error('❌ Error saving and redeploying:', error);
-            setDeploymentStatus('❌ Deployment failed');
-            setTimeout(() => setDeploymentStatus(''), 3000);
+            const message = error instanceof Error ? error.message : 'Deployment failed';
+            setDeploymentStatus(`❌ ${message}`);
+            setTimeout(() => setDeploymentStatus(''), 5000);
         } finally {
             setIsDeploying(false);
         }
