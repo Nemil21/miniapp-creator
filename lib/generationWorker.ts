@@ -909,8 +909,10 @@ async function executeInitialGenerationJob(
 
         // Deployment succeeded
         console.log("✅ Preview created successfully");
-        projectUrl = getPreviewUrl(projectId) || `https://${projectId}.${PREVIEW_API_BASE}`;
+        // Use Vercel URL if available, otherwise fall back to preview URL
+        projectUrl = previewData.vercelUrl || previewData.previewUrl || getPreviewUrl(projectId) || `${PREVIEW_API_BASE}/p/${projectId}`;
         console.log(`🎉 Project ready at: ${projectUrl}`);
+        console.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'Not available'}`);
         break; // Exit retry loop on success
 
       } catch (previewError) {
@@ -1040,6 +1042,7 @@ async function executeInitialGenerationJob(
       console.log("🔄 Updating projects table with deployment URL...");
       await updateProject(project.id, {
         previewUrl: deploymentUrl,
+        vercelUrl: previewData?.vercelUrl || undefined, // Save Vercel URL separately
         name: projectName,
         description: `${userRequest.substring(0, 100)}...`
       });
