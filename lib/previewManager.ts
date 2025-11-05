@@ -10,6 +10,7 @@ const activePreviews = new Map<string, PreviewResponse>();
 
 // Preview API configuration
 const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
+const CUSTOM_DOMAIN_BASE = process.env.CUSTOM_DOMAIN_BASE || 'minidev.fun';
 
 /**
  * Poll for deployment status when orchestrator returns "in_progress"
@@ -328,7 +329,7 @@ export async function createPreview(
         console.log(`📋 Deployment logs length: ${deploymentLogs.length} characters`);
         
         const errorResponse: PreviewResponse = {
-          url: `${PREVIEW_API_BASE}/p/${projectId}`,
+          url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
           status: 'deployment_failed',
           port: 3000,
           deploymentError: response.error as string || 'Unknown deployment error',
@@ -362,7 +363,7 @@ export async function createPreview(
           console.error(`❌ Polled deployment failed: ${pollResult.error}`);
           // Return deployment failure
           return {
-            url: `${PREVIEW_API_BASE}/p/${projectId}`,
+            url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
             status: 'deployment_failed',
             port: 3000,
             deploymentError: pollResult.error || 'Deployment failed during polling',
@@ -416,7 +417,7 @@ export async function createPreview(
         url:
           apiResponse.previewUrl ||
           apiResponse.vercelUrl ||
-          `${PREVIEW_API_BASE}/p/${projectId}`,
+          `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
         status: (apiResponse.status as string) || (apiResponse.isNewDeployment ? "deployed" : "updated"),
         port: (apiResponse.port as number) || 3000, // Use port from response or default to 3000
         previewUrl: apiResponse.previewUrl as string,

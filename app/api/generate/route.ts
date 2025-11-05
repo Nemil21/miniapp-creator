@@ -14,6 +14,7 @@ import {
 
 // Import the API base URL
 const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
+const CUSTOM_DOMAIN_BASE = process.env.CUSTOM_DOMAIN_BASE || 'minidev.fun';
 import {
   // getOptimizedSystemPrompt,
   // createOptimizedUserPrompt,
@@ -902,7 +903,7 @@ export async function POST(request: NextRequest) {
         `📊 Preview Status: ${previewData.status}, Port: ${previewData.port}`
       );
 
-      projectUrl = getPreviewUrl(projectId) || `https://${projectId}.${PREVIEW_API_BASE}`;
+      projectUrl = getPreviewUrl(projectId) || `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
       console.log(`🎉 Project ready at: ${projectUrl}`);
     } catch (previewError) {
       console.error("❌ Failed to create preview:", previewError);
@@ -910,13 +911,13 @@ export async function POST(request: NextRequest) {
 
       // Create a fallback preview data object
       previewData = {
-        url: `${PREVIEW_API_BASE}/p/${projectId}`,
+        url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
         status: "error",
         port: 3000,
-        previewUrl: `${PREVIEW_API_BASE}/p/${projectId}`,
+        previewUrl: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
       };
 
-      projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
+      projectUrl = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
 
       console.log("⚠️ Using fallback preview URL:", projectUrl);
       console.log("⚠️ Continuing with project creation despite preview error");
@@ -1489,7 +1490,7 @@ export async function PATCH(request: NextRequest) {
         files: result.files,
         diffs: result.diffs,
         changed: result.files.map(f => f.filename), // Add changedFiles for frontend compatibility
-        previewUrl: updatedPreviewUrl || `${PREVIEW_API_BASE}/p/${projectId}`,
+        previewUrl: updatedPreviewUrl || `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
         vercelUrl: updatedPreviewUrl, // Include Vercel URL
         message: "Project updated with diff-based changes",
         patchId: savedPatch?.id, // Include patch ID for tracking
@@ -1685,7 +1686,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({
         success: true,
         changed: generatedFiles.map((f) => f.filename),
-        previewUrl: updatedPreviewUrl || `${PREVIEW_API_BASE}/p/${projectId}`,
+        previewUrl: updatedPreviewUrl || `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
         vercelUrl: updatedPreviewUrl, // Include Vercel URL
       });
     }

@@ -37,6 +37,7 @@ import {
 } from "./deploymentErrorParser";
 
 const PREVIEW_API_BASE = process.env.PREVIEW_API_BASE || 'https://minidev.fun';
+const CUSTOM_DOMAIN_BASE = process.env.CUSTOM_DOMAIN_BASE || 'minidev.fun';
 
 // Utility: Recursively read all files in a directory
 async function readAllFiles(
@@ -804,7 +805,7 @@ async function executeInitialGenerationJob(
     // Create preview (now with real contract addresses injected if Web3)
     console.log("🚀 Creating preview...");
     let previewData: Awaited<ReturnType<typeof createPreview>> | undefined;
-    let projectUrl: string = `${PREVIEW_API_BASE}/p/${projectId}`; // Default fallback URL
+    let projectUrl: string = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`; // Default fallback URL (custom domain)
     const maxDeploymentRetries = 2; // Allow 1 retry with fixes
     let deploymentAttempt = 0;
 
@@ -902,7 +903,7 @@ async function executeInitialGenerationJob(
               attempts: deploymentAttempt,
               finalError: previewData.deploymentError.substring(0, 500)
             });
-            projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
+            projectUrl = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
             break;
           }
         }
@@ -910,7 +911,7 @@ async function executeInitialGenerationJob(
         // Deployment succeeded
         console.log("✅ Preview created successfully");
         // Use Vercel URL if available, otherwise fall back to preview URL
-        projectUrl = previewData.vercelUrl || previewData.previewUrl || getPreviewUrl(projectId) || `${PREVIEW_API_BASE}/p/${projectId}`;
+        projectUrl = previewData.vercelUrl || previewData.previewUrl || getPreviewUrl(projectId) || `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
         console.log(`🎉 Project ready at: ${projectUrl}`);
         console.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'Not available'}`);
         break; // Exit retry loop on success
@@ -944,13 +945,13 @@ async function executeInitialGenerationJob(
         } else if (deploymentAttempt >= maxDeploymentRetries) {
           // If this is the last attempt, use fallback
           previewData = {
-            url: `${PREVIEW_API_BASE}/p/${projectId}`,
+            url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
             status: "error",
             port: 3000,
-            previewUrl: `${PREVIEW_API_BASE}/p/${projectId}`,
+            previewUrl: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
           };
 
-          projectUrl = `${PREVIEW_API_BASE}/p/${projectId}`;
+          projectUrl = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
           console.log("⚠️ Using fallback preview URL:", projectUrl);
           break;
         } else {
