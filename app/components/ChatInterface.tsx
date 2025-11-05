@@ -713,8 +713,6 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     } else if (job.status === 'failed') {
                         clearInterval(pollInterval);
                         const errorMessage = job.error || 'Job failed';
-                        // Check if this is a deployment error with logs
-                        const isDeploymentError = errorMessage.includes('Deployment failed');
                         reject(new Error(errorMessage));
                     } else if (attempt >= maxAttempts) {
                         clearInterval(pollInterval);
