@@ -7,7 +7,7 @@ import { updateGenerationJobStatus } from "../../../../../lib/database";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -22,7 +22,7 @@ export async function POST(
       );
     }
 
-    const jobId = params.jobId;
+    const { id: jobId } = await params;
     const body = await request.json();
     const { error, logs, deploymentError } = body;
 
