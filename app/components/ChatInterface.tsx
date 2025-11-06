@@ -712,7 +712,15 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         resolve(project);
                     } else if (job.status === 'failed') {
                         clearInterval(pollInterval);
-                        const errorMessage = job.error || 'Job failed';
+                        console.log('❌ Job failed, details:', {
+                            error: job.error,
+                            result: job.result,
+                            hasDeploymentError: job.result?.deploymentError,
+                            deploymentError: job.result?.deploymentError
+                        });
+                        
+                        // Try to extract detailed error message from result
+                        const errorMessage = job.result?.deploymentError || job.error || 'Job failed';
                         reject(new Error(errorMessage));
                     } else if (attempt >= maxAttempts) {
                         clearInterval(pollInterval);
@@ -921,10 +929,17 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             let displayMessage = errorMessage;
             if (errorMessage.includes('Deployment failed')) {
                 // Extract the specific error from deployment failure message
-                const match = errorMessage.match(/Deployment failed after \d+ attempts: (.+)/);
+                // Try both patterns: "Deployment failed after N attempts: error" and "Deployment failed: error"
+                const matchWithAttempts = errorMessage.match(/Deployment failed after \d+ attempts: (.+)/);
+                const matchSimple = errorMessage.match(/Deployment failed: (.+)/);
+                const match = matchWithAttempts || matchSimple;
+                
                 if (match) {
                     const deployError = match[1];
                     displayMessage = `❌ **Deployment Failed**\n\nYour app was generated successfully, but deployment to Vercel failed with the following error:\n\n\`\`\`\n${deployError.substring(0, 500)}\n\`\`\`\n\nPlease check the error above and try again. Common issues include:\n- TypeScript errors\n- Missing dependencies\n- Configuration issues`;
+                } else {
+                    // Fallback: show the full error message
+                    displayMessage = `❌ **Deployment Failed**\n\n${errorMessage}`;
                 }
             }
             

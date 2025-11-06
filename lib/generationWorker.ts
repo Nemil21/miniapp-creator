@@ -27,6 +27,7 @@ import {
   getPreviewUrl,
   updatePreviewFiles,
   deployContractsFirst,
+  redeployToVercel,
 } from "./previewManager";
 import { STAGE_MODEL_CONFIG, ANTHROPIC_MODELS } from "./llmOptimizer";
 import { updateFilesWithContractAddresses } from "./contractAddressInjector";
@@ -1263,16 +1264,7 @@ async function executeFollowUpJob(
   await writeFilesToDir(userDir, result.files);
   await saveFilesToGenerated(projectId, result.files);
 
-  // Update preview (optional - may fail on Railway)
-  try {
-    console.log("🔄 Updating preview...");
-    await updatePreviewFiles(projectId, result.files, accessToken);
-    console.log("✅ Preview updated successfully");
-  } catch (previewError) {
-    console.warn("⚠️ Preview update failed (expected on Railway):", previewError);
-  }
-
-  // Save to database
+  // Save to database first
   const safeFiles = result.files.filter(file => {
     if (file.content.includes('\0') || file.content.includes('\x00')) {
       console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
@@ -1283,6 +1275,53 @@ async function executeFollowUpJob(
 
   await saveProjectFiles(projectId, safeFiles);
   console.log("✅ Project files updated in database");
+
+  // Check if project has contracts (Web3) by looking for contracts directory
+  const hasContracts = result.files.some(f => 
+    f.filename.startsWith('contracts/') && f.filename.endsWith('.sol')
+  );
+  const isWeb3 = hasContracts;
+
+  // Redeploy to Vercel with updated files
+  try {
+    console.log("\n" + "=".repeat(60));
+    console.log("🚀 REDEPLOYING TO VERCEL");
+    console.log("=".repeat(60));
+    
+    const previewData = await redeployToVercel(
+      projectId,
+      result.files,
+      accessToken,
+      isWeb3,
+      jobId
+    );
+    
+    console.log("✅ Vercel deployment successful!");
+    console.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'N/A'}`);
+
+    // Update project with deployment URL (should be same as initial deployment)
+    // The URL is stored for redundancy/verification, but it should not change
+    // across deployments since we're deploying to the same Vercel project
+    if (previewData.vercelUrl) {
+      const project = await getProjectById(projectId);
+      const urlChanged = project?.vercelUrl !== previewData.vercelUrl;
+      
+      if (urlChanged) {
+        console.log(`⚠️ Vercel URL changed: ${project?.vercelUrl} → ${previewData.vercelUrl}`);
+        console.log(`   This is unexpected - we should be deploying to the same project`);
+      }
+      
+      await updateProject(projectId, {
+        previewUrl: previewData.vercelUrl,
+        vercelUrl: previewData.vercelUrl,
+      });
+      console.log(`✅ Project deployment URL confirmed: ${previewData.vercelUrl}`);
+    }
+  } catch (deployError) {
+    console.error("❌ Vercel deployment failed:", deployError);
+    // Don't fail the entire job - files are already saved to database
+    console.warn("⚠️ Files are saved to database, but Vercel deployment failed");
+  }
 
   // Store patch for rollback (if diffs available)
   if (hasDiffs && diffCount > 0) {

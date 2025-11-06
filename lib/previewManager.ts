@@ -102,8 +102,8 @@ function getProjectPatchesDir(projectId: string): string {
 
 export interface PreviewResponse {
   url: string;
-  status: string;
-  port: number;
+  status?: string;
+  port?: number;
   previewUrl?: string;
   vercelUrl?: string;
   aliasSuccess?: boolean;
@@ -112,6 +112,11 @@ export interface PreviewResponse {
   contractAddresses?: { [contractName: string]: string }; // Deployed contract addresses
   deploymentError?: string; // Deployment error message if build failed
   deploymentLogs?: string; // Full deployment logs for error parsing
+  validationResult?: { 
+    success: boolean; 
+    errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; 
+    warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }> 
+  }; // Validation result from deployment
 }
 
 export interface PreviewFile {
@@ -516,6 +521,94 @@ export async function updatePreviewFiles(
     // Don't throw - just log the error. The files are already saved to database.
     // The preview will be out of sync but the user can still access the project.
     console.warn(`⚠️  Preview update failed for ${projectId}, but files are saved to database`);
+  }
+}
+
+// Redeploy project to Vercel (for follow-up edits)
+export async function redeployToVercel(
+  projectId: string,
+  files: { filename: string; content: string }[],
+  accessToken: string,
+  isWeb3?: boolean,
+  jobId?: string
+): Promise<PreviewResponse> {
+  console.log(`🚀 Redeploying project to Vercel: ${projectId}`);
+  console.log(`📁 Files count: ${files.length}`);
+
+  try {
+    // Convert files array to object format expected by the API
+    const filesObject: { [key: string]: string } = {};
+    files.forEach((file) => {
+      filesObject[file.filename] = file.content;
+    });
+
+    console.log(`📦 Converted ${Object.keys(filesObject).length} files to object format`);
+
+    const requestBody = {
+      hash: projectId,
+      files: filesObject,
+      deployToExternal: "vercel",
+      isWeb3: isWeb3 !== undefined ? isWeb3 : true,
+      skipContracts: true, // Skip contracts for follow-up deployments
+      jobId,
+    };
+
+    console.log(`📤 Sending redeploy request to: ${PREVIEW_API_BASE}/deploy`);
+
+    // Make API request with extended timeout for Vercel deployment
+    const response = await fetch(`${PREVIEW_API_BASE}/deploy`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(420000), // 7 minutes timeout
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Redeploy request failed: ${response.status} ${errorText}`);
+      throw new Error(
+        `Failed to redeploy to Vercel: ${response.status} ${errorText}`
+      );
+    }
+
+    const apiResponse: any = await response.json();
+    console.log(`✅ Redeploy API response received:`, {
+      success: apiResponse.success,
+      vercelUrl: apiResponse.vercelUrl,
+      hasDeploymentError: !!apiResponse.deploymentError,
+    });
+
+    // Check for deployment errors
+    if (apiResponse.deploymentError) {
+      console.error(`❌ Vercel deployment failed:`, apiResponse.deploymentError);
+      throw new Error(`Vercel deployment failed: ${apiResponse.deploymentError}`);
+    }
+
+    // Extract preview URL and Vercel URL
+    const previewUrl = apiResponse.vercelUrl || apiResponse.url || apiResponse.previewUrl;
+    const vercelUrl = apiResponse.vercelUrl;
+
+    if (!previewUrl && !vercelUrl) {
+      console.warn(`⚠️ No deployment URL in response:`, apiResponse);
+    }
+
+    console.log(`✅ Redeploy successful!`);
+    console.log(`📍 Vercel URL: ${vercelUrl || 'N/A'}`);
+    console.log(`📍 Preview URL: ${previewUrl || 'N/A'}`);
+
+    return {
+      url: previewUrl || "",
+      vercelUrl: vercelUrl,
+      contractAddresses: apiResponse.contractAddresses,
+      validationResult: apiResponse.validationResult,
+    };
+  } catch (error) {
+    console.error(`❌ Redeploy error:`, error);
+    console.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+    throw error;
   }
 }
 
