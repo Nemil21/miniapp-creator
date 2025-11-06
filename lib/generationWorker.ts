@@ -826,7 +826,8 @@ async function executeInitialGenerationJob(
           generatedFiles, // Already contains real addresses if Web3
           accessToken,
           enhancedResult.intentSpec?.isWeb3, // Pass isWeb3 flag to preview API
-          skipContractsInDeploy // Skip contracts if we already deployed them
+          skipContractsInDeploy, // Skip contracts if we already deployed them
+          jobId // Pass jobId for background deployment error reporting
         );
 
         console.log(`🔍 [RETRY-DEBUG] Preview data received:`, {

@@ -189,7 +189,8 @@ export async function createPreview(
   files: { filename: string; content: string }[],
   accessToken: string,
   isWeb3?: boolean,
-  skipContracts?: boolean // NEW: Allow caller to specify if contracts already deployed
+  skipContracts?: boolean, // NEW: Allow caller to specify if contracts already deployed
+  jobId?: string // NEW: Job ID for background deployment error reporting
 ): Promise<PreviewResponse> {
   console.log(`🚀 Creating preview for project: ${projectId}`);
   console.log(`📁 Files count: ${files.length}`);
@@ -197,6 +198,7 @@ export async function createPreview(
   console.log(`🌐 Preview API Base: ${PREVIEW_API_BASE}`);
   console.log(`🔧 isWeb3: ${isWeb3 !== undefined ? isWeb3 : 'not specified'}`);
   console.log(`🔧 skipContracts: ${skipContracts !== undefined ? skipContracts : 'not specified'}`);
+  console.log(`🆔 jobId: ${jobId || 'not specified'}`);
 
   try {
     // Convert files array to object format expected by the API
@@ -218,6 +220,7 @@ export async function createPreview(
       deployToExternal: "vercel",
       isWeb3: isWeb3 !== undefined ? isWeb3 : true, // Default to true for backward compatibility
       skipContracts: shouldSkipContracts, // Skip if already deployed OR non-Web3
+      jobId, // Pass jobId for background deployment error reporting
     };
 
     console.log(`📤 Sending request to: ${PREVIEW_API_BASE}/deploy`);
