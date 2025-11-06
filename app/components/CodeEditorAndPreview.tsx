@@ -36,7 +36,7 @@ export function CodeEditorAndPreview({
     isGenerating = false,
     onFileChange,
     onSaveFile,
-    onOpenSidebar
+
 }: CodeEditorAndPreviewProps) {
     const [viewMode, setViewMode] = useState<ViewMode>(currentProject ? 'code' : 'preview');
     const [showLogs, setShowLogs] = useState(false);
@@ -46,9 +46,9 @@ export function CodeEditorAndPreview({
     // Update view mode when currentProject changes
     useEffect(() => {
         if (currentProject) {
-            setViewMode('code'); // Show code editor when project is loaded
+            setViewMode('preview'); // Show preview when project is loaded
         } else {
-            setViewMode('preview'); // Show project list when no project
+            setViewMode('preview'); // Show preview when no project
         }
     }, [currentProject]);
 
@@ -154,7 +154,7 @@ export function CodeEditorAndPreview({
             <div className="flex items-center justify-between p-4 border-b border-black-10 bg-white">
                 {/* Left side - Toggle icons */}
                 <div className="flex items-center gap-1 bg-black-5 rounded-lg p-1">
-                    {(['code', 'preview', 'history'] as ViewMode[]).map((mode) => (
+                    {(['code', 'preview'] as ViewMode[]).map((mode) => (
                         <button
                             key={mode}
                             onClick={() => setViewMode(mode)}
@@ -163,14 +163,25 @@ export function CodeEditorAndPreview({
                                 : 'text-black-60 hover:text-black hover:bg-black-10'
                                 }`}
                             title={`${getViewModeLabel(mode)} view`}
-                            disabled={mode === 'history' && !currentProject}
                         >
                             {getViewModeIcon(mode)}
                         </button>
                     ))}
+                    {/* History button commented out */}
+                    {/* <button
+                        onClick={() => setViewMode('history')}
+                        className={`p-2 rounded-md transition-colors ${viewMode === 'history'
+                            ? 'bg-black text-white'
+                            : 'text-black-60 hover:text-black hover:bg-black-10'
+                            }`}
+                        title="History view"
+                        disabled={!currentProject}
+                    >
+                        {getViewModeIcon('history')}
+                    </button> */}
                 </div>
 
-                {/* Right side - Project URL controls and Projects button */}
+                {/* Right side - Project URL controls */}
                 <div className="flex items-center gap-3">
                     {currentProject && (
                         <>
@@ -220,21 +231,6 @@ export function CodeEditorAndPreview({
                                 Publish
                             </button>
                         </>
-                    )}
-
-                    {/* Projects button - rightmost */}
-                    {onOpenSidebar && (
-                        <button
-                            onClick={onOpenSidebar}
-                            onMouseEnter={onOpenSidebar}
-                            className="p-2 px-3 rounded-lg bg-black-5 text-black-60 hover:text-black hover:bg-black-10 transition-colors flex items-center gap-2"
-                            title="Open Projects"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                            </svg>
-                            <span className="text-xs font-medium">Projects</span>
-                        </button>
                     )}
                 </div>
             </div>

@@ -2,7 +2,7 @@
 import { logger } from "../../lib/logger";
 
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useAuthContext } from '../contexts/AuthContext';
 
@@ -315,7 +315,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     const [fileTree, setFileTree] = useState<FileNode[]>([]);
     const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
     const [monacoError, setMonacoError] = useState<boolean>(false);
-    const [monacoLoadTimeout, setMonacoLoadTimeout] = useState<NodeJS.Timeout | null>(null);
+    const monacoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [monacoRetryCount, setMonacoRetryCount] = useState<number>(0);
     const { sessionToken } = useAuthContext();
     const [isSaving, setIsSaving] = useState(false);
@@ -370,37 +370,38 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
         };
     }, []);
 
-    // Monaco Editor load timeout - if Monaco doesn't load within 10 seconds, show fallback
+    // Reset Monaco error when file changes
     useEffect(() => {
+        if (selectedFile) {
+            logger.log('🔄 File changed, resetting Monaco error state');
+            setMonacoError(false);
+        }
+    }, [selectedFile]);
+
+    // Monaco Editor load timeout - if Monaco doesn't load within 15 seconds, show fallback
+    useEffect(() => {
+        // Clear any existing timeouts first
+        if (monacoTimeoutRef.current) {
+            clearTimeout(monacoTimeoutRef.current);
+            monacoTimeoutRef.current = null;
+        }
+
         if (selectedFile && fileContent && !monacoError) {
             logger.log('⏰ Starting Monaco load timeout for file:', selectedFile);
-            const timeout = setTimeout(() => {
-                logger.log('⏰ Monaco Editor load timeout (10s) - switching to fallback');
+            
+            // Timeout at 15 seconds - fallback
+            monacoTimeoutRef.current = setTimeout(() => {
+                logger.log('⏰ Monaco Editor load timeout (15s) - switching to fallback');
                 logger.log('⏰ This means Monaco never called onMount()');
                 setMonacoError(true);
-            }, 10000); // 10 second timeout - give Monaco plenty of time
-
-            setMonacoLoadTimeout(timeout);
+            }, 15000); // 15 second timeout - give Monaco plenty of time
 
             return () => {
-                if (timeout) {
-                    clearTimeout(timeout);
-                    setMonacoLoadTimeout(null);
+                if (monacoTimeoutRef.current) {
+                    clearTimeout(monacoTimeoutRef.current);
+                    monacoTimeoutRef.current = null;
                 }
             };
-        }
-    }, [selectedFile, fileContent, monacoError]);
-
-    // Monaco load timeout increased to give it more time to load
-    useEffect(() => {
-        if (selectedFile && fileContent && !monacoError) {
-            logger.log('⏰ Monaco load monitor started for:', selectedFile);
-            const timeout = setTimeout(() => {
-                logger.log('⏰ Monaco taking longer than expected, but staying patient...');
-                // Increased timeout - Monaco can take time in production
-            }, 5000); // 5 second monitoring
-
-            return () => clearTimeout(timeout);
         }
     }, [selectedFile, fileContent, monacoError]);
 
@@ -693,9 +694,10 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                     logger.log('✅ Monaco instance:', !!monaco);
                                                     setMonacoError(false);
                                                     // Clear the timeout since Monaco loaded successfully
-                                                    if (monacoLoadTimeout) {
-                                                        clearTimeout(monacoLoadTimeout);
-                                                        setMonacoLoadTimeout(null);
+                                                    if (monacoTimeoutRef.current) {
+                                                        logger.log('✅ Clearing Monaco timeout - editor loaded successfully');
+                                                        clearTimeout(monacoTimeoutRef.current);
+                                                        monacoTimeoutRef.current = null;
                                                     }
                                                 }}
                                                 onValidate={(markers) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 interface DialogContextValue {
     open: boolean;
@@ -52,9 +53,16 @@ export function DialogContent({
     onPointerDownOutside?: () => void;
 }) {
     const context = React.useContext(DialogContext);
+    const [mounted, setMounted] = React.useState(false);
+
+    React.useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
     if (!context) throw new Error("DialogContent must be used within Dialog");
 
-    if (!context.open) return null;
+    if (!context.open || !mounted) return null;
 
     const handleBackdropClick = () => {
         if (onPointerDownOutside) {
@@ -63,15 +71,19 @@ export function DialogContent({
         context.onOpenChange(false);
     };
 
-    return (
+    const dialogContent = (
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/50 z-50 cursor-pointer"
+                className="fixed inset-0 bg-black/50 cursor-pointer"
+                style={{ zIndex: 9999 }}
                 onClick={handleBackdropClick}
             />
             {/* Dialog */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div 
+                className="fixed inset-0 flex items-center justify-center p-4 pointer-events-none"
+                style={{ zIndex: 9999 }}
+            >
                 <div
                     className={`bg-white p-6 shadow-xl max-w-md w-full pointer-events-auto ${className}`}
                     onClick={(e) => e.stopPropagation()}
@@ -81,6 +93,9 @@ export function DialogContent({
             </div>
         </>
     );
+
+    // Render dialog at document.body level to escape stacking context
+    return createPortal(dialogContent, document.body);
 }
 
 export function DialogHeader({
