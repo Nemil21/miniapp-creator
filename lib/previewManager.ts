@@ -574,7 +574,19 @@ export async function redeployToVercel(
       );
     }
 
-    const apiResponse: any = await response.json();
+    const apiResponse = await response.json() as {
+      success?: boolean;
+      vercelUrl?: string;
+      url?: string;
+      previewUrl?: string;
+      deploymentError?: string;
+      contractAddresses?: { [contractName: string]: string };
+      validationResult?: { 
+        success: boolean; 
+        errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; 
+        warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }> 
+      };
+    };
     console.log(`✅ Redeploy API response received:`, {
       success: apiResponse.success,
       vercelUrl: apiResponse.vercelUrl,

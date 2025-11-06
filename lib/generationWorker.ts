@@ -25,7 +25,6 @@ import {
   createPreview,
   saveFilesToGenerated,
   getPreviewUrl,
-  updatePreviewFiles,
   deployContractsFirst,
   redeployToVercel,
 } from "./previewManager";
