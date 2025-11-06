@@ -35,6 +35,7 @@ import {
   formatErrorsForLLM,
   getFilesToFix,
 } from "./deploymentErrorParser";
+import { logger } from "./logger";
 
 
 const CUSTOM_DOMAIN_BASE = process.env.CUSTOM_DOMAIN_BASE || 'minidev.fun';
@@ -75,7 +76,7 @@ async function readAllFiles(
         const content = await fs.readFile(fullPath, "utf8");
 
         if (content.includes('\0') || content.includes('\x00')) {
-          console.log(`⚠️ Skipping binary file: ${relPath}`);
+          logger.log(`⚠️ Skipping binary file: ${relPath}`);
           continue;
         }
 
@@ -85,7 +86,7 @@ async function readAllFiles(
 
         files.push({ filename: relPath, content: sanitizedContent });
       } catch (error) {
-        console.log(`⚠️ Skipping binary file: ${relPath} (${error})`);
+        logger.log(`⚠️ Skipping binary file: ${relPath} (${error})`);
         continue;
       }
     }
@@ -152,7 +153,7 @@ async function fetchBoilerplateFromGitHub(targetDir: string) {
         // Fetch file content
         const fileResponse = await fetch(item.download_url);
         if (!fileResponse.ok) {
-          console.warn(`⚠️ Failed to fetch file ${itemPath}: ${fileResponse.status}`);
+          logger.warn(`⚠️ Failed to fetch file ${itemPath}: ${fileResponse.status}`);
           continue;
         }
         
@@ -160,7 +161,7 @@ async function fetchBoilerplateFromGitHub(targetDir: string) {
         
         // Check for binary content
         if (content.includes('\0') || content.includes('\x00')) {
-          console.log(`⚠️ Skipping binary file: ${itemPath}`);
+          logger.log(`⚠️ Skipping binary file: ${itemPath}`);
           continue;
         }
         
@@ -201,9 +202,9 @@ async function callClaudeWithLogging(
     } as typeof modelConfig;
   }
 
-  console.log(`\n🤖 LLM Call - ${stageName}`);
-  console.log("  Model:", modelConfig.model);
-  console.log("  Max Tokens:", modelConfig.maxTokens);
+  logger.log(`\n🤖 LLM Call - ${stageName}`);
+  logger.log("  Model:", modelConfig.model);
+  logger.log("  Max Tokens:", modelConfig.maxTokens);
 
   const body = {
     model: modelConfig.model,
@@ -219,7 +220,7 @@ async function callClaudeWithLogging(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     if (attempt > 1) {
       const throttleDelay = Math.min(500 * attempt, 2000);
-      console.log(`⏱️ Throttling request (attempt ${attempt}), waiting ${throttleDelay}ms...`);
+      logger.log(`⏱️ Throttling request (attempt ${attempt}), waiting ${throttleDelay}ms...`);
       await new Promise(resolve => setTimeout(resolve, throttleDelay));
     }
 
@@ -244,10 +245,10 @@ async function callClaudeWithLogging(
             const delay = baseDelay * Math.pow(2, attempt - 1);
 
             if (attempt === maxRetries - 1 && modelConfig.fallbackModel) {
-              console.log(`⚠️ API ${response.status} error, switching to fallback model: ${modelConfig.fallbackModel}`);
+              logger.log(`⚠️ API ${response.status} error, switching to fallback model: ${modelConfig.fallbackModel}`);
               body.model = modelConfig.fallbackModel;
             } else {
-              console.log(`⚠️ API ${response.status} error, retrying in ${delay}ms...`);
+              logger.log(`⚠️ API ${response.status} error, retrying in ${delay}ms...`);
             }
 
             await new Promise((resolve) => setTimeout(resolve, delay));
@@ -262,10 +263,10 @@ async function callClaudeWithLogging(
             const delay = baseDelay * Math.pow(2, attempt - 1);
 
             if (attempt === maxRetries - 1 && modelConfig.fallbackModel) {
-              console.log(`⚠️ Server error ${response.status}, switching to fallback model: ${modelConfig.fallbackModel}`);
+              logger.log(`⚠️ Server error ${response.status}, switching to fallback model: ${modelConfig.fallbackModel}`);
               body.model = modelConfig.fallbackModel;
             } else {
-              console.log(`⚠️ Server error ${response.status}, retrying in ${delay}ms...`);
+              logger.log(`⚠️ Server error ${response.status}, retrying in ${delay}ms...`);
             }
 
             await new Promise((resolve) => setTimeout(resolve, delay));
@@ -291,15 +292,15 @@ async function callClaudeWithLogging(
 
       const actualCost = calculateActualCost(inputTokens, outputTokens, modelConfig.model);
 
-      console.log("📥 Output:");
-      console.log("  Response Time:", endTime - startTime, "ms");
-      console.log("  Total Tokens:", totalTokens);
-      console.log("  Cost:", actualCost);
+      logger.log("📥 Output:");
+      logger.log("  Response Time:", endTime - startTime, "ms");
+      logger.log("  Total Tokens:", totalTokens);
+      logger.log("  Cost:", actualCost);
 
       return responseText;
     } catch (error) {
       if (attempt === maxRetries) {
-        console.error(`❌ LLM API Error (${stageName}) after ${maxRetries} attempts:`, error);
+        logger.error(`❌ LLM API Error (${stageName}) after ${maxRetries} attempts:`, error);
         throw error;
       }
 
@@ -308,7 +309,7 @@ async function callClaudeWithLogging(
         (error instanceof Error && error.message.includes("fetch"))
       ) {
         const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`⚠️ Network error, retrying in ${delay}ms...`);
+        logger.log(`⚠️ Network error, retrying in ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
@@ -400,44 +401,44 @@ async function fixDeploymentErrors(
   currentFiles: { filename: string; content: string }[],
   projectId: string
 ): Promise<{ filename: string; content: string }[]> {
-  console.log("\n" + "=".repeat(70));
-  console.log("🔧 DEPLOYMENT ERROR DETECTED - ATTEMPTING TO FIX");
-  console.log("=".repeat(70));
-  console.log(`🔍 [FIX-DEBUG] Input parameters:`);
-  console.log(`🔍 [FIX-DEBUG] - deploymentError length: ${deploymentError.length}`);
-  console.log(`🔍 [FIX-DEBUG] - deploymentLogs length: ${deploymentLogs.length}`);
-  console.log(`🔍 [FIX-DEBUG] - currentFiles count: ${currentFiles.length}`);
-  console.log(`🔍 [FIX-DEBUG] - projectId: ${projectId}`);
-  console.log(`🔍 [FIX-DEBUG] First 500 chars of error:\n${deploymentError.substring(0, 500)}`);
+  logger.log("\n" + "=".repeat(70));
+  logger.log("🔧 DEPLOYMENT ERROR DETECTED - ATTEMPTING TO FIX");
+  logger.log("=".repeat(70));
+  logger.log(`🔍 [FIX-DEBUG] Input parameters:`);
+  logger.log(`🔍 [FIX-DEBUG] - deploymentError length: ${deploymentError.length}`);
+  logger.log(`🔍 [FIX-DEBUG] - deploymentLogs length: ${deploymentLogs.length}`);
+  logger.log(`🔍 [FIX-DEBUG] - currentFiles count: ${currentFiles.length}`);
+  logger.log(`🔍 [FIX-DEBUG] - projectId: ${projectId}`);
+  logger.log(`🔍 [FIX-DEBUG] First 500 chars of error:\n${deploymentError.substring(0, 500)}`);
 
   // Parse deployment errors
   const parsed = parseVercelDeploymentErrors(deploymentError, deploymentLogs);
-  console.log(`📊 Parsed errors: ${parsed.errors.length} total`);
-  console.log(`   - TypeScript: ${parsed.hasTypeScriptErrors ? 'YES' : 'NO'}`);
-  console.log(`   - ESLint: ${parsed.hasESLintErrors ? 'YES' : 'NO'}`);
-  console.log(`   - Build: ${parsed.hasBuildErrors ? 'YES' : 'NO'}`);
-  console.log(`🔍 [FIX-DEBUG] Parsed error details:`, JSON.stringify(parsed.errors.slice(0, 3), null, 2));
+  logger.log(`📊 Parsed errors: ${parsed.errors.length} total`);
+  logger.log(`   - TypeScript: ${parsed.hasTypeScriptErrors ? 'YES' : 'NO'}`);
+  logger.log(`   - ESLint: ${parsed.hasESLintErrors ? 'YES' : 'NO'}`);
+  logger.log(`   - Build: ${parsed.hasBuildErrors ? 'YES' : 'NO'}`);
+  logger.log(`🔍 [FIX-DEBUG] Parsed error details:`, JSON.stringify(parsed.errors.slice(0, 3), null, 2));
 
   if (parsed.errors.length === 0) {
-    console.log("⚠️ No parseable errors found in deployment logs");
-    console.log(`🔍 [FIX-DEBUG] Returning ${currentFiles.length} original files unchanged`);
+    logger.log("⚠️ No parseable errors found in deployment logs");
+    logger.log(`🔍 [FIX-DEBUG] Returning ${currentFiles.length} original files unchanged`);
     return currentFiles;
   }
 
   // Get files that need fixing
   const filesToFix = getFilesToFix(parsed, currentFiles);
-  console.log(`📝 Files to fix: ${filesToFix.length}`);
-  filesToFix.forEach(f => console.log(`   - ${f.filename}`));
+  logger.log(`📝 Files to fix: ${filesToFix.length}`);
+  filesToFix.forEach(f => logger.log(`   - ${f.filename}`));
 
   if (filesToFix.length === 0) {
-    console.log("⚠️ No files identified for fixing");
+    logger.log("⚠️ No files identified for fixing");
     return currentFiles;
   }
 
   // Format errors for LLM
   const errorMessage = formatErrorsForLLM(parsed);
-  console.log("\n📋 Error summary for LLM:");
-  console.log(errorMessage);
+  logger.log("\n📋 Error summary for LLM:");
+  logger.log(errorMessage);
 
   // Import getStage4ValidatorPrompt from llmOptimizer
   const { getStage4ValidatorPrompt } = await import('./llmOptimizer');
@@ -449,9 +450,9 @@ async function fixDeploymentErrors(
     false // Use diff-based fixes, not complete file rewrites
   );
 
-  console.log(`\n🤖 Calling LLM to fix deployment errors...`);
-  console.log(`🔍 [FIX-DEBUG] LLM prompt length: ${fixPrompt.length} chars`);
-  console.log(`🔍 [FIX-DEBUG] Using diff-based fixes: true`);
+  logger.log(`\n🤖 Calling LLM to fix deployment errors...`);
+  logger.log(`🔍 [FIX-DEBUG] LLM prompt length: ${fixPrompt.length} chars`);
+  logger.log(`🔍 [FIX-DEBUG] Using diff-based fixes: true`);
   
   const fixResponse = await callClaudeWithLogging(
     fixPrompt,
@@ -460,16 +461,16 @@ async function fixDeploymentErrors(
     "STAGE_4_VALIDATOR"
   );
 
-  console.log(`🔍 [FIX-DEBUG] LLM response received, length: ${fixResponse.length} chars`);
-  console.log(`🔍 [FIX-DEBUG] Response preview (first 500 chars):\n${fixResponse.substring(0, 500)}`);
+  logger.log(`🔍 [FIX-DEBUG] LLM response received, length: ${fixResponse.length} chars`);
+  logger.log(`🔍 [FIX-DEBUG] Response preview (first 500 chars):\n${fixResponse.substring(0, 500)}`);
 
   // Log the response for debugging
-  const { logStageResponse } = await import('./logger');
-  logStageResponse(projectId, 'stage4-deployment-error-fixes', fixResponse, {
+  logger.log(`📊 [${projectId}] Stage 4 Deployment Error Fixes:`, {
     errorCount: parsed.errors.length,
     filesToFix: filesToFix.length,
+    responseLength: fixResponse.length,
   });
-  console.log(`🔍 [FIX-DEBUG] Response logged to stage4-deployment-error-fixes`);
+  logger.log(`🔍 [FIX-DEBUG] Response logged to stage4-deployment-error-fixes`);
 
   // Parse LLM response
   const { parseStage4ValidatorResponse } = await import('./parserUtils');
@@ -477,20 +478,20 @@ async function fixDeploymentErrors(
   
   try {
     const fixes = parseStage4ValidatorResponse(fixResponse);
-    console.log(`✅ Parsed ${fixes.length} fixes from LLM`);
+    logger.log(`✅ Parsed ${fixes.length} fixes from LLM`);
     
     // Log what we got from the LLM
     fixes.forEach((fix, idx) => {
-      console.log(`\n📄 Fix ${idx + 1}: ${fix.filename}`);
-      console.log(`   - Has unifiedDiff: ${!!fix.unifiedDiff}`);
-      console.log(`   - Has diffHunks: ${!!fix.diffHunks}`);
-      console.log(`   - Has content: ${!!fix.content}`);
+      logger.log(`\n📄 Fix ${idx + 1}: ${fix.filename}`);
+      logger.log(`   - Has unifiedDiff: ${!!fix.unifiedDiff}`);
+      logger.log(`   - Has diffHunks: ${!!fix.diffHunks}`);
+      logger.log(`   - Has content: ${!!fix.content}`);
       if (fix.unifiedDiff) {
-        console.log(`   - Diff length: ${fix.unifiedDiff.length} chars`);
-        console.log(`   - Diff preview: ${fix.unifiedDiff.substring(0, 200)}...`);
+        logger.log(`   - Diff length: ${fix.unifiedDiff.length} chars`);
+        logger.log(`   - Diff preview: ${fix.unifiedDiff.substring(0, 200)}...`);
       }
       if (fix.diffHunks) {
-        console.log(`   - Number of hunks: ${fix.diffHunks.length}`);
+        logger.log(`   - Number of hunks: ${fix.diffHunks.length}`);
       }
     });
 
@@ -503,16 +504,16 @@ async function fixDeploymentErrors(
         unifiedDiff: f.unifiedDiff!,
       }));
 
-    console.log(`\n🔍 Filtered to ${fileDiffs.length} files with valid diffs (from ${fixes.length} total)`);
+    logger.log(`\n🔍 Filtered to ${fileDiffs.length} files with valid diffs (from ${fixes.length} total)`);
 
     if (fileDiffs.length === 0) {
-      console.log("⚠️ No diff-based fixes found, returning original files");
-      console.log("💡 LLM may have returned full file content instead of diffs");
+      logger.log("⚠️ No diff-based fixes found, returning original files");
+      logger.log("💡 LLM may have returned full file content instead of diffs");
       
       // Fallback: If LLM returned full content instead of diffs, use that
       const fullContentFixes = fixes.filter(f => f.content && !f.unifiedDiff);
       if (fullContentFixes.length > 0) {
-        console.log(`📝 Found ${fullContentFixes.length} full-content fixes, applying those instead`);
+        logger.log(`📝 Found ${fullContentFixes.length} full-content fixes, applying those instead`);
         const updatedFiles = currentFiles.map(currentFile => {
           const fix = fullContentFixes.find(f => f.filename === currentFile.filename);
           return fix ? { ...currentFile, content: fix.content! } : currentFile;
@@ -524,15 +525,15 @@ async function fixDeploymentErrors(
     }
 
     // Apply fixes to current files
-    console.log(`\n🔧 Applying diffs to files...`);
+    logger.log(`\n🔧 Applying diffs to files...`);
     const fixedFiles = applyDiffsToFiles(currentFiles, fileDiffs);
-    console.log(`✅ Applied fixes to ${fixedFiles.length} files`);
+    logger.log(`✅ Applied fixes to ${fixedFiles.length} files`);
 
     return fixedFiles;
   } catch (parseError) {
-    console.error("❌ Failed to parse LLM fix response:", parseError);
-    console.error("Stack trace:", parseError instanceof Error ? parseError.stack : 'No stack trace');
-    console.log("📋 Returning original files");
+    logger.error("❌ Failed to parse LLM fix response:", parseError);
+    logger.error("Stack trace:", parseError instanceof Error ? parseError.stack : 'No stack trace');
+    logger.log("📋 Returning original files");
     return currentFiles;
   }
 }
@@ -541,7 +542,7 @@ async function fixDeploymentErrors(
  * Main worker function to execute a generation job
  */
 export async function executeGenerationJob(jobId: string): Promise<void> {
-  console.log(`🚀 Starting job execution: ${jobId}`);
+  logger.log(`🚀 Starting job execution: ${jobId}`);
 
   try {
     // Fetch job from database
@@ -565,14 +566,14 @@ export async function executeGenerationJob(jobId: string): Promise<void> {
 
     // Route to appropriate handler based on job type
     if (context.isFollowUp) {
-      console.log(`🔄 Detected follow-up job, routing to follow-up handler`);
+      logger.log(`🔄 Detected follow-up job, routing to follow-up handler`);
       return await executeFollowUpJob(jobId, job, context);
     } else {
-      console.log(`🆕 Detected initial generation job, routing to initial generation handler`);
+      logger.log(`🆕 Detected initial generation job, routing to initial generation handler`);
       return await executeInitialGenerationJob(jobId, job, context);
     }
   } catch (error) {
-    console.error(`❌ Job ${jobId} failed:`, error);
+    logger.error(`❌ Job ${jobId} failed:`, error);
 
     // Update job status to failed
     await updateGenerationJobStatus(
@@ -607,8 +608,8 @@ async function executeInitialGenerationJob(
       throw new Error(`User ${job.userId} not found`);
     }
 
-    console.log(`🔧 Processing job for user: ${user.email || user.id}`);
-    console.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
+    logger.log(`🔧 Processing job for user: ${user.email || user.id}`);
+    logger.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
 
     // Extract user request
     const lines = prompt.split("\n");
@@ -631,7 +632,7 @@ async function executeInitialGenerationJob(
     // Use existing project ID or generate new one
     const projectId = existingProjectId || uuidv4();
 
-    console.log(`📁 Project ID: ${projectId}`);
+    logger.log(`📁 Project ID: ${projectId}`);
 
     // Set up directories
     const outputDir = process.env.NODE_ENV === 'production'
@@ -644,29 +645,29 @@ async function executeInitialGenerationJob(
 
     // Use local boilerplate in development, GitHub API in production
     if (process.env.NODE_ENV === 'production') {
-      console.log("📋 Fetching boilerplate from GitHub API (production mode)...");
+      logger.log("📋 Fetching boilerplate from GitHub API (production mode)...");
       try {
         await fetchBoilerplateFromGitHub(boilerplateDir);
-        console.log("✅ Boilerplate fetched successfully");
+        logger.log("✅ Boilerplate fetched successfully");
       } catch (error) {
-        console.error("❌ Failed to fetch boilerplate:", error);
+        logger.error("❌ Failed to fetch boilerplate:", error);
         throw new Error(`Failed to fetch boilerplate: ${error}`);
       }
     } else {
       // Development mode: use local boilerplate
-      console.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
+      logger.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
       const localBoilerplatePath = path.join(process.cwd(), '..', 'minidev-boilerplate');
       try {
         await fs.copy(localBoilerplatePath, boilerplateDir);
-        console.log("✅ Boilerplate copied successfully from local folder");
+        logger.log("✅ Boilerplate copied successfully from local folder");
       } catch (error) {
-        console.error("❌ Failed to copy local boilerplate:", error);
+        logger.error("❌ Failed to copy local boilerplate:", error);
         throw new Error(`Failed to copy boilerplate: ${error}`);
       }
     }
 
     // Copy boilerplate to user directory
-    console.log("📋 Copying boilerplate to user directory...");
+    logger.log("📋 Copying boilerplate to user directory...");
     await fs.copy(boilerplateDir, userDir, {
       filter: (src) => {
         const excludePatterns = [
@@ -682,15 +683,15 @@ async function executeInitialGenerationJob(
         return !excludePatterns.some((pattern) => src.includes(pattern));
       },
     });
-    console.log("✅ Boilerplate copied successfully");
+    logger.log("✅ Boilerplate copied successfully");
 
     // Clean up boilerplate directory
     await fs.remove(boilerplateDir);
 
     // Read boilerplate files
-    console.log("📖 Reading boilerplate files...");
+    logger.log("📖 Reading boilerplate files...");
     const boilerplateFiles = await readAllFiles(userDir);
-    console.log(`📁 Found ${boilerplateFiles.length} boilerplate files`);
+    logger.log(`📁 Found ${boilerplateFiles.length} boilerplate files`);
 
     // Create LLM caller
     const callLLM = async (
@@ -708,7 +709,7 @@ async function executeInitialGenerationJob(
     };
 
     // Execute enhanced pipeline
-    console.log("🔄 Executing enhanced pipeline...");
+    logger.log("🔄 Executing enhanced pipeline...");
     const enhancedResult = await executeEnhancedPipeline(
       prompt,
       boilerplateFiles,
@@ -728,7 +729,7 @@ async function executeInitialGenerationJob(
       content: f.content
     }));
 
-    console.log(`✅ Successfully generated ${generatedFiles.length} files`);
+    logger.log(`✅ Successfully generated ${generatedFiles.length} files`);
 
     // Filter out contracts for non-Web3 apps BEFORE writing to disk
     if (enhancedResult.intentSpec && !enhancedResult.intentSpec.isWeb3) {
@@ -736,34 +737,34 @@ async function executeInitialGenerationJob(
       generatedFiles = generatedFiles.filter(file => {
         const isContractFile = file.filename.startsWith('contracts/');
         if (isContractFile) {
-          console.log(`🗑️ Filtering out contract file: ${file.filename}`);
+          logger.log(`🗑️ Filtering out contract file: ${file.filename}`);
         }
         return !isContractFile;
       });
-      console.log(`📦 Filtered ${originalCount - generatedFiles.length} contract files from generated output`);
+      logger.log(`📦 Filtered ${originalCount - generatedFiles.length} contract files from generated output`);
 
       // Also delete contracts directory from disk if it exists
       const contractsDir = path.join(userDir, 'contracts');
       if (await fs.pathExists(contractsDir)) {
-        console.log("🗑️ Removing contracts/ directory from disk...");
+        logger.log("🗑️ Removing contracts/ directory from disk...");
         await fs.remove(contractsDir);
-        console.log("✅ Contracts directory removed from disk");
+        logger.log("✅ Contracts directory removed from disk");
       }
     }
 
     // Write files to disk (now without contracts for non-Web3 apps)
-    console.log("💾 Writing generated files to disk...");
+    logger.log("💾 Writing generated files to disk...");
     await writeFilesToDir(userDir, generatedFiles);
     await saveFilesToGenerated(projectId, generatedFiles);
-    console.log("✅ Files written successfully");
+    logger.log("✅ Files written successfully");
 
     // NEW: Deploy contracts FIRST for Web3 projects (before creating preview)
     let contractAddresses: { [key: string]: string } | undefined;
 
     if (enhancedResult.intentSpec?.isWeb3) {
-      console.log("\n" + "=".repeat(70));
-      console.log("🔗 WEB3 PROJECT DETECTED - DEPLOYING CONTRACTS FIRST");
-      console.log("=".repeat(70) + "\n");
+      logger.log("\n" + "=".repeat(70));
+      logger.log("🔗 WEB3 PROJECT DETECTED - DEPLOYING CONTRACTS FIRST");
+      logger.log("=".repeat(70) + "\n");
 
       try {
         // Deploy contracts and get real addresses
@@ -773,14 +774,14 @@ async function executeInitialGenerationJob(
           accessToken
         );
 
-        console.log("✅ Contracts deployed successfully!");
-        console.log("📝 Contract addresses:", JSON.stringify(contractAddresses, null, 2));
+        logger.log("✅ Contracts deployed successfully!");
+        logger.log("📝 Contract addresses:", JSON.stringify(contractAddresses, null, 2));
 
         // Inject real contract addresses into files BEFORE deployment
         if (contractAddresses && Object.keys(contractAddresses).length > 0) {
-          console.log("\n" + "=".repeat(70));
-          console.log("💉 INJECTING CONTRACT ADDRESSES INTO FILES");
-          console.log("=".repeat(70) + "\n");
+          logger.log("\n" + "=".repeat(70));
+          logger.log("💉 INJECTING CONTRACT ADDRESSES INTO FILES");
+          logger.log("=".repeat(70) + "\n");
 
           generatedFiles = updateFilesWithContractAddresses(
             generatedFiles,
@@ -790,20 +791,20 @@ async function executeInitialGenerationJob(
           // Rewrite files with injected addresses
           await writeFilesToDir(userDir, generatedFiles);
           await saveFilesToGenerated(projectId, generatedFiles);
-          console.log("✅ Contract addresses injected and files updated");
+          logger.log("✅ Contract addresses injected and files updated");
         }
       } catch (contractError) {
-        console.error("\n" + "=".repeat(70));
-        console.error("⚠️  CONTRACT DEPLOYMENT FAILED - CONTINUING WITH PLACEHOLDERS");
-        console.error("=".repeat(70));
-        console.error("Error:", contractError);
-        console.log("📝 App will deploy with placeholder addresses\n");
+        logger.error("\n" + "=".repeat(70));
+        logger.error("⚠️  CONTRACT DEPLOYMENT FAILED - CONTINUING WITH PLACEHOLDERS");
+        logger.error("=".repeat(70));
+        logger.error("Error:", contractError);
+        logger.log("📝 App will deploy with placeholder addresses\n");
         // Continue with placeholder addresses - don't fail the entire job
       }
     }
 
     // Create preview (now with real contract addresses injected if Web3)
-    console.log("🚀 Creating preview...");
+    logger.log("🚀 Creating preview...");
     let previewData: Awaited<ReturnType<typeof createPreview>> | undefined;
     let projectUrl: string = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`; // Default fallback URL (custom domain)
     const maxDeploymentRetries = 2; // Allow 1 retry with fixes
@@ -811,15 +812,15 @@ async function executeInitialGenerationJob(
 
     while (deploymentAttempt < maxDeploymentRetries) {
       deploymentAttempt++;
-      console.log(`\n📦 Deployment attempt ${deploymentAttempt}/${maxDeploymentRetries}...`);
-      console.log(`🔍 [RETRY-DEBUG] Starting deployment attempt ${deploymentAttempt}`);
-      console.log(`🔍 [RETRY-DEBUG] maxDeploymentRetries: ${maxDeploymentRetries}`);
-      console.log(`🔍 [RETRY-DEBUG] Files count: ${generatedFiles.length}`);
+      logger.log(`\n📦 Deployment attempt ${deploymentAttempt}/${maxDeploymentRetries}...`);
+      logger.log(`🔍 [RETRY-DEBUG] Starting deployment attempt ${deploymentAttempt}`);
+      logger.log(`🔍 [RETRY-DEBUG] maxDeploymentRetries: ${maxDeploymentRetries}`);
+      logger.log(`🔍 [RETRY-DEBUG] Files count: ${generatedFiles.length}`);
 
       try {
         // Skip contract deployment in /deploy endpoint if we already deployed them
         const skipContractsInDeploy = !!contractAddresses; // true if we already deployed contracts
-        console.log(`🔍 [RETRY-DEBUG] skipContractsInDeploy: ${skipContractsInDeploy}`);
+        logger.log(`🔍 [RETRY-DEBUG] skipContractsInDeploy: ${skipContractsInDeploy}`);
 
         previewData = await createPreview(
           projectId,
@@ -830,7 +831,7 @@ async function executeInitialGenerationJob(
           jobId // Pass jobId for background deployment error reporting
         );
 
-        console.log(`🔍 [RETRY-DEBUG] Preview data received:`, {
+        logger.log(`🔍 [RETRY-DEBUG] Preview data received:`, {
           status: previewData.status,
           hasError: !!previewData.deploymentError,
           hasLogs: !!previewData.deploymentLogs,
@@ -840,11 +841,11 @@ async function executeInitialGenerationJob(
 
         // Check if deployment failed with errors
         if (previewData.status === 'deployment_failed' && previewData.deploymentError) {
-          console.error(`❌ Deployment failed on attempt ${deploymentAttempt}`);
-          console.log(`📋 Deployment error: ${previewData.deploymentError}`);
-          console.log(`📋 Deployment logs available: ${previewData.deploymentLogs ? 'YES' : 'NO'}`);
-          console.log(`🔍 [RETRY-DEBUG] Deployment failed, checking if retry is possible...`);
-          console.log(`🔍 [RETRY-DEBUG] deploymentAttempt < maxDeploymentRetries: ${deploymentAttempt < maxDeploymentRetries}`);
+          logger.error(`❌ Deployment failed on attempt ${deploymentAttempt}`);
+          logger.log(`📋 Deployment error: ${previewData.deploymentError}`);
+          logger.log(`📋 Deployment logs available: ${previewData.deploymentLogs ? 'YES' : 'NO'}`);
+          logger.log(`🔍 [RETRY-DEBUG] Deployment failed, checking if retry is possible...`);
+          logger.log(`🔍 [RETRY-DEBUG] deploymentAttempt < maxDeploymentRetries: ${deploymentAttempt < maxDeploymentRetries}`);
           
           // Log to database for visibility
           await updateGenerationJobStatus(jobId, 'processing', {
@@ -854,16 +855,16 @@ async function executeInitialGenerationJob(
             error: previewData.deploymentError.substring(0, 500), // Truncate for DB
             hasLogs: !!previewData.deploymentLogs
           });
-          console.log(`🔍 [RETRY-DEBUG] Database status updated with deployment_retry`);
+          logger.log(`🔍 [RETRY-DEBUG] Database status updated with deployment_retry`);
           
           // If this is not the last attempt, try to fix errors
           if (deploymentAttempt < maxDeploymentRetries) {
-            console.log(`🔧 Attempting to fix deployment errors...`);
-            console.log(`🔍 [RETRY-DEBUG] Calling fixDeploymentErrors with:`);
-            console.log(`🔍 [RETRY-DEBUG] - Error length: ${previewData.deploymentError.length}`);
-            console.log(`🔍 [RETRY-DEBUG] - Logs length: ${previewData.deploymentLogs?.length || 0}`);
-            console.log(`🔍 [RETRY-DEBUG] - Files count: ${generatedFiles.length}`);
-            console.log(`🔍 [RETRY-DEBUG] - Project ID: ${projectId}`);
+            logger.log(`🔧 Attempting to fix deployment errors...`);
+            logger.log(`🔍 [RETRY-DEBUG] Calling fixDeploymentErrors with:`);
+            logger.log(`🔍 [RETRY-DEBUG] - Error length: ${previewData.deploymentError.length}`);
+            logger.log(`🔍 [RETRY-DEBUG] - Logs length: ${previewData.deploymentLogs?.length || 0}`);
+            logger.log(`🔍 [RETRY-DEBUG] - Files count: ${generatedFiles.length}`);
+            logger.log(`🔍 [RETRY-DEBUG] - Project ID: ${projectId}`);
             
             const fixedFiles = await fixDeploymentErrors(
               previewData.deploymentError,
@@ -872,17 +873,17 @@ async function executeInitialGenerationJob(
               projectId
             );
 
-            console.log(`🔍 [RETRY-DEBUG] fixDeploymentErrors returned ${fixedFiles.length} files`);
-            console.log(`🔍 [RETRY-DEBUG] Files changed: ${fixedFiles.length !== generatedFiles.length ? 'YES (count changed)' : 'checking content...'}`);
+            logger.log(`🔍 [RETRY-DEBUG] fixDeploymentErrors returned ${fixedFiles.length} files`);
+            logger.log(`🔍 [RETRY-DEBUG] Files changed: ${fixedFiles.length !== generatedFiles.length ? 'YES (count changed)' : 'checking content...'}`);
 
             // Update generatedFiles with fixes
             generatedFiles = fixedFiles;
 
             // Write fixed files back to disk
-            console.log(`🔍 [RETRY-DEBUG] Writing ${fixedFiles.length} fixed files to disk...`);
+            logger.log(`🔍 [RETRY-DEBUG] Writing ${fixedFiles.length} fixed files to disk...`);
             await writeFilesToDir(userDir, generatedFiles);
             await saveFilesToGenerated(projectId, generatedFiles);
-            console.log("✅ Fixed files saved, retrying deployment...");
+            logger.log("✅ Fixed files saved, retrying deployment...");
             
             // Log retry to database
             await updateGenerationJobStatus(jobId, 'processing', {
@@ -891,8 +892,8 @@ async function executeInitialGenerationJob(
               maxAttempts: maxDeploymentRetries,
               fixesApplied: true
             });
-            console.log(`🔍 [RETRY-DEBUG] Database updated with deployment_retrying status`);
-            console.log(`🔍 [RETRY-DEBUG] Continuing to next deployment attempt...`);
+            logger.log(`🔍 [RETRY-DEBUG] Database updated with deployment_retrying status`);
+            logger.log(`🔍 [RETRY-DEBUG] Continuing to next deployment attempt...`);
             
             // Continue to next iteration to retry deployment
             continue;
@@ -900,7 +901,7 @@ async function executeInitialGenerationJob(
             // Last attempt failed, mark job as failed
             // DON'T throw here - we're inside a try block and it will be caught
             // Instead, we'll break out of the loop and handle failure after
-            console.error("❌ All deployment attempts failed - breaking out of retry loop");
+            logger.error("❌ All deployment attempts failed - breaking out of retry loop");
             const errorDetails = {
               status: 'deployment_failed_all_attempts',
               attempts: deploymentAttempt,
@@ -917,27 +918,27 @@ async function executeInitialGenerationJob(
         }
 
         // Deployment succeeded
-        console.log("✅ Preview created successfully");
+        logger.log("✅ Preview created successfully");
         // Use Vercel URL if available, otherwise fall back to preview URL
         projectUrl = previewData.vercelUrl || previewData.previewUrl || getPreviewUrl(projectId) || `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
-        console.log(`🎉 Project ready at: ${projectUrl}`);
-        console.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'Not available'}`);
+        logger.log(`🎉 Project ready at: ${projectUrl}`);
+        logger.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'Not available'}`);
         break; // Exit retry loop on success
 
       } catch (previewError) {
-        console.error(`❌ Failed to create preview on attempt ${deploymentAttempt}:`, previewError);
+        logger.error(`❌ Failed to create preview on attempt ${deploymentAttempt}:`, previewError);
         
         // Check if it's a timeout error that should trigger retry
         const errorMessage = previewError instanceof Error ? previewError.message : String(previewError);
         const isTimeoutError = errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT') || errorMessage.includes('ECONNRESET');
         
-        console.log(`🔍 [RETRY-DEBUG] Error type: ${isTimeoutError ? 'TIMEOUT' : 'OTHER'}`);
-        console.log(`🔍 [RETRY-DEBUG] Error message: ${errorMessage}`);
-        console.log(`🔍 [RETRY-DEBUG] Should retry: ${isTimeoutError && deploymentAttempt < maxDeploymentRetries}`);
+        logger.log(`🔍 [RETRY-DEBUG] Error type: ${isTimeoutError ? 'TIMEOUT' : 'OTHER'}`);
+        logger.log(`🔍 [RETRY-DEBUG] Error message: ${errorMessage}`);
+        logger.log(`🔍 [RETRY-DEBUG] Should retry: ${isTimeoutError && deploymentAttempt < maxDeploymentRetries}`);
         
         // Convert timeout errors to deployment_failed status so retry logic can handle them
         if (isTimeoutError && deploymentAttempt < maxDeploymentRetries) {
-          console.log(`⏱️ Timeout detected, treating as deployment failure and retrying...`);
+          logger.log(`⏱️ Timeout detected, treating as deployment failure and retrying...`);
           
           // Log to database
           await updateGenerationJobStatus(jobId, 'processing', {
@@ -948,11 +949,11 @@ async function executeInitialGenerationJob(
           });
           
           // For timeout errors, just retry without trying to fix
-          console.log(`🔄 Retrying deployment after timeout...`);
+          logger.log(`🔄 Retrying deployment after timeout...`);
           continue;
         } else if (deploymentAttempt >= maxDeploymentRetries) {
           // If this is the last attempt, fail the job
-          console.error("❌ All deployment attempts failed after exception");
+          logger.error("❌ All deployment attempts failed after exception");
           
           const errorDetails = {
             status: 'deployment_failed_exception',
@@ -966,7 +967,7 @@ async function executeInitialGenerationJob(
           throw new Error(`Deployment failed after ${deploymentAttempt} attempts: ${errorMessage}`);
         } else {
           // Non-timeout error on non-final attempt - retry
-          console.log(`🔧 Non-timeout error, retrying...`);
+          logger.log(`🔧 Non-timeout error, retrying...`);
           continue;
         }
       }
@@ -977,7 +978,7 @@ async function executeInitialGenerationJob(
     const deploymentError = previewData?.deploymentError || 'Deployment failed';
 
     // Save project to database (ALWAYS save, even if deployment failed)
-    console.log("💾 Saving project to database...");
+    logger.log("💾 Saving project to database...");
 
     const projectName = enhancedResult.intentSpec
       ? generateProjectName(enhancedResult.intentSpec)
@@ -995,9 +996,9 @@ async function executeInitialGenerationJob(
         projectUrl,
         projectId
       );
-      console.log("✅ Project created in database");
+      logger.log("✅ Project created in database");
     } else {
-      console.log("ℹ️ Project already exists in database, updating files");
+      logger.log("ℹ️ Project already exists in database, updating files");
     }
 
     // Save files to database (this will replace existing files)
@@ -1008,28 +1009,28 @@ async function executeInitialGenerationJob(
       ? allFiles.filter(file => {
           const isContractFile = file.filename.startsWith('contracts/');
           if (isContractFile) {
-            console.log(`🗑️ Excluding contract file from database: ${file.filename}`);
+            logger.log(`🗑️ Excluding contract file from database: ${file.filename}`);
           }
           return !isContractFile;
         })
       : allFiles;
 
-    console.log(`📦 Files to save: ${filesToSave.length} (excluded ${allFiles.length - filesToSave.length} contract files)`);
+    logger.log(`📦 Files to save: ${filesToSave.length} (excluded ${allFiles.length - filesToSave.length} contract files)`);
 
     const safeFiles = filesToSave.filter(file => {
       if (file.content.includes('\0') || file.content.includes('\x00')) {
-        console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
+        logger.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
         return false;
       }
       return true;
     });
 
     await saveProjectFiles(project.id, safeFiles);
-    console.log("✅ Project files saved to database successfully");
+    logger.log("✅ Project files saved to database successfully");
 
     // If deployment failed, mark job as failed and return early
     if (deploymentFailed) {
-      console.error("❌ Deployment failed - marking job as failed");
+      logger.error("❌ Deployment failed - marking job as failed");
       
       // Save deployment info with 'failed' status
       try {
@@ -1040,9 +1041,9 @@ async function executeInitialGenerationJob(
           'failed',
           previewData?.deploymentLogs || deploymentError // Save logs or error
         );
-        console.log("✅ Failed deployment info saved to database");
+        logger.log("✅ Failed deployment info saved to database");
       } catch (dbError) {
-        console.error("⚠️ Failed to save deployment info:", dbError);
+        logger.error("⚠️ Failed to save deployment info:", dbError);
       }
 
       // Update project with basic info
@@ -1053,7 +1054,7 @@ async function executeInitialGenerationJob(
           description: `${userRequest.substring(0, 100)}...`
         });
       } catch (dbError) {
-        console.error("⚠️ Failed to update project:", dbError);
+        logger.error("⚠️ Failed to update project:", dbError);
       }
 
       // Job was already marked as 'failed' in the deployment loop
@@ -1063,10 +1064,10 @@ async function executeInitialGenerationJob(
 
     // Deployment succeeded - save deployment info
     try {
-      console.log("💾 Saving successful deployment info to database...");
+      logger.log("💾 Saving successful deployment info to database...");
       
       const deploymentUrl = previewData?.vercelUrl || projectUrl;
-      console.log(`🌐 Deployment URL to save: ${deploymentUrl}`);
+      logger.log(`🌐 Deployment URL to save: ${deploymentUrl}`);
 
       // Use contract addresses from our deployment (already injected into files)
       // Fall back to previewData.contractAddresses for backward compatibility
@@ -1080,23 +1081,23 @@ async function executeInitialGenerationJob(
         undefined, // buildLogs
         deploymentContractAddresses // Contract addresses (real ones from our deployment)
       );
-      console.log(`✅ Deployment saved to database: ${deployment.id}`);
+      logger.log(`✅ Deployment saved to database: ${deployment.id}`);
 
       if (deploymentContractAddresses && Object.keys(deploymentContractAddresses).length > 0) {
-        console.log(`📝 Contract addresses saved:`, JSON.stringify(deploymentContractAddresses, null, 2));
+        logger.log(`📝 Contract addresses saved:`, JSON.stringify(deploymentContractAddresses, null, 2));
       }
 
       // CRITICAL: Update the projects table with deployment URL and metadata
-      console.log("🔄 Updating projects table with deployment URL...");
+      logger.log("🔄 Updating projects table with deployment URL...");
       await updateProject(project.id, {
         previewUrl: deploymentUrl,
         vercelUrl: previewData?.vercelUrl || undefined, // Save Vercel URL separately
         name: projectName,
         description: `${userRequest.substring(0, 100)}...`
       });
-      console.log(`✅ Projects table updated with URL: ${deploymentUrl}`);
+      logger.log(`✅ Projects table updated with URL: ${deploymentUrl}`);
     } catch (deploymentDbError) {
-      console.error("⚠️ Failed to save deployment info:", deploymentDbError);
+      logger.error("⚠️ Failed to save deployment info:", deploymentDbError);
       // Don't fail the entire job if deployment record fails
     }
 
@@ -1114,7 +1115,7 @@ async function executeInitialGenerationJob(
       contractAddresses: contractAddresses, // Include contract addresses in result
     };
 
-    console.log(`📝 Updating job ${jobId} status to completed with result:`, {
+    logger.log(`📝 Updating job ${jobId} status to completed with result:`, {
       projectId: result.projectId,
       vercelUrl: result.vercelUrl,
       totalFiles: result.totalFiles
@@ -1122,14 +1123,14 @@ async function executeInitialGenerationJob(
 
     try {
       await updateGenerationJobStatus(jobId, "completed", result);
-      console.log(`✅ Job ${jobId} status updated to completed in database`);
+      logger.log(`✅ Job ${jobId} status updated to completed in database`);
     } catch (updateError) {
-      console.error(`❌ Failed to update job status to completed:`, updateError);
+      logger.error(`❌ Failed to update job status to completed:`, updateError);
       throw updateError; // Re-throw to trigger error handling
     }
 
-    console.log(`✅ Job ${jobId} completed successfully`);
-    console.log(`🎉 Final result:`, {
+    logger.log(`✅ Job ${jobId} completed successfully`);
+    logger.log(`🎉 Final result:`, {
       projectId: result.projectId,
       vercelUrl: result.vercelUrl,
       previewUrl: result.previewUrl
@@ -1144,7 +1145,7 @@ async function executeFollowUpJob(
   job: Awaited<ReturnType<typeof getGenerationJobById>>,
   context: GenerationJobContext
 ): Promise<void> {
-  console.log(`🔄 Starting follow-up job execution: ${jobId}`);
+  logger.log(`🔄 Starting follow-up job execution: ${jobId}`);
 
   const { prompt, existingProjectId: projectId, useDiffBased = true } = context;
   const accessToken = process.env.PREVIEW_AUTH_TOKEN;
@@ -1163,9 +1164,9 @@ async function executeFollowUpJob(
     throw new Error(`User ${job.userId} not found`);
   }
 
-  console.log(`🔧 Processing follow-up job for user: ${user.email || user.id}`);
-  console.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
-  console.log(`📁 Project ID: ${projectId}`);
+  logger.log(`🔧 Processing follow-up job for user: ${user.email || user.id}`);
+  logger.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
+  logger.log(`📁 Project ID: ${projectId}`);
 
   // Get project directory
   const userDir = getProjectDir(projectId);
@@ -1180,10 +1181,10 @@ async function executeFollowUpJob(
   try {
     // Try reading from disk first
     if (await fs.pathExists(userDir)) {
-      console.log(`📁 Reading files from disk: ${userDir}`);
+      logger.log(`📁 Reading files from disk: ${userDir}`);
       currentFiles = await readAllFiles(userDir);
     } else {
-      console.log(`💾 Directory not found on disk, fetching from database for project: ${projectId}`);
+      logger.log(`💾 Directory not found on disk, fetching from database for project: ${projectId}`);
       // Fetch files from database
       const dbFiles = await getProjectFiles(projectId);
       currentFiles = dbFiles.map(f => ({
@@ -1192,15 +1193,15 @@ async function executeFollowUpJob(
       }));
 
       if (currentFiles.length > 0) {
-        console.log(`✅ Loaded ${currentFiles.length} files from database`);
+        logger.log(`✅ Loaded ${currentFiles.length} files from database`);
         // Recreate the directory structure on disk for processing
-        console.log(`📁 Recreating project directory: ${userDir}`);
+        logger.log(`📁 Recreating project directory: ${userDir}`);
         await writeFilesToDir(userDir, currentFiles);
-        console.log(`✅ Project files restored to disk`);
+        logger.log(`✅ Project files restored to disk`);
       }
     }
   } catch (error) {
-    console.error(`❌ Error reading project files:`, error);
+    logger.error(`❌ Error reading project files:`, error);
     throw new Error(`Failed to load project files: ${error instanceof Error ? error.message : String(error)}`);
   }
 
@@ -1208,7 +1209,7 @@ async function executeFollowUpJob(
     throw new Error(`No existing files found for project ${projectId}`);
   }
 
-  console.log(`✅ Loaded ${currentFiles.length} files for follow-up edit`);
+  logger.log(`✅ Loaded ${currentFiles.length} files for follow-up edit`);
 
   // Create LLM caller
   const callLLM = async (
@@ -1228,7 +1229,7 @@ async function executeFollowUpJob(
   // Execute appropriate pipeline
   let result;
   if (useDiffBased) {
-    console.log("🔄 Using diff-based pipeline for follow-up edit");
+    logger.log("🔄 Using diff-based pipeline for follow-up edit");
     result = await executeDiffBasedPipeline(
       prompt,
       currentFiles,
@@ -1242,7 +1243,7 @@ async function executeFollowUpJob(
       userDir
     );
   } else {
-    console.log("🔄 Using enhanced pipeline for follow-up edit");
+    logger.log("🔄 Using enhanced pipeline for follow-up edit");
     result = await executeEnhancedPipeline(
       prompt,
       currentFiles,
@@ -1257,7 +1258,7 @@ async function executeFollowUpJob(
   // Check if result has diffs (from diff-based pipeline)
   const hasDiffs = 'diffs' in result && result.diffs;
   const diffCount = hasDiffs ? (result as { diffs: unknown[] }).diffs.length : 0;
-  console.log(`✅ Generated ${result.files.length} files${hasDiffs ? ` with ${diffCount} diffs` : ''}`);
+  logger.log(`✅ Generated ${result.files.length} files${hasDiffs ? ` with ${diffCount} diffs` : ''}`);
 
   // Write changes to disk
   await writeFilesToDir(userDir, result.files);
@@ -1266,14 +1267,14 @@ async function executeFollowUpJob(
   // Save to database first
   const safeFiles = result.files.filter(file => {
     if (file.content.includes('\0') || file.content.includes('\x00')) {
-      console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
+      logger.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
       return false;
     }
     return true;
   });
 
   await saveProjectFiles(projectId, safeFiles);
-  console.log("✅ Project files updated in database");
+  logger.log("✅ Project files updated in database");
 
   // Check if project has contracts (Web3) by looking for contracts directory
   const hasContracts = result.files.some(f => 
@@ -1283,9 +1284,9 @@ async function executeFollowUpJob(
 
   // Redeploy to Vercel with updated files
   try {
-    console.log("\n" + "=".repeat(60));
-    console.log("🚀 REDEPLOYING TO VERCEL");
-    console.log("=".repeat(60));
+    logger.log("\n" + "=".repeat(60));
+    logger.log("🚀 REDEPLOYING TO VERCEL");
+    logger.log("=".repeat(60));
     
     const previewData = await redeployToVercel(
       projectId,
@@ -1295,8 +1296,8 @@ async function executeFollowUpJob(
       jobId
     );
     
-    console.log("✅ Vercel deployment successful!");
-    console.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'N/A'}`);
+    logger.log("✅ Vercel deployment successful!");
+    logger.log(`🌐 Vercel URL: ${previewData.vercelUrl || 'N/A'}`);
 
     // Update project with deployment URL (should be same as initial deployment)
     // The URL is stored for redundancy/verification, but it should not change
@@ -1306,27 +1307,27 @@ async function executeFollowUpJob(
       const urlChanged = project?.vercelUrl !== previewData.vercelUrl;
       
       if (urlChanged) {
-        console.log(`⚠️ Vercel URL changed: ${project?.vercelUrl} → ${previewData.vercelUrl}`);
-        console.log(`   This is unexpected - we should be deploying to the same project`);
+        logger.log(`⚠️ Vercel URL changed: ${project?.vercelUrl} → ${previewData.vercelUrl}`);
+        logger.log(`   This is unexpected - we should be deploying to the same project`);
       }
       
       await updateProject(projectId, {
         previewUrl: previewData.vercelUrl,
         vercelUrl: previewData.vercelUrl,
       });
-      console.log(`✅ Project deployment URL confirmed: ${previewData.vercelUrl}`);
+      logger.log(`✅ Project deployment URL confirmed: ${previewData.vercelUrl}`);
     }
   } catch (deployError) {
-    console.error("❌ Vercel deployment failed:", deployError);
+    logger.error("❌ Vercel deployment failed:", deployError);
     // Don't fail the entire job - files are already saved to database
-    console.warn("⚠️ Files are saved to database, but Vercel deployment failed");
+    logger.warn("⚠️ Files are saved to database, but Vercel deployment failed");
   }
 
   // Store patch for rollback (if diffs available)
   if (hasDiffs && diffCount > 0) {
     try {
       const resultWithDiffs = result as unknown as { diffs: Array<{ filename: string }> };
-      console.log(`📦 Storing patch with ${diffCount} diffs for rollback`);
+      logger.log(`📦 Storing patch with ${diffCount} diffs for rollback`);
       const changedFiles = resultWithDiffs.diffs.map(d => d.filename);
       const description = `Updated ${changedFiles.length} file(s): ${changedFiles.join(', ')}`;
 
@@ -1337,9 +1338,9 @@ async function executeFollowUpJob(
         timestamp: new Date().toISOString(),
       }, description);
 
-      console.log(`✅ Patch saved for rollback`);
+      logger.log(`✅ Patch saved for rollback`);
     } catch (patchError) {
-      console.error("⚠️ Failed to save patch:", patchError);
+      logger.error("⚠️ Failed to save patch:", patchError);
       // Don't fail the job if patch save fails
     }
   }
@@ -1357,15 +1358,15 @@ async function executeFollowUpJob(
     totalFiles: result.files.length,
   };
 
-  console.log(`📝 Updating follow-up job ${jobId} status to completed`);
+  logger.log(`📝 Updating follow-up job ${jobId} status to completed`);
 
   try {
     await updateGenerationJobStatus(jobId, "completed", jobResult);
-    console.log(`✅ Follow-up job ${jobId} status updated to completed in database`);
+    logger.log(`✅ Follow-up job ${jobId} status updated to completed in database`);
   } catch (updateError) {
-    console.error(`❌ Failed to update follow-up job status:`, updateError);
+    logger.error(`❌ Failed to update follow-up job status:`, updateError);
     throw updateError;
   }
 
-  console.log(`✅ Follow-up job ${jobId} completed successfully`);
+  logger.log(`✅ Follow-up job ${jobId} completed successfully`);
 }

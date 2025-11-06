@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs-extra";
 import path from "path";
@@ -19,12 +20,12 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get("projectId");
     const listFiles = searchParams.get("listFiles") === "true";
 
-    console.log(
+    logger.log(
       `🔍 FILES GET request - projectId: ${projectId}, filePath: ${filePath}, listFiles: ${listFiles}`
     );
 
     if (!projectId) {
-      console.log(`❌ Missing project ID`);
+      logger.log(`❌ Missing project ID`);
       return NextResponse.json(
         { error: "Missing project ID" },
         { status: 400 }
@@ -33,22 +34,22 @@ export async function GET(request: NextRequest) {
 
     // Handle file listing request
     if (listFiles) {
-      console.log(
+      logger.log(
         `📋 Listing files from generated directory for project: ${projectId}`
       );
       try {
         let files = await listGeneratedFiles(projectId);
-        console.log(
+        logger.log(
           `📁 Found ${files.length} files in generated directory:`,
           files
         );
 
         // If no files found in generated directory, try database
         if (files.length === 0) {
-          console.log(`📋 No files in generated directory, checking database...`);
+          logger.log(`📋 No files in generated directory, checking database...`);
           const dbFiles = await getProjectFiles(projectId);
           files = dbFiles.map(f => f.filename);
-          console.log(
+          logger.log(
             `📁 Found ${files.length} files in database:`,
             files
           );
@@ -60,10 +61,10 @@ export async function GET(request: NextRequest) {
           projectId: projectId,
           totalFiles: files.length,
         };
-        console.log(`📤 Sending response:`, JSON.stringify(response, null, 2));
+        logger.log(`📤 Sending response:`, JSON.stringify(response, null, 2));
         return NextResponse.json(response);
       } catch (error) {
-        console.error(`❌ Error listing generated files:`, error);
+        logger.error(`❌ Error listing generated files:`, error);
         return NextResponse.json(
           { error: "Failed to list generated files" },
           { status: 500 }
@@ -73,37 +74,37 @@ export async function GET(request: NextRequest) {
 
     // Handle file content request
     if (!filePath) {
-      console.log(`❌ Missing file path`);
+      logger.log(`❌ Missing file path`);
       return NextResponse.json({ error: "Missing file path" }, { status: 400 });
     }
 
     // Security check: prevent directory traversal
     if (filePath.includes("..") || filePath.startsWith("/")) {
-      console.log(`❌ Invalid file path: ${filePath}`);
+      logger.log(`❌ Invalid file path: ${filePath}`);
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
-    console.log(`🔍 Fetching file from generated directory: ${filePath}`);
+    logger.log(`🔍 Fetching file from generated directory: ${filePath}`);
 
     try {
       let content = await getGeneratedFile(projectId, filePath);
 
       if (!content) {
-        console.log(`❌ File not found in generated directory: ${filePath}, checking database...`);
+        logger.log(`❌ File not found in generated directory: ${filePath}, checking database...`);
         // Try to get from database
         const dbFiles = await getProjectFiles(projectId);
         const dbFile = dbFiles.find(f => f.filename === filePath);
         if (dbFile) {
           content = dbFile.content;
-          console.log(
+          logger.log(
             `✅ Found file in database: ${filePath} (${content.length} chars)`
           );
         } else {
-          console.log(`❌ File not found in database either: ${filePath}`);
+          logger.log(`❌ File not found in database either: ${filePath}`);
           return NextResponse.json({ error: "File not found" }, { status: 404 });
         }
       } else {
-        console.log(
+        logger.log(
           `✅ Found file in generated directory: ${filePath} (${content.length} chars)`
         );
       }
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
       else if (ext === ".html") contentType = "text/html";
       else if (ext === ".md") contentType = "text/markdown";
 
-      console.log(`📤 Sending file with content type: ${contentType}`);
+      logger.log(`📤 Sending file with content type: ${contentType}`);
 
       return new NextResponse(content, {
         headers: {
@@ -127,14 +128,14 @@ export async function GET(request: NextRequest) {
         },
       });
     } catch (error) {
-      console.error(`❌ Error fetching file from container:`, error);
+      logger.error(`❌ Error fetching file from container:`, error);
       return NextResponse.json(
         { error: "Failed to fetch file from container" },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error("❌ Error serving file:", error);
+    logger.error("❌ Error serving file:", error);
     return NextResponse.json(
       { error: "Failed to serve file" },
       { status: 500 }
@@ -157,12 +158,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    console.log(
+    logger.log(
       `💾 PUT request - projectId: ${projectId}, filename: ${filename}`
     );
 
     if (!projectId || !filename || content === undefined) {
-      console.log(`❌ Missing required fields`);
+      logger.log(`❌ Missing required fields`);
       return NextResponse.json(
         { error: "Missing projectId, filename, or content" },
         { status: 400 }
@@ -171,26 +172,26 @@ export async function PUT(request: NextRequest) {
 
     // Security check: prevent directory traversal
     if (filename.includes("..") || filename.startsWith("/")) {
-      console.log(`❌ Invalid file path: ${filename}`);
+      logger.log(`❌ Invalid file path: ${filename}`);
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
     // Write to local filesystem (for backup and consistency)
     try {
       await updateGeneratedFile(projectId, filename, content);
-      console.log(`✅ File saved locally: ${filename}`);
+      logger.log(`✅ File saved locally: ${filename}`);
     } catch (error) {
-      console.warn(`⚠️ Failed to save file locally:`, error);
+      logger.warn(`⚠️ Failed to save file locally:`, error);
       // Don't fail the request if local save fails
     }
 
     // Update the preview with the new file (optional - may not be supported on Railway)
     try {
       await updatePreviewFiles(projectId, [{ filename, content }], accessToken);
-      console.log(`✅ Preview updated with file: ${filename}`);
+      logger.log(`✅ Preview updated with file: ${filename}`);
     } catch (error) {
-      console.warn(`⚠️  Failed to update preview files (this is expected on Railway):`, error);
-      console.log(`📁 File ${filename} has been saved locally`);
+      logger.warn(`⚠️  Failed to update preview files (this is expected on Railway):`, error);
+      logger.log(`📁 File ${filename} has been saved locally`);
       // Don't fail the request - preview updates are optional
     }
 
@@ -201,7 +202,7 @@ export async function PUT(request: NextRequest) {
       message: "File saved successfully",
     });
   } catch (error) {
-    console.error("❌ Error saving file:", error);
+    logger.error("❌ Error saving file:", error);
     return NextResponse.json({ error: "Failed to save file" }, { status: 500 });
   }
 }
@@ -213,12 +214,12 @@ export async function DELETE(request: NextRequest) {
     const projectId = searchParams.get("projectId");
     const filename = searchParams.get("filename");
 
-    console.log(
+    logger.log(
       `🗑️ DELETE request - projectId: ${projectId}, filename: ${filename}`
     );
 
     if (!projectId || !filename) {
-      console.log(`❌ Missing projectId or filename`);
+      logger.log(`❌ Missing projectId or filename`);
       return NextResponse.json(
         { error: "Missing projectId or filename" },
         { status: 400 }
@@ -227,7 +228,7 @@ export async function DELETE(request: NextRequest) {
 
     // Security check: prevent directory traversal
     if (filename.includes("..") || filename.startsWith("/")) {
-      console.log(`❌ Invalid file path: ${filename}`);
+      logger.log(`❌ Invalid file path: ${filename}`);
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
@@ -241,16 +242,16 @@ export async function DELETE(request: NextRequest) {
     try {
       if (await fs.pathExists(localFilePath)) {
         await fs.remove(localFilePath);
-        console.log(`✅ File deleted locally: ${localFilePath}`);
+        logger.log(`✅ File deleted locally: ${localFilePath}`);
       }
     } catch (error) {
-      console.warn(`⚠️ Failed to delete file locally:`, error);
+      logger.warn(`⚠️ Failed to delete file locally:`, error);
     }
 
     // Delete from preview
     try {
       await deleteGeneratedFile(projectId, filename);
-      console.log(`✅ Generated file deleted: ${filename}`);
+      logger.log(`✅ Generated file deleted: ${filename}`);
 
       return NextResponse.json({
         success: true,
@@ -259,14 +260,14 @@ export async function DELETE(request: NextRequest) {
         message: "File deleted successfully",
       });
     } catch (error) {
-      console.error(`❌ Failed to delete generated file:`, error);
+      logger.error(`❌ Failed to delete generated file:`, error);
       return NextResponse.json(
         { error: "Failed to delete generated file" },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error("❌ Error deleting file:", error);
+    logger.error("❌ Error deleting file:", error);
     return NextResponse.json(
       { error: "Failed to delete file" },
       { status: 500 }

@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useRef, useEffect } from 'react';
 import { useLoginWithEmail } from '@privy-io/react-auth';
@@ -29,7 +31,7 @@ export function EmailLogin() {
             setActiveOtpIndex(0);
         } catch (error) {
             setError('Failed to send OTP. Please try again.');
-            console.error('Error sending code:', error);
+            logger.error('Error sending code:', error);
         }
 
         setIsLoading(false);
@@ -58,7 +60,7 @@ export function EmailLogin() {
         } catch (error) {
             setError('Invalid OTP');
             setOtp(['', '', '', '', '', '']);
-            console.log('Error logging in with code:', error);
+            logger.log('Error logging in with code:', error);
         }
 
         setIsLoading(false);
@@ -103,18 +105,18 @@ export function EmailLogin() {
 
         try {
             await loginWithCode({ code: otpString }).then(() => {
-                console.log('OTP verified');
+                logger.log('OTP verified');
                 setIsVerified(true);
                 setTimeout(() => {
                     setIsVerified(false);
-                    console.log('timeout check');
+                    logger.log('timeout check');
                 }, 3000);
             });
 
         } catch (error) {
             setError('Invalid OTP. Please try again.');
             setIsVerified(false);
-            console.log('Error auto-verifying code:', error);
+            logger.log('Error auto-verifying code:', error);
         }
 
         setIsVerifying(false);
@@ -177,7 +179,7 @@ export function EmailLogin() {
             setActiveOtpIndex(0);
         } catch (error) {
             setError('Failed to resend OTP. Please try again.');
-            console.error('Error resending code:', error);
+            logger.error('Error resending code:', error);
         }
 
         setIsLoading(false);

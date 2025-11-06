@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 // Robust JSON parsing utilities for multi-stage LLM pipeline responses
 import { PatchPlan, DiffHunk } from './llmOptimizer';
 
@@ -184,7 +185,7 @@ export function parseStage2PatchResponse(responseText: string): PatchPlan {
     try {
       return tryParseJsonText(candidate) as PatchPlan;
     } catch (e) {
-      console.warn('Parsing between markers failed:', e);
+      logger.warn('Parsing between markers failed:', e);
     }
   }
 
@@ -194,7 +195,7 @@ export function parseStage2PatchResponse(responseText: string): PatchPlan {
     try {
       return tryParseJsonText(balanced) as PatchPlan;
     } catch (e) {
-      console.warn('Parsing balanced JSON failed, attempting sanitization...', e);
+      logger.warn('Parsing balanced JSON failed, attempting sanitization...', e);
     }
   }
 
@@ -204,12 +205,12 @@ export function parseStage2PatchResponse(responseText: string): PatchPlan {
     try {
       return tryParseJsonText(patchesObjText) as PatchPlan;
     } catch (e) {
-      console.warn('Parsing extracted patches object failed:', e);
+      logger.warn('Parsing extracted patches object failed:', e);
     }
   }
 
   // 4) Last resort: create a minimal valid patch plan
-  console.log('All JSON parsing strategies failed, creating minimal patch plan...');
+  logger.log('All JSON parsing strategies failed, creating minimal patch plan...');
   return {
     patches: [{
       filename: "src/app/page.tsx",
@@ -270,7 +271,7 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
       const parsed = tryParseJsonText(candidate);
       return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
     } catch (e) {
-      console.warn('Stage 3: Parsing between markers failed, attempting repairs:', e);
+      logger.warn('Stage 3: Parsing between markers failed, attempting repairs:', e);
       
       // Attempt JSON repair
       const repaired = repairJsonArray(candidate);
@@ -279,7 +280,7 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
           const parsed = tryParseJsonText(repaired);
           return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
         } catch (repairError) {
-          console.warn('Stage 3: JSON repair also failed:', repairError);
+          logger.warn('Stage 3: JSON repair also failed:', repairError);
         }
       }
     }
@@ -292,7 +293,7 @@ export function parseStage3CodeResponse(responseText: string): { filename: strin
       const parsed = tryParseJsonText(balanced);
       return sanitizeStage3Response(Array.isArray(parsed) ? parsed : [parsed]);
     } catch (e) {
-      console.warn('Stage 3: Parsing balanced JSON failed:', e);
+      logger.warn('Stage 3: Parsing balanced JSON failed:', e);
     }
   }
 
@@ -376,7 +377,7 @@ export function parseStage4ValidatorResponse(responseText: string): { filename: 
     try {
       return tryParseJsonText(candidate) as { filename: string; content: string; unifiedDiff?: string; diffHunks?: DiffHunk[] }[];
     } catch (e) {
-      console.warn('Stage 4: Parsing between markers failed:', e);
+      logger.warn('Stage 4: Parsing between markers failed:', e);
     }
   }
 
@@ -386,7 +387,7 @@ export function parseStage4ValidatorResponse(responseText: string): { filename: 
     try {
       return tryParseJsonText(balanced) as { filename: string; content: string; unifiedDiff?: string; diffHunks?: DiffHunk[] }[];
     } catch (e) {
-      console.warn('Stage 4: Parsing balanced JSON failed:', e);
+      logger.warn('Stage 4: Parsing balanced JSON failed:', e);
     }
   }
 
@@ -412,7 +413,7 @@ export function parseJsonResponse(responseText: string, stageName: string = 'Unk
     try {
       return tryParseJsonText(candidate);
     } catch (e) {
-      console.warn(`${stageName}: Parsing between markers failed:`, e);
+      logger.warn(`${stageName}: Parsing between markers failed:`, e);
     }
   }
 
@@ -422,7 +423,7 @@ export function parseJsonResponse(responseText: string, stageName: string = 'Unk
     try {
       return tryParseJsonText(balanced);
     } catch (e) {
-      console.warn(`${stageName}: Parsing balanced JSON failed:`, e);
+      logger.warn(`${stageName}: Parsing balanced JSON failed:`, e);
     }
   }
 

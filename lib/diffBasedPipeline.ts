@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 // Enhanced LLM Pipeline with Diff-Based Patching
 // This module provides a specialized pipeline for follow-up changes using surgical diffs
 // It uses the multi-stage pipeline with diff-based prompts for optimal results
@@ -52,8 +53,8 @@ export async function executeDiffBasedPipeline(
     enableLinting = true
   } = options;
 
-  console.log('🚀 Starting Diff-Based Pipeline');
-  console.log('Options:', { enableContextGathering, enableDiffValidation, enableLinting });
+  logger.log('🚀 Starting Diff-Based Pipeline');
+  logger.log('Options:', { enableContextGathering, enableDiffValidation, enableLinting });
 
   let contextGathered = null;
   const generatedFiles: { filename: string; content: string }[] = [];
@@ -61,7 +62,7 @@ export async function executeDiffBasedPipeline(
 
   // Stage 0: Context Gathering (if enabled)
   if (enableContextGathering) {
-    console.log('📊 Stage 0: Context Gathering');
+    logger.log('📊 Stage 0: Context Gathering');
     
     try {
       const contextPrompt = `USER REQUEST: ${userPrompt}`;
@@ -77,13 +78,13 @@ export async function executeDiffBasedPipeline(
         contextData = JSON.parse(contextResponse);
         contextGathered = contextData;
       } catch (error) {
-        console.warn('⚠️ Context gathering response is not valid JSON, skipping context:', error);
+        logger.warn('⚠️ Context gathering response is not valid JSON, skipping context:', error);
         contextGathered = { needsContext: false, toolCalls: [] };
       }
 
       // Execute tool calls if needed
       if (contextData.needsContext && contextData.toolCalls?.length > 0) {
-        console.log('🔍 Executing tool calls for context gathering');
+        logger.log('🔍 Executing tool calls for context gathering');
         
         // Use real project data if available, otherwise skip tool execution
         if (projectId && projectDir) {
@@ -92,16 +93,16 @@ export async function executeDiffBasedPipeline(
           // Add tool results to user prompt for better context
           userPrompt = `${userPrompt}\n\nContext gathered:\n${toolResults.toolResults.map((r, index) => `Tool ${index + 1}: ${r.output}`).join('\n')}`;
         } else {
-          console.warn('⚠️ Project ID or directory not provided, skipping tool execution');
+          logger.warn('⚠️ Project ID or directory not provided, skipping tool execution');
         }
       }
     } catch (error) {
-      console.warn('⚠️ Context gathering failed, continuing without context:', error);
+      logger.warn('⚠️ Context gathering failed, continuing without context:', error);
     }
   }
 
   // Use the specialized follow-up pipeline for diff-based changes
-  console.log('🔄 Using specialized follow-up pipeline for diff-based changes');
+  logger.log('🔄 Using specialized follow-up pipeline for diff-based changes');
   const pipelineResult = await executeFollowUpPipeline(
     userPrompt,
     currentFiles,
@@ -128,19 +129,19 @@ export async function executeDiffBasedPipeline(
 
   // Stage 4: Validation (Diff-Based)
   if (enableDiffValidation) {
-    console.log('✅ Stage 4: Diff-Based Validation');
+    logger.log('✅ Stage 4: Diff-Based Validation');
     
     // Validate diffs
     for (const diff of diffs) {
       const isValid = validateDiff(diff);
       if (!isValid) {
-        console.warn(`⚠️ Invalid diff for ${diff.filename}, skipping validation`);
+        logger.warn(`⚠️ Invalid diff for ${diff.filename}, skipping validation`);
       }
     }
 
     // Run linter if enabled
     if (enableLinting) {
-      console.log('🔍 Running linter validation');
+      logger.log('🔍 Running linter validation');
       // TODO: Implement linter validation
       // This would run ESLint on the generated files and fix any issues
     }
@@ -148,13 +149,13 @@ export async function executeDiffBasedPipeline(
 
   // Note: Syntax validation removed due to false positives with TypeScript generics
   // Files will be validated by TypeScript compiler during build/preview
-  console.log('✅ Diff-Based Pipeline Complete');
-  console.log(`Generated ${generatedFiles.length} files with ${diffs.length} diffs`);
+  logger.log('✅ Diff-Based Pipeline Complete');
+  logger.log(`Generated ${generatedFiles.length} files with ${diffs.length} diffs`);
   
   if (validationResult) {
-    console.log(`✅ Validation Success: ${validationResult.success}`);
-    console.log(`❌ Validation Errors: ${validationResult.errors.length}`);
-    console.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
+    logger.log(`✅ Validation Success: ${validationResult.success}`);
+    logger.log(`❌ Validation Errors: ${validationResult.errors.length}`);
+    logger.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
   }
 
   return {
@@ -173,7 +174,7 @@ export function applyDiffsToFiles(
   files: { filename: string; content: string }[],
   diffs: FileDiff[]
 ): { filename: string; content: string }[] {
-  console.log('applyDiffsToFiles called with:', { files: files.length, diffs: diffs.length });
+  logger.log('applyDiffsToFiles called with:', { files: files.length, diffs: diffs.length });
   const result: { filename: string; content: string }[] = [];
   const modifiedFiles = new Set<string>();
   const currentContent: { [filename: string]: string } = {};
@@ -184,16 +185,16 @@ export function applyDiffsToFiles(
   }
 
   for (const diff of diffs) {
-    console.log('Processing diff for:', diff.filename);
+    logger.log('Processing diff for:', diff.filename);
     
     if (currentContent[diff.filename] !== undefined) {
       // File exists - apply diff with fuzzy matching for line number corrections
       // Skip pre-validation since fuzzy matching in applyDiffHunks handles misalignments
-      console.log(`Applying diff to existing file: ${diff.filename}`);
+      logger.log(`Applying diff to existing file: ${diff.filename}`);
       
       // Apply diff to current content
       try {
-        console.log('✅ Diff validation passed, applying diff hunks:', diff.hunks);
+        logger.log('✅ Diff validation passed, applying diff hunks:', diff.hunks);
         const newContent = applyDiffHunks(currentContent[diff.filename], diff.hunks);
         
         // Only add to result if content actually changed from original
@@ -204,15 +205,15 @@ export function applyDiffsToFiles(
             content: newContent
           });
           modifiedFiles.add(diff.filename);
-          console.log(`✅ Applied diff to ${diff.filename}`);
+          logger.log(`✅ Applied diff to ${diff.filename}`);
         } else {
-          console.log(`⚠️ No changes detected for ${diff.filename}, skipping`);
+          logger.log(`⚠️ No changes detected for ${diff.filename}, skipping`);
         }
         
         // Update current content for this file
         currentContent[diff.filename] = newContent;
       } catch (error) {
-        console.error(`❌ Failed to apply diff to ${diff.filename}:`, error);
+        logger.error(`❌ Failed to apply diff to ${diff.filename}:`, error);
         // Add current content as fallback
         result.push({
           filename: diff.filename,
@@ -222,7 +223,7 @@ export function applyDiffsToFiles(
       }
     } else {
       // File doesn't exist - create new file from diff content
-      console.log(`📝 Creating new file ${diff.filename} from diff content`);
+      logger.log(`📝 Creating new file ${diff.filename} from diff content`);
       try {
         // Extract content from unified diff
         const diffLines = diff.unifiedDiff.split('\n');
@@ -237,9 +238,9 @@ export function applyDiffsToFiles(
         });
         modifiedFiles.add(diff.filename);
         currentContent[diff.filename] = newContent;
-        console.log(`✅ Created new file ${diff.filename} with ${contentLines.length} chars`);
+        logger.log(`✅ Created new file ${diff.filename} with ${contentLines.length} chars`);
       } catch (error) {
-        console.error(`❌ Failed to create file ${diff.filename}:`, error);
+        logger.error(`❌ Failed to create file ${diff.filename}:`, error);
         // Add empty file as fallback
         const fallbackContent = '';
         result.push({
@@ -252,7 +253,7 @@ export function applyDiffsToFiles(
     }
   }
 
-  console.log(`📊 applyDiffsToFiles returning ${result.length} modified files:`, Array.from(modifiedFiles));
+  logger.log(`📊 applyDiffsToFiles returning ${result.length} modified files:`, Array.from(modifiedFiles));
   return result;
 }
 
@@ -262,11 +263,11 @@ export function applyDiffsToFiles(
 export function storeDiffs(projectId: string, diffs: FileDiff[]): void {
   // TODO: Implement diff storage in project history
   // This would store diffs in generated/<project-id>/patches/ for rollback
-  console.log(`📦 Storing ${diffs.length} diffs for project ${projectId}`);
+  logger.log(`📦 Storing ${diffs.length} diffs for project ${projectId}`);
   
   // For now, just log the diffs - in a real implementation, this would save to disk
   if (diffs.length > 0) {
-    console.log('Diffs to store:', diffs);
+    logger.log('Diffs to store:', diffs);
   }
 }
 
@@ -276,6 +277,6 @@ export function storeDiffs(projectId: string, diffs: FileDiff[]): void {
 export function rollbackDiffs(projectId: string, diffs: FileDiff[]): { filename: string; content: string }[] {
   // TODO: Implement rollback functionality
   // This would apply diffs in reverse to rollback changes
-  console.log(`🔄 Rolling back ${diffs.length} diffs for project ${projectId}`);
+  logger.log(`🔄 Rolling back ${diffs.length} diffs for project ${projectId}`);
   return [];
 }

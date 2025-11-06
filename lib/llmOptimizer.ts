@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 // Multi-stage LLM optimization utilities for Farcaster Miniapp generation
 
 import * as fs from 'fs';
@@ -36,7 +37,7 @@ const logStageResponse = (projectId: string, stageName: string, response: string
     
     // In production (Vercel), use structured console logging instead of file system
     if (process.env.NODE_ENV === 'production') {
-      console.log(`[${stageName}] ${JSON.stringify(logContent)}`);
+      logger.log(`[${stageName}] ${JSON.stringify(logContent)}`);
     } else {
       // In development, still write to files
       const debugDir = createDebugLogDir(projectId);
@@ -45,10 +46,10 @@ const logStageResponse = (projectId: string, stageName: string, response: string
       const filepath = path.join(debugDir, filename);
       
       fs.writeFileSync(filepath, JSON.stringify(logContent, null, 2));
-      console.log(`📝 Debug log saved: ${filepath}`);
+      logger.log(`📝 Debug log saved: ${filepath}`);
     }
   } catch (error) {
-    console.error('Failed to write debug log:', error);
+    logger.error('Failed to write debug log:', error);
   }
 };
 
@@ -1083,7 +1084,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       const item = window.localStorage.getItem(key);
       if (item) setStoredValue(JSON.parse(item));
     } catch (error) {
-      console.error('Error loading from localStorage:', error);
+      logger.error('Error loading from localStorage:', error);
     }
   }, [key]);
 
@@ -1093,7 +1094,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       setStoredValue(valueToStore);
       window.localStorage.setItem(key, JSON.stringify(valueToStore));
     } catch (error) {
-      console.error('Error saving to localStorage:', error);
+      logger.error('Error saving to localStorage:', error);
     }
   };
 
@@ -1191,13 +1192,13 @@ WRONG - This will fail:
 CORRECT:
   const puzzle = await SudokuPuzzle.deploy();
   await puzzle.waitForDeployment();
-  console.log("✅ SudokuPuzzle:", await puzzle.getAddress()); // ✅ YES!
+  logger.log("✅ SudokuPuzzle:", await puzzle.getAddress()); // ✅ YES!
   // Let frontend call addFunds() when needed
 
 🚨 MULTIPLE CONTRACTS: Add 3-second delay between deployments to prevent nonce conflicts
 Example:
   await contract1.waitForDeployment();
-  console.log("✅ Contract1:", await contract1.getAddress());
+  logger.log("✅ Contract1:", await contract1.getAddress());
 
   // Delay before next deployment
   await new Promise(resolve => setTimeout(resolve, 3000));
@@ -1261,20 +1262,20 @@ NOTICE: Context lines are the EXACT text after the | symbol, without the line nu
 - NEVER insert code inside array literals: const arr = [ /* ❌ NO CODE HERE */ ]
 - NEVER insert code inside object literals: const obj = { /* ❌ NO CODE HERE */ }
 - NEVER insert code between array/object opening and first element
-- ✅ Insert BEFORE the declaration: console.log('before'); const arr = [1, 2, 3];
-- ✅ Insert AFTER the declaration: const arr = [1, 2, 3]; console.log('after');
-- ❌ WRONG: const arr = [\n  console.log();\n  1, 2, 3\n];
+- ✅ Insert BEFORE the declaration: logger.log('before'); const arr = [1, 2, 3];
+- ✅ Insert AFTER the declaration: const arr = [1, 2, 3]; logger.log('after');
+- ❌ WRONG: const arr = [\n  logger.log();\n  1, 2, 3\n];
 
 EXAMPLE - Adding logging to array initialization:
 ❌ WRONG:
   const data = puzzle || [
-    console.log('test');
+    logger.log('test');
     [1, 2, 3],
     [4, 5, 6]
   ];
 
 ✅ CORRECT:
-  console.log('test');
+  logger.log('test');
   const data = puzzle || [
     [1, 2, 3],
     [4, 5, 6]
@@ -1641,7 +1642,7 @@ export function validateGeneratedFiles(
 } {
   // Only validate that we have at least one file and it's not empty
   if (files.length === 0) {
-    console.warn("No files generated");
+    logger.warn("No files generated");
     return {
       isValid: false,
       missingFiles: ["No files generated"],
@@ -1660,7 +1661,7 @@ export function validateGeneratedFiles(
   });
   
   if (emptyFiles.length > 0) {
-    console.warn(
+    logger.warn(
       "Empty files detected:",
       emptyFiles.map((f) => f.filename)
     );
@@ -1795,7 +1796,7 @@ export function validateImportsAndReferences(
   });
 
   if (missingImports.length > 0) {
-    console.warn("Missing imported files:", missingImports);
+    logger.warn("Missing imported files:", missingImports);
   }
 
   return {
@@ -1822,8 +1823,8 @@ export function filterFilesByWeb3Requirement(
 ): { filename: string; content: string }[] {
   if (isWeb3) {
     // Keep all files for web3 apps (including contracts)
-    console.log(`📦 Web3 app detected (isWeb3: true)`);
-    console.log(`📦 Including ALL ${files.length} files (with contracts/)`);
+    logger.log(`📦 Web3 app detected (isWeb3: true)`);
+    logger.log(`📦 Including ALL ${files.length} files (with contracts/)`);
     return files;
   }
 
@@ -1834,10 +1835,10 @@ export function filterFilesByWeb3Requirement(
   });
 
   const removed = files.length - filtered.length;
-  console.log(`📦 Non-web3 app detected (isWeb3: false)`);
-  console.log(`📦 Filtered out ${removed} contract files from contracts/`);
-  console.log(`📦 Sending ${filtered.length} files to LLM (contracts excluded)`);
-  console.log(`💰 Token savings: ~${removed * 150} tokens (estimated)`);
+  logger.log(`📦 Non-web3 app detected (isWeb3: false)`);
+  logger.log(`📦 Filtered out ${removed} contract files from contracts/`);
+  logger.log(`📦 Sending ${filtered.length} files to LLM (contracts excluded)`);
+  logger.log(`💰 Token savings: ~${removed * 150} tokens (estimated)`);
 
   return filtered;
 }
@@ -1876,14 +1877,14 @@ export function filterProtectedConfigFiles(
   const filtered = files.filter(file => {
     const isProtected = protectedFiles.includes(file.filename);
     if (isProtected) {
-      console.log(`🛡️ Filtering out protected config file: ${file.filename} (keeping boilerplate version)`);
+      logger.log(`🛡️ Filtering out protected config file: ${file.filename} (keeping boilerplate version)`);
     }
     return !isProtected;
   });
 
   const removed = files.length - filtered.length;
   if (removed > 0) {
-    console.log(`🛡️ Protected ${removed} config files from LLM overwriting`);
+    logger.log(`🛡️ Protected ${removed} config files from LLM overwriting`);
   }
 
   return filtered;
@@ -1908,8 +1909,8 @@ export function validateNoNewContracts(
       const isTemplate = file.filename.includes('Template.sol');
 
       if (!isTemplate && file.operation === 'create') {
-        console.error(`❌ Attempted to create new contract: ${file.filename}`);
-        console.error(`❌ Only template-based contracts allowed (ERC20Template.sol, ERC721Template.sol, EscrowTemplate.sol)`);
+        logger.error(`❌ Attempted to create new contract: ${file.filename}`);
+        logger.error(`❌ Only template-based contracts allowed (ERC20Template.sol, ERC721Template.sol, EscrowTemplate.sol)`);
         invalidFiles.push(file.filename);
       }
     }
@@ -1939,18 +1940,18 @@ async function executeStage1IntentParser(
   ) => Promise<string>,
   projectId?: string
 ): Promise<IntentSpec> {
-  console.log("\n" + "=".repeat(50));
-  console.log("📋 STAGE 1: Intent Parser");
-  console.log("=".repeat(50));
+  logger.log("\n" + "=".repeat(50));
+  logger.log("📋 STAGE 1: Intent Parser");
+  logger.log("=".repeat(50));
 
   const intentPrompt = `USER REQUEST: ${userPrompt}`;
-  console.log("📤 Sending to LLM (Stage 1):");
-  console.log(
+  logger.log("📤 Sending to LLM (Stage 1):");
+  logger.log(
     "System Prompt Length:",
     getStage1IntentParserPrompt().length,
     "chars"
   );
-  console.log("User Prompt:", intentPrompt);
+  logger.log("User Prompt:", intentPrompt);
 
   const startTime1 = Date.now();
   const intentResponse = await callLLM(
@@ -1970,16 +1971,16 @@ async function executeStage1IntentParser(
     });
   }
 
-  console.log("📥 Received from LLM (Stage 1):");
-  console.log("Response Length:", intentResponse.length, "chars");
-  console.log("Response Time:", endTime1 - startTime1, "ms");
+  logger.log("📥 Received from LLM (Stage 1):");
+  logger.log("Response Length:", intentResponse.length, "chars");
+  logger.log("Response Time:", endTime1 - startTime1, "ms");
 
   let intentSpec: IntentSpec;
   try {
     intentSpec = JSON.parse(intentResponse);
   } catch (error) {
-    console.error("❌ Failed to parse Stage 1 response as JSON:");
-    console.error("Raw response:", intentResponse);
+    logger.error("❌ Failed to parse Stage 1 response as JSON:");
+    logger.error("Raw response:", intentResponse);
     throw new Error(
       `Stage 1 JSON parsing failed: ${
         error instanceof Error ? error.message : String(error)
@@ -2012,13 +2013,13 @@ async function executeStage1IntentParser(
     throw new Error("Stage 1 response missing 'needsChanges' boolean field");
   }
 
-  console.log("✅ Stage 1 complete - Parsed Intent:");
-  console.log("  Feature:", intentSpec.feature);
-  console.log("  Requirements:", intentSpec.requirements.length);
-  console.log("  Target Files:", intentSpec.targetFiles.length);
-  console.log("  Dependencies:", intentSpec.dependencies.length);
-  console.log("  Needs Changes:", intentSpec.needsChanges);
-  console.log("  Reason:", intentSpec.reason);
+  logger.log("✅ Stage 1 complete - Parsed Intent:");
+  logger.log("  Feature:", intentSpec.feature);
+  logger.log("  Requirements:", intentSpec.requirements.length);
+  logger.log("  Target Files:", intentSpec.targetFiles.length);
+  logger.log("  Dependencies:", intentSpec.dependencies.length);
+  logger.log("  Needs Changes:", intentSpec.needsChanges);
+  logger.log("  Reason:", intentSpec.reason);
 
   return intentSpec;
 }
@@ -2040,9 +2041,9 @@ async function executeStage2PatchPlanner(
   isInitialGeneration: boolean,
   projectId?: string
 ): Promise<PatchPlan> {
-  console.log("\n" + "=".repeat(50));
-  console.log("📝 STAGE 2: Patch Planner");
-  console.log("=".repeat(50));
+  logger.log("\n" + "=".repeat(50));
+  logger.log("📝 STAGE 2: Patch Planner");
+  logger.log("=".repeat(50));
 
   // Optimize: Only include target files from intentSpec to reduce prompt size
   const relevantFiles = !isInitialGeneration && intentSpec.targetFiles.length > 0
@@ -2053,20 +2054,20 @@ async function executeStage2PatchPlanner(
       )
     : currentFiles;
   
-  console.log(`📊 Files included: ${relevantFiles.length} of ${currentFiles.length} total`);
+  logger.log(`📊 Files included: ${relevantFiles.length} of ${currentFiles.length} total`);
   if (relevantFiles.length < currentFiles.length) {
-    console.log(`   Filtered to target files: ${intentSpec.targetFiles.join(', ')}`);
+    logger.log(`   Filtered to target files: ${intentSpec.targetFiles.join(', ')}`);
   }
 
   const patchPrompt = `USER REQUEST: ${userPrompt}`;
-  console.log("📤 Sending to LLM (Stage 2):");
-  console.log(
+  logger.log("📤 Sending to LLM (Stage 2):");
+  logger.log(
     "System Prompt Length:",
     getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration).length,
     "chars"
   );
-  console.log("User Prompt:", patchPrompt);
-  console.log("Intent Spec:", JSON.stringify(intentSpec, null, 2));
+  logger.log("User Prompt:", patchPrompt);
+  logger.log("Intent Spec:", JSON.stringify(intentSpec, null, 2));
 
   const startTime2 = Date.now();
   const patchResponse = await callLLM(
@@ -2087,10 +2088,10 @@ async function executeStage2PatchPlanner(
     });
   }
 
-  console.log("📥 Received from LLM (Stage 2):");
-  console.log("Response Length:", patchResponse.length, "chars");
-  console.log("Response Time:", endTime2 - startTime2, "ms");
-  console.log("Raw Response:", patchResponse.substring(0, 500) + "...");
+  logger.log("📥 Received from LLM (Stage 2):");
+  logger.log("Response Length:", patchResponse.length, "chars");
+  logger.log("Response Time:", endTime2 - startTime2, "ms");
+  logger.log("Raw Response:", patchResponse.substring(0, 500) + "...");
 
   const patchPlan: PatchPlan = parseStage2PatchResponse(patchResponse);
 
@@ -2098,8 +2099,8 @@ async function executeStage2PatchPlanner(
   const isPotentiallyTruncated = isResponseTruncated(patchResponse);
   
   if (isPotentiallyTruncated) {
-    console.warn("⚠️ Stage 2 response appears to be truncated. Retry logic is handled in callClaudeWithLogging.");
-    console.warn("Response ends with:", patchResponse.slice(-100));
+    logger.warn("⚠️ Stage 2 response appears to be truncated. Retry logic is handled in callClaudeWithLogging.");
+    logger.warn("Response ends with:", patchResponse.slice(-100));
   }
 
   // Validate patch plan structure
@@ -2118,12 +2119,12 @@ async function executeStage2PatchPlanner(
   patchPlan.patches.forEach((patch, index) => {
     // Validate each patch structure
     if (!patch || typeof patch !== "object") {
-      console.warn(`⚠️ Invalid patch ${index + 1}: patch is not an object`);
+      logger.warn(`⚠️ Invalid patch ${index + 1}: patch is not an object`);
       return;
     }
 
     if (!patch.filename || typeof patch.filename !== "string") {
-      console.warn(
+      logger.warn(
         `⚠️ Invalid patch ${index + 1}: filename is missing or not a string`
       );
       return;
@@ -2133,14 +2134,14 @@ async function executeStage2PatchPlanner(
       !patch.operation ||
       !["create", "modify", "delete"].includes(patch.operation)
     ) {
-      console.warn(
+      logger.warn(
         `⚠️ Invalid patch ${index + 1}: operation is missing or invalid`
       );
       return;
     }
 
     if (!patch.changes || !Array.isArray(patch.changes)) {
-      console.warn(
+      logger.warn(
         `⚠️ Invalid patch ${
           index + 1
         }: changes array is missing or not an array`
@@ -2153,17 +2154,17 @@ async function executeStage2PatchPlanner(
     else if (patch.operation === 'modify') modifyPatches++;
     else if (patch.operation === 'delete') deletePatches++;
 
-    console.log(
+    logger.log(
       `  Patch ${index + 1}: ${patch.operation} ${patch.filename} (${
         patch.changes.length
       } changes)`
     );
   });
 
-  console.log(`\n✅ Stage 2 complete - Generated ${totalPatches} patches`);
-  console.log(`  - Create: ${createPatches}`);
-  console.log(`  - Modify: ${modifyPatches}`);
-  console.log(`  - Delete: ${deletePatches}`);
+  logger.log(`\n✅ Stage 2 complete - Generated ${totalPatches} patches`);
+  logger.log(`  - Create: ${createPatches}`);
+  logger.log(`  - Modify: ${modifyPatches}`);
+  logger.log(`  - Delete: ${deletePatches}`);
 
   return patchPlan;
 }
@@ -2189,30 +2190,30 @@ export async function executeInitialGenerationPipeline(
   projectDir?: string
 ): Promise<{ files: { filename: string; content: string }[]; intentSpec: IntentSpec }> {
   try {
-    console.log("🚀 Starting INITIAL GENERATION pipeline...");
-    console.log("📝 User Prompt:", userPrompt);
-    console.log("📁 Current Files Count:", currentFiles.length);
+    logger.log("🚀 Starting INITIAL GENERATION pipeline...");
+    logger.log("📝 User Prompt:", userPrompt);
+    logger.log("📁 Current Files Count:", currentFiles.length);
 
     // Stage 1: Intent Parser
     const intentSpec = await executeStage1IntentParser(userPrompt, callLLM, projectId);
 
     // Check if changes are needed
     if (!intentSpec.needsChanges) {
-      console.log("\n" + "=".repeat(50));
-      console.log("✅ NO CHANGES NEEDED - Using Boilerplate As-Is");
-      console.log("=".repeat(50));
-      console.log("📋 Reason:", intentSpec.reason);
-      console.log("📁 Returning", currentFiles.length, "boilerplate files");
-      console.log("🎉 Pipeline completed early - no modifications needed!");
+      logger.log("\n" + "=".repeat(50));
+      logger.log("✅ NO CHANGES NEEDED - Using Boilerplate As-Is");
+      logger.log("=".repeat(50));
+      logger.log("📋 Reason:", intentSpec.reason);
+      logger.log("📁 Returning", currentFiles.length, "boilerplate files");
+      logger.log("🎉 Pipeline completed early - no modifications needed!");
       return { files: currentFiles, intentSpec };
     }
 
     // 🎯 Filter files based on web3 requirement (after Stage 1, before Stage 2)
-    console.log("\n" + "=".repeat(50));
-    console.log("🔍 FILTERING FILES BASED ON WEB3 REQUIREMENT");
-    console.log("=".repeat(50));
+    logger.log("\n" + "=".repeat(50));
+    logger.log("🔍 FILTERING FILES BASED ON WEB3 REQUIREMENT");
+    logger.log("=".repeat(50));
     const filteredFiles = filterFilesByWeb3Requirement(currentFiles, intentSpec.isWeb3);
-    console.log("✅ File filtering complete");
+    logger.log("✅ File filtering complete");
 
     // Stage 2: Patch Planner (using filtered files)
     const patchPlan = await executeStage2PatchPlanner(
@@ -2247,16 +2248,16 @@ export async function executeInitialGenerationPipeline(
     // Filter out protected config files to prevent LLM from overwriting boilerplate
     const finalFiles = filterProtectedConfigFiles(validatedFiles) as { filename: string; content: string }[];
 
-    console.log("\n" + "=".repeat(50));
-    console.log("🎉 INITIAL GENERATION PIPELINE COMPLETED!");
-    console.log("=".repeat(50));
-    console.log(`📁 Generated ${finalFiles.length} files`);
+    logger.log("\n" + "=".repeat(50));
+    logger.log("🎉 INITIAL GENERATION PIPELINE COMPLETED!");
+    logger.log("=".repeat(50));
+    logger.log(`📁 Generated ${finalFiles.length} files`);
 
     return { files: finalFiles, intentSpec };
   } catch (error) {
-    console.error("❌ Initial generation pipeline failed:");
-    console.error("  Error:", error);
-    console.error(
+    logger.error("❌ Initial generation pipeline failed:");
+    logger.error("  Error:", error);
+    logger.error(
       "  Stack:",
       error instanceof Error ? error.stack : "No stack trace"
     );
@@ -2290,29 +2291,29 @@ export async function executeFollowUpPipeline(
   validationResult?: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> };
 }> {
   try {
-    console.log("🚀 Starting FOLLOW-UP CHANGES pipeline...");
-    console.log("📝 User Prompt:", userPrompt);
-    console.log("📁 Current Files Count:", currentFiles.length);
+    logger.log("🚀 Starting FOLLOW-UP CHANGES pipeline...");
+    logger.log("📝 User Prompt:", userPrompt);
+    logger.log("📁 Current Files Count:", currentFiles.length);
 
     // Stage 1: Intent Parser
     const intentSpec = await executeStage1IntentParser(userPrompt, callLLM, projectId);
 
     // Check if changes are needed
     if (!intentSpec.needsChanges) {
-      console.log("\n" + "=".repeat(50));
-      console.log("✅ NO CHANGES NEEDED");
-      console.log("=".repeat(50));
-      console.log("📋 Reason:", intentSpec.reason);
-      console.log("📁 Returning", currentFiles.length, "unchanged files");
+      logger.log("\n" + "=".repeat(50));
+      logger.log("✅ NO CHANGES NEEDED");
+      logger.log("=".repeat(50));
+      logger.log("📋 Reason:", intentSpec.reason);
+      logger.log("📁 Returning", currentFiles.length, "unchanged files");
       return { files: currentFiles, diffs: [], intentSpec };
     }
 
     // 🎯 Filter files based on web3 requirement (after Stage 1, before Stage 2)
-    console.log("\n" + "=".repeat(50));
-    console.log("🔍 FILTERING FILES BASED ON WEB3 REQUIREMENT");
-    console.log("=".repeat(50));
+    logger.log("\n" + "=".repeat(50));
+    logger.log("🔍 FILTERING FILES BASED ON WEB3 REQUIREMENT");
+    logger.log("=".repeat(50));
     const filteredFiles = filterFilesByWeb3Requirement(currentFiles, intentSpec.isWeb3);
-    console.log("✅ File filtering complete");
+    logger.log("✅ File filtering complete");
 
     // Stage 2: Patch Planner (with diffs) - using filtered files
     const patchPlan = await executeStage2PatchPlanner(
@@ -2348,23 +2349,23 @@ export async function executeFollowUpPipeline(
     // Filter out protected config files to prevent LLM from overwriting boilerplate
     const finalFiles = filterProtectedConfigFiles(validatedFiles) as { filename: string; content: string }[];
 
-    console.log("\n" + "=".repeat(50));
-    console.log("🎉 FOLLOW-UP PIPELINE COMPLETED!");
-    console.log("=".repeat(50));
-    console.log(`📁 Generated ${finalFiles.length} files`);
-    console.log(`📝 Applied ${diffs.length} diffs`);
+    logger.log("\n" + "=".repeat(50));
+    logger.log("🎉 FOLLOW-UP PIPELINE COMPLETED!");
+    logger.log("=".repeat(50));
+    logger.log(`📁 Generated ${finalFiles.length} files`);
+    logger.log(`📝 Applied ${diffs.length} diffs`);
     
     if (validationResult) {
-      console.log(`✅ Validation Success: ${validationResult.success}`);
-      console.log(`❌ Validation Errors: ${validationResult.errors.length}`);
-      console.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
+      logger.log(`✅ Validation Success: ${validationResult.success}`);
+      logger.log(`❌ Validation Errors: ${validationResult.errors.length}`);
+      logger.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
     }
 
     return { files: finalFiles, diffs, intentSpec, validationResult };
   } catch (error) {
-    console.error("❌ Follow-up pipeline failed:");
-    console.error("  Error:", error);
-    console.error(
+    logger.error("❌ Follow-up pipeline failed:");
+    logger.error("  Error:", error);
+    logger.error(
       "  Stack:",
       error instanceof Error ? error.stack : "No stack trace"
     );
@@ -2393,13 +2394,13 @@ async function executeStage3InitialGeneration(
   ) => Promise<string>,
   projectId?: string
 ): Promise<{ filename: string; content: string }[]> {
-  console.log("\n" + "=".repeat(50));
-  console.log("💻 STAGE 3: Code Generator (Initial Generation)");
-  console.log("=".repeat(50));
+  logger.log("\n" + "=".repeat(50));
+  logger.log("💻 STAGE 3: Code Generator (Initial Generation)");
+  logger.log("=".repeat(50));
 
   const codePrompt = `USER REQUEST: ${userPrompt}`;
-  console.log("📤 Sending to LLM (Stage 3):");
-  console.log(
+  logger.log("📤 Sending to LLM (Stage 3):");
+  logger.log(
     "System Prompt Length:",
     getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true).length,
     "chars"
@@ -2425,9 +2426,9 @@ async function executeStage3InitialGeneration(
     });
   }
 
-  console.log("📥 Received from LLM (Stage 3):");
-  console.log("Response Length:", codeResponse.length, "chars");
-  console.log("Response Time:", endTime3 - startTime3, "ms");
+  logger.log("📥 Received from LLM (Stage 3):");
+  logger.log("Response Length:", codeResponse.length, "chars");
+  logger.log("Response Time:", endTime3 - startTime3, "ms");
 
   const generatedFiles = parseStage3CodeResponse(codeResponse);
 
@@ -2440,18 +2441,18 @@ async function executeStage3InitialGeneration(
   if (intentSpec.isWeb3) {
     const contractValidation = validateNoNewContracts(generatedFiles);
     if (!contractValidation.isValid) {
-      console.error("\n" + "=".repeat(70));
-      console.error("❌ CONTRACT VALIDATION FAILED - NEW CONTRACTS DETECTED");
-      console.error("=".repeat(70));
-      console.error("Invalid files:", contractValidation.invalidFiles);
-      console.error("\n🚨 ONLY TEMPLATE MODIFICATIONS ALLOWED:");
-      console.error("  ✅ contracts/src/ERC20Template.sol");
-      console.error("  ✅ contracts/src/ERC721Template.sol");
-      console.error("  ✅ contracts/src/EscrowTemplate.sol");
-      console.error("  ❌ Any other .sol files are FORBIDDEN\n");
+      logger.error("\n" + "=".repeat(70));
+      logger.error("❌ CONTRACT VALIDATION FAILED - NEW CONTRACTS DETECTED");
+      logger.error("=".repeat(70));
+      logger.error("Invalid files:", contractValidation.invalidFiles);
+      logger.error("\n🚨 ONLY TEMPLATE MODIFICATIONS ALLOWED:");
+      logger.error("  ✅ contracts/src/ERC20Template.sol");
+      logger.error("  ✅ contracts/src/ERC721Template.sol");
+      logger.error("  ✅ contracts/src/EscrowTemplate.sol");
+      logger.error("  ❌ Any other .sol files are FORBIDDEN\n");
       
       // 🔄 RETRY: Send back to AI with strict template-only instructions
-      console.log("🔄 Retrying Stage 3 with strict template-only enforcement...\n");
+      logger.log("🔄 Retrying Stage 3 with strict template-only enforcement...\n");
       
       const retryPrompt = `
 USER REQUEST: ${userPrompt}
@@ -2491,8 +2492,8 @@ Now regenerate the code using ONLY the templates above.`;
       // Validate again
       const retryValidation = validateNoNewContracts(retriedFiles);
       if (!retryValidation.isValid) {
-        console.error("\n❌ RETRY FAILED - Still generating invalid contracts:", retryValidation.invalidFiles);
-        console.error("🔧 Filtering out invalid contracts and proceeding...\n");
+        logger.error("\n❌ RETRY FAILED - Still generating invalid contracts:", retryValidation.invalidFiles);
+        logger.error("🔧 Filtering out invalid contracts and proceeding...\n");
         
         // Last resort: filter out invalid files
         const filteredFiles = retriedFiles.filter(file => 
@@ -2507,7 +2508,7 @@ Now regenerate the code using ONLY the templates above.`;
         return completeFiles;
       }
       
-      console.log("✅ Retry successful - All contracts are valid templates\n");
+      logger.log("✅ Retry successful - All contracts are valid templates\n");
       
       // Use the retried files
       const completeFiles: { filename: string; content: string }[] = retriedFiles.map(file => ({
@@ -2525,7 +2526,7 @@ Now regenerate the code using ONLY the templates above.`;
     content: file.content || ''
   }));
 
-  console.log(`✅ Stage 3 complete - Generated ${completeFiles.length} complete files`);
+  logger.log(`✅ Stage 3 complete - Generated ${completeFiles.length} complete files`);
   
   return completeFiles;
 }
@@ -2547,13 +2548,13 @@ async function executeStage3FollowUpGeneration(
   ) => Promise<string>,
   projectId?: string
 ): Promise<{ files: { filename: string; content: string }[]; diffs: FileDiff[] }> {
-  console.log("\n" + "=".repeat(50));
-  console.log("💻 STAGE 3: Code Generator (Follow-Up Changes - Diff-Based)");
-  console.log("=".repeat(50));
+  logger.log("\n" + "=".repeat(50));
+  logger.log("💻 STAGE 3: Code Generator (Follow-Up Changes - Diff-Based)");
+  logger.log("=".repeat(50));
 
   const codePrompt = `USER REQUEST: ${userPrompt}`;
-  console.log("📤 Sending to LLM (Stage 3):");
-  console.log(
+  logger.log("📤 Sending to LLM (Stage 3):");
+  logger.log(
     "System Prompt Length:",
     getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false).length,
     "chars"
@@ -2579,22 +2580,22 @@ async function executeStage3FollowUpGeneration(
     });
   }
 
-  console.log("📥 Received from LLM (Stage 3):");
-  console.log("Response Length:", codeResponse.length, "chars");
-  console.log("Response Time:", endTime3 - startTime3, "ms");
+  logger.log("📥 Received from LLM (Stage 3):");
+  logger.log("Response Length:", codeResponse.length, "chars");
+  logger.log("Response Time:", endTime3 - startTime3, "ms");
 
   const generatedFiles = parseStage3CodeResponse(codeResponse);
 
   // 🚨 VALIDATION: Verify LLM is following diff-based requirements
-  console.log('\n' + '='.repeat(50));
-  console.log('🔍 STAGE 3 RESPONSE VALIDATION');
-  console.log('='.repeat(50));
-  console.log(`📊 Total files generated: ${generatedFiles.length}`);
-  console.log(`📊 Files with operation='modify': ${generatedFiles.filter(f => f.operation === 'modify').length}`);
-  console.log(`📊 Files with operation='create': ${generatedFiles.filter(f => f.operation === 'create').length}`);
-  console.log(`📊 Files with unifiedDiff: ${generatedFiles.filter(f => f.unifiedDiff).length}`);
-  console.log(`📊 Files with content: ${generatedFiles.filter(f => f.content).length}`);
-  console.log('');
+  logger.log('\n' + '='.repeat(50));
+  logger.log('🔍 STAGE 3 RESPONSE VALIDATION');
+  logger.log('='.repeat(50));
+  logger.log(`📊 Total files generated: ${generatedFiles.length}`);
+  logger.log(`📊 Files with operation='modify': ${generatedFiles.filter(f => f.operation === 'modify').length}`);
+  logger.log(`📊 Files with operation='create': ${generatedFiles.filter(f => f.operation === 'create').length}`);
+  logger.log(`📊 Files with unifiedDiff: ${generatedFiles.filter(f => f.unifiedDiff).length}`);
+  logger.log(`📊 Files with content: ${generatedFiles.filter(f => f.content).length}`);
+  logger.log('');
 
   // Build existing files set for validation
   const existingFileNames = new Set(currentFiles.map(f => f.filename));
@@ -2602,7 +2603,7 @@ async function executeStage3FollowUpGeneration(
   const validationWarnings: string[] = [];
 
   // Detailed breakdown by file
-  console.log('📋 File-by-file analysis:');
+  logger.log('📋 File-by-file analysis:');
   generatedFiles.forEach(file => {
     const isExisting = existingFileNames.has(file.filename);
     const hasUnifiedDiff = !!file.unifiedDiff;
@@ -2610,67 +2611,67 @@ async function executeStage3FollowUpGeneration(
     const operation = file.operation || 'unknown';
 
     const status = isExisting ? '🔄 EXISTING' : '🆕 NEW';
-    console.log(`  ${status} ${file.filename}:`);
-    console.log(`    - operation: ${operation}`);
-    console.log(`    - hasUnifiedDiff: ${hasUnifiedDiff}`);
-    console.log(`    - hasContent: ${hasContent}`);
+    logger.log(`  ${status} ${file.filename}:`);
+    logger.log(`    - operation: ${operation}`);
+    logger.log(`    - hasUnifiedDiff: ${hasUnifiedDiff}`);
+    logger.log(`    - hasContent: ${hasContent}`);
 
     // Validate existing files MUST use diff format
     if (isExisting) {
       if (operation !== 'modify') {
         const error = `❌ ${file.filename}: EXISTING file has operation='${operation}' (should be 'modify')`;
         validationErrors.push(error);
-        console.log(`    ${error}`);
+        logger.log(`    ${error}`);
       }
       if (!hasUnifiedDiff) {
         const error = `❌ ${file.filename}: EXISTING file missing unifiedDiff (required for modifications)`;
         validationErrors.push(error);
-        console.log(`    ${error}`);
+        logger.log(`    ${error}`);
       }
       if (hasContent) {
         const warning = `⚠️  ${file.filename}: EXISTING file has content field (should use unifiedDiff only)`;
         validationWarnings.push(warning);
-        console.log(`    ${warning}`);
+        logger.log(`    ${warning}`);
       }
     } else {
       // Validate new files MUST use content format
       if (operation !== 'create') {
         const error = `❌ ${file.filename}: NEW file has operation='${operation}' (should be 'create')`;
         validationErrors.push(error);
-        console.log(`    ${error}`);
+        logger.log(`    ${error}`);
       }
       if (!hasContent) {
         const error = `❌ ${file.filename}: NEW file missing content (required for new files)`;
         validationErrors.push(error);
-        console.log(`    ${error}`);
+        logger.log(`    ${error}`);
       }
       if (hasUnifiedDiff) {
         const warning = `⚠️  ${file.filename}: NEW file has unifiedDiff (should use content only)`;
         validationWarnings.push(warning);
-        console.log(`    ${warning}`);
+        logger.log(`    ${warning}`);
       }
     }
   });
 
-  console.log('');
+  logger.log('');
   if (validationErrors.length > 0) {
-    console.log('❌ VALIDATION ERRORS:', validationErrors.length);
-    validationErrors.forEach(err => console.log(`  ${err}`));
+    logger.log('❌ VALIDATION ERRORS:', validationErrors.length);
+    validationErrors.forEach(err => logger.log(`  ${err}`));
   }
   if (validationWarnings.length > 0) {
-    console.log('⚠️  VALIDATION WARNINGS:', validationWarnings.length);
-    validationWarnings.forEach(warn => console.log(`  ${warn}`));
+    logger.log('⚠️  VALIDATION WARNINGS:', validationWarnings.length);
+    validationWarnings.forEach(warn => logger.log(`  ${warn}`));
   }
   if (validationErrors.length === 0 && validationWarnings.length === 0) {
-    console.log('✅ All files passed validation - LLM followed diff-based requirements correctly!');
+    logger.log('✅ All files passed validation - LLM followed diff-based requirements correctly!');
   }
-  console.log('='.repeat(50) + '\n');
+  logger.log('='.repeat(50) + '\n');
 
   // 🚨 AGGRESSIVE FALLBACK: Auto-convert full content to diffs for existing files
   if (validationErrors.length > 0) {
-    console.log('\n' + '='.repeat(50));
-    console.log('🔧 AUTO-CONVERSION: LLM violated diff requirements, forcing conversion...');
-    console.log('='.repeat(50));
+    logger.log('\n' + '='.repeat(50));
+    logger.log('🔧 AUTO-CONVERSION: LLM violated diff requirements, forcing conversion...');
+    logger.log('='.repeat(50));
     
     let conversionsCount = 0;
     for (const file of generatedFiles) {
@@ -2678,7 +2679,7 @@ async function executeStage3FollowUpGeneration(
       
       // If existing file has full content instead of diff, convert it
       if (isExisting && file.content && !file.unifiedDiff) {
-        console.log(`🔄 Converting ${file.filename} from full content to diff...`);
+        logger.log(`🔄 Converting ${file.filename} from full content to diff...`);
         
         const originalFile = currentFiles.find(f => f.filename === file.filename);
         if (originalFile) {
@@ -2692,37 +2693,37 @@ async function executeStage3FollowUpGeneration(
             delete file.content;
             
             conversionsCount++;
-            console.log(`  ✅ Converted successfully (${diff.hunks.length} hunks)`);
+            logger.log(`  ✅ Converted successfully (${diff.hunks.length} hunks)`);
           } catch (error) {
-            console.error(`  ❌ Conversion failed:`, error);
+            logger.error(`  ❌ Conversion failed:`, error);
           }
         }
       }
     }
     
-    console.log(`\n🔧 Auto-conversion complete: ${conversionsCount} files converted to diffs`);
-    console.log('='.repeat(50) + '\n');
+    logger.log(`\n🔧 Auto-conversion complete: ${conversionsCount} files converted to diffs`);
+    logger.log('='.repeat(50) + '\n');
   }
 
   // Process files: apply diffs for modifications, use content for new files
   const filesWithDiffs = generatedFiles.filter(file => file.operation === 'modify' && file.unifiedDiff);
   const filesWithContent = generatedFiles.filter(file => file.operation === 'create' && file.content);
 
-  console.log(`📊 File processing breakdown:`);
-  console.log(`  Files with diffs (will apply): ${filesWithDiffs.length}`);
-  console.log(`  Files with content (will add): ${filesWithContent.length}`);
+  logger.log(`📊 File processing breakdown:`);
+  logger.log(`  Files with diffs (will apply): ${filesWithDiffs.length}`);
+  logger.log(`  Files with content (will add): ${filesWithContent.length}`);
   
   if (filesWithDiffs.length === 0 && existingFileNames.size > 0) {
-    console.warn('⚠️  WARNING: No diffs to apply despite having existing files!');
-    console.warn('   This means the LLM regenerated entire files instead of creating diffs.');
-    console.warn('   Check the validation errors above to see what went wrong.');
+    logger.warn('⚠️  WARNING: No diffs to apply despite having existing files!');
+    logger.warn('   This means the LLM regenerated entire files instead of creating diffs.');
+    logger.warn('   Check the validation errors above to see what went wrong.');
   }
 
   const processedFiles: { filename: string; content: string }[] = [];
 
   // Apply diffs to existing files
   if (filesWithDiffs.length > 0) {
-    console.log(`🔄 Applying diffs to ${filesWithDiffs.length} files...`);
+    logger.log(`🔄 Applying diffs to ${filesWithDiffs.length} files...`);
     
     const diffs = filesWithDiffs.map(file => {
       const hunks = parseUnifiedDiff(file.unifiedDiff!);
@@ -2735,12 +2736,12 @@ async function executeStage3FollowUpGeneration(
 
     const filesWithAppliedDiffs = applyDiffsToFiles(currentFiles, diffs);
     processedFiles.push(...filesWithAppliedDiffs);
-    console.log(`✅ Successfully applied diffs to ${filesWithAppliedDiffs.length} files`);
+    logger.log(`✅ Successfully applied diffs to ${filesWithAppliedDiffs.length} files`);
   }
 
   // Add new files with complete content
   if (filesWithContent.length > 0) {
-    console.log(`📝 Adding ${filesWithContent.length} new files...`);
+    logger.log(`📝 Adding ${filesWithContent.length} new files...`);
     filesWithContent.forEach(file => {
       processedFiles.push({
         filename: file.filename,
@@ -2763,7 +2764,7 @@ async function executeStage3FollowUpGeneration(
     appliedDiffs.push(...diffs);
   }
 
-  console.log(`✅ Stage 3 complete - Generated ${processedFiles.length} files with ${appliedDiffs.length} diffs`);
+  logger.log(`✅ Stage 3 complete - Generated ${processedFiles.length} files with ${appliedDiffs.length} diffs`);
   
   return { files: processedFiles, diffs: appliedDiffs };
 }
@@ -2784,28 +2785,28 @@ async function executeStage4InitialValidation(
   projectId?: string,
   projectDir?: string
 ): Promise<{ filename: string; content: string }[]> {
-  console.log("\n" + "=".repeat(50));
-  console.log("🔍 STAGE 4: Compilation Validation (Initial Generation)");
-  console.log("=".repeat(50));
-  console.log(`📊 Input Summary:`);
-  console.log(`  - Generated files: ${generatedFiles.length}`);
-  console.log(`  - Current files: ${currentFiles.length}`);
-  console.log(`  - Project ID: ${projectId || 'None'}`);
+  logger.log("\n" + "=".repeat(50));
+  logger.log("🔍 STAGE 4: Compilation Validation (Initial Generation)");
+  logger.log("=".repeat(50));
+  logger.log(`📊 Input Summary:`);
+  logger.log(`  - Generated files: ${generatedFiles.length}`);
+  logger.log(`  - Current files: ${currentFiles.length}`);
+  logger.log(`  - Project ID: ${projectId || 'None'}`);
 
   // Skip Railway validation in production (causes 3+ min timeouts + memory failures)
   if (process.env.NODE_ENV === 'production') {
-    console.log("⚠️  Railway validation skipped in production - using local validation only");
+    logger.log("⚠️  Railway validation skipped in production - using local validation only");
     // Jump directly to local validation
   } else {
     // Try Railway validation first (full validation) - development only
     try {
-    console.log("\n🚂 Attempting Railway validation (full compilation)...");
+    logger.log("\n🚂 Attempting Railway validation (full compilation)...");
     const railwayClient = createRailwayValidationClient();
     
     // Check if Railway validation is available
     const isRailwayAvailable = await railwayClient.checkHealth();
     if (isRailwayAvailable) {
-      console.log("✅ Railway validation available - using full compilation validation");
+      logger.log("✅ Railway validation available - using full compilation validation");
       
       const railwayResult = await railwayClient.validateProject(
         projectId || `validation-${Date.now()}`,
@@ -2820,64 +2821,64 @@ async function executeStage4InitialValidation(
         projectDir // Pass the complete project directory
       );
 
-      console.log("\n📊 Railway Validation Results Summary:");
-      console.log("  ✅ Success:", railwayResult.success);
-      console.log("  ❌ Errors:", railwayResult.errors.length);
-      console.log("  ⚠️  Warnings:", railwayResult.warnings.length);
-      console.log("  ℹ️  Info:", railwayResult.info.length);
-      console.log("  ⏱️  Compilation Time:", railwayResult.compilationTime, "ms");
-      console.log("  📋 Validation Summary:", railwayResult.validationSummary);
+      logger.log("\n📊 Railway Validation Results Summary:");
+      logger.log("  ✅ Success:", railwayResult.success);
+      logger.log("  ❌ Errors:", railwayResult.errors.length);
+      logger.log("  ⚠️  Warnings:", railwayResult.warnings.length);
+      logger.log("  ℹ️  Info:", railwayResult.info.length);
+      logger.log("  ⏱️  Compilation Time:", railwayResult.compilationTime, "ms");
+      logger.log("  📋 Validation Summary:", railwayResult.validationSummary);
 
       if (railwayResult.success) {
-        console.log("\n🎉 Railway validation successful - files are valid!");
-        console.log(`📁 Returning ${railwayResult.files.length} validated files`);
+        logger.log("\n🎉 Railway validation successful - files are valid!");
+        logger.log(`📁 Returning ${railwayResult.files.length} validated files`);
         return railwayResult.files;
       } else {
-        console.log("\n⚠️ Railway validation found errors - proceeding to error fixing...");
+        logger.log("\n⚠️ Railway validation found errors - proceeding to error fixing...");
         return await fixRailwayCompilationErrors(railwayResult, callLLM, projectId, true);
       }
     } else {
-      console.log("⚠️ Railway validation not available - falling back to local validation");
+      logger.log("⚠️ Railway validation not available - falling back to local validation");
     }
   } catch (railwayError) {
-    console.warn("⚠️ Railway validation failed - falling back to local validation:", railwayError);
+    logger.warn("⚠️ Railway validation failed - falling back to local validation:", railwayError);
   }
   }
 
   // Fallback to local validation (limited in serverless)
-  console.log("\n🔧 Falling back to local CompilationValidator...");
+  logger.log("\n🔧 Falling back to local CompilationValidator...");
   const validator = new CompilationValidator(process.cwd());
   
   // Convert to the format expected by CompilationValidator
-  console.log("🔄 Converting files for validation...");
+  logger.log("🔄 Converting files for validation...");
   const filesForValidation = generatedFiles.map(file => ({
     filename: file.filename,
     content: file.content,
     operation: 'create' as const
   }));
-  console.log(`  ✅ Converted ${filesForValidation.length} files for validation`);
+  logger.log(`  ✅ Converted ${filesForValidation.length} files for validation`);
 
-  console.log("\n🚀 Starting local compilation validation...");
+  logger.log("\n🚀 Starting local compilation validation...");
   const compilationResult = await validator.validateProject(
     filesForValidation,
     currentFiles
   );
 
-  console.log("\n📊 Local Compilation Results Summary:");
-  console.log("  ✅ Success:", compilationResult.success);
-  console.log("  ❌ Errors:", compilationResult.errors.length);
-  console.log("  ⚠️  Warnings:", compilationResult.warnings.length);
-  console.log("  ℹ️  Info:", compilationResult.info.length);
-  console.log("  ⏱️  Compilation Time:", compilationResult.compilationTime, "ms");
-  console.log("  📋 Validation Summary:", compilationResult.validationSummary);
+  logger.log("\n📊 Local Compilation Results Summary:");
+  logger.log("  ✅ Success:", compilationResult.success);
+  logger.log("  ❌ Errors:", compilationResult.errors.length);
+  logger.log("  ⚠️  Warnings:", compilationResult.warnings.length);
+  logger.log("  ℹ️  Info:", compilationResult.info.length);
+  logger.log("  ⏱️  Compilation Time:", compilationResult.compilationTime, "ms");
+  logger.log("  📋 Validation Summary:", compilationResult.validationSummary);
 
   if (compilationResult.success) {
-    console.log("\n🎉 Local validation successful - files are valid!");
-    console.log(`📁 Returning ${compilationResult.files.length} validated files`);
+    logger.log("\n🎉 Local validation successful - files are valid!");
+    logger.log(`📁 Returning ${compilationResult.files.length} validated files`);
     return compilationResult.files;
   }
 
-  console.log("\n⚠️ Local validation found errors - proceeding to error fixing...");
+  logger.log("\n⚠️ Local validation found errors - proceeding to error fixing...");
   return await fixCompilationErrors(compilationResult, callLLM, projectId, true);
 }
 
@@ -2900,23 +2901,23 @@ async function executeStage4FollowUpValidation(
   validatedFiles: { filename: string; content: string }[];
   validationResult: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> };
 }> {
-  console.log("\n" + "=".repeat(50));
-  console.log("🔍 STAGE 4: Compilation Validation (Follow-Up Changes)");
-  console.log("=".repeat(50));
-  console.log(`📊 Input Summary:`);
-  console.log(`  - Generated files: ${generatedFiles.length}`);
-  console.log(`  - Current files: ${currentFiles.length}`);
-  console.log(`  - Project ID: ${projectId || 'None'}`);
+  logger.log("\n" + "=".repeat(50));
+  logger.log("🔍 STAGE 4: Compilation Validation (Follow-Up Changes)");
+  logger.log("=".repeat(50));
+  logger.log(`📊 Input Summary:`);
+  logger.log(`  - Generated files: ${generatedFiles.length}`);
+  logger.log(`  - Current files: ${currentFiles.length}`);
+  logger.log(`  - Project ID: ${projectId || 'None'}`);
 
   // Try Railway validation first (full validation)
   try {
-    console.log("\n🚂 Attempting Railway validation (full compilation)...");
+    logger.log("\n🚂 Attempting Railway validation (full compilation)...");
     const railwayClient = createRailwayValidationClient();
     
     // Check if Railway validation is available
     const isRailwayAvailable = await railwayClient.checkHealth();
     if (isRailwayAvailable) {
-      console.log("✅ Railway validation available - using full compilation validation");
+      logger.log("✅ Railway validation available - using full compilation validation");
       
       const railwayResult = await railwayClient.validateProject(
         projectId || `validation-${Date.now()}`,
@@ -2931,17 +2932,17 @@ async function executeStage4FollowUpValidation(
         projectDir // Pass the complete project directory
       );
 
-      console.log("\n📊 Railway Validation Results Summary:");
-      console.log("  ✅ Success:", railwayResult.success);
-      console.log("  ❌ Errors:", railwayResult.errors.length);
-      console.log("  ⚠️  Warnings:", railwayResult.warnings.length);
-      console.log("  ℹ️  Info:", railwayResult.info.length);
-      console.log("  ⏱️  Compilation Time:", railwayResult.compilationTime, "ms");
-      console.log("  📋 Validation Summary:", railwayResult.validationSummary);
+      logger.log("\n📊 Railway Validation Results Summary:");
+      logger.log("  ✅ Success:", railwayResult.success);
+      logger.log("  ❌ Errors:", railwayResult.errors.length);
+      logger.log("  ⚠️  Warnings:", railwayResult.warnings.length);
+      logger.log("  ℹ️  Info:", railwayResult.info.length);
+      logger.log("  ⏱️  Compilation Time:", railwayResult.compilationTime, "ms");
+      logger.log("  📋 Validation Summary:", railwayResult.validationSummary);
 
       if (railwayResult.success) {
-        console.log("\n🎉 Railway validation successful - files are valid!");
-        console.log(`📁 Returning ${railwayResult.files.length} validated files`);
+        logger.log("\n🎉 Railway validation successful - files are valid!");
+        logger.log(`📁 Returning ${railwayResult.files.length} validated files`);
         return {
           validatedFiles: railwayResult.files,
           validationResult: {
@@ -2953,7 +2954,7 @@ async function executeStage4FollowUpValidation(
         };
       }
 
-      console.log("\n⚠️ Railway validation found errors - proceeding to surgical error fixing...");
+      logger.log("\n⚠️ Railway validation found errors - proceeding to surgical error fixing...");
       const fixedFiles = await fixRailwayCompilationErrors(railwayResult, callLLM, projectId, false);
       return {
         validatedFiles: fixedFiles,
@@ -2965,18 +2966,18 @@ async function executeStage4FollowUpValidation(
         }
       };
     } else {
-      console.log("⚠️ Railway validation not available - falling back to local validation");
+      logger.log("⚠️ Railway validation not available - falling back to local validation");
     }
   } catch (railwayError) {
-    console.warn("⚠️ Railway validation failed - falling back to local validation:", railwayError);
+    logger.warn("⚠️ Railway validation failed - falling back to local validation:", railwayError);
   }
 
   // Fallback to local validation (limited in serverless)
-  console.log("\n🔧 Falling back to local CompilationValidator...");
+  logger.log("\n🔧 Falling back to local CompilationValidator...");
   const validator = new CompilationValidator(process.cwd());
   
   // Convert to the format expected by CompilationValidator
-  console.log("🔄 Converting files for validation (follow-up mode)...");
+  logger.log("🔄 Converting files for validation (follow-up mode)...");
   // For follow-up changes, we need to pass the actual file content for validation
   // The CompilationValidator will handle the diff application internally
   const filesForValidation = generatedFiles.map(file => ({
@@ -2984,25 +2985,25 @@ async function executeStage4FollowUpValidation(
     content: file.content,
     operation: 'modify' as const
   }));
-  console.log(`  ✅ Converted ${filesForValidation.length} files for validation`);
+  logger.log(`  ✅ Converted ${filesForValidation.length} files for validation`);
 
-  console.log("\n🚀 Starting local compilation validation...");
+  logger.log("\n🚀 Starting local compilation validation...");
   const compilationResult = await validator.validateProject(
     filesForValidation,
     currentFiles
   );
 
-  console.log("\n📊 Local Compilation Results Summary:");
-  console.log("  ✅ Success:", compilationResult.success);
-  console.log("  ❌ Errors:", compilationResult.errors.length);
-  console.log("  ⚠️  Warnings:", compilationResult.warnings.length);
-  console.log("  ℹ️  Info:", compilationResult.info.length);
-  console.log("  ⏱️  Compilation Time:", compilationResult.compilationTime, "ms");
-  console.log("  📋 Validation Summary:", compilationResult.validationSummary);
+  logger.log("\n📊 Local Compilation Results Summary:");
+  logger.log("  ✅ Success:", compilationResult.success);
+  logger.log("  ❌ Errors:", compilationResult.errors.length);
+  logger.log("  ⚠️  Warnings:", compilationResult.warnings.length);
+  logger.log("  ℹ️  Info:", compilationResult.info.length);
+  logger.log("  ⏱️  Compilation Time:", compilationResult.compilationTime, "ms");
+  logger.log("  📋 Validation Summary:", compilationResult.validationSummary);
 
   if (compilationResult.success) {
-    console.log("\n🎉 Local validation successful - files are valid!");
-    console.log(`📁 Returning ${compilationResult.files.length} validated files`);
+    logger.log("\n🎉 Local validation successful - files are valid!");
+    logger.log(`📁 Returning ${compilationResult.files.length} validated files`);
     return {
       validatedFiles: compilationResult.files,
       validationResult: {
@@ -3014,7 +3015,7 @@ async function executeStage4FollowUpValidation(
     };
   }
 
-  console.log("\n⚠️ Local validation found errors - proceeding to surgical error fixing...");
+  logger.log("\n⚠️ Local validation found errors - proceeding to surgical error fixing...");
   const fixedFiles = await fixCompilationErrors(compilationResult, callLLM, projectId, false);
   return {
     validatedFiles: fixedFiles,
@@ -3042,23 +3043,23 @@ async function fixRailwayCompilationErrors(
   projectId?: string,
   isInitialGeneration: boolean = false
 ): Promise<{ filename: string; content: string }[]> {
-  console.log("\n" + "=".repeat(60));
-  console.log("🔧 STAGE 4: Railway Compilation Error Fixing Process");
-  console.log("=".repeat(60));
-  console.log(`📊 Input Summary:`);
-  console.log(`  - Total files: ${railwayResult.files.length}`);
-  console.log(`  - Railway errors: ${railwayResult.errors.length}`);
-  console.log(`  - Railway warnings: ${railwayResult.warnings.length}`);
-  console.log(`  - Railway info: ${railwayResult.info.length}`);
-  console.log(`  - Is Initial Generation: ${isInitialGeneration}`);
+  logger.log("\n" + "=".repeat(60));
+  logger.log("🔧 STAGE 4: Railway Compilation Error Fixing Process");
+  logger.log("=".repeat(60));
+  logger.log(`📊 Input Summary:`);
+  logger.log(`  - Total files: ${railwayResult.files.length}`);
+  logger.log(`  - Railway errors: ${railwayResult.errors.length}`);
+  logger.log(`  - Railway warnings: ${railwayResult.warnings.length}`);
+  logger.log(`  - Railway info: ${railwayResult.info.length}`);
+  logger.log(`  - Is Initial Generation: ${isInitialGeneration}`);
   
   // Use only Railway errors
-  console.log("\n🔍 Step 1: Processing Railway compilation errors...");
+  logger.log("\n🔍 Step 1: Processing Railway compilation errors...");
   const allErrors = railwayResult.errors;
-  console.log(`  ✅ Total errors to process: ${allErrors.length}`);
+  logger.log(`  ✅ Total errors to process: ${allErrors.length}`);
   
   // Group errors by file for easier processing
-  console.log("\n🔍 Step 2: Grouping errors by file...");
+  logger.log("\n🔍 Step 2: Grouping errors by file...");
   const errorsByFile = new Map<string, RailwayValidationError[]>();
   for (const error of allErrors) {
     if (!errorsByFile.has(error.file)) {
@@ -3066,26 +3067,26 @@ async function fixRailwayCompilationErrors(
     }
     errorsByFile.get(error.file)!.push(error);
   }
-  console.log(`  ✅ Errors grouped into ${errorsByFile.size} files`);
+  logger.log(`  ✅ Errors grouped into ${errorsByFile.size} files`);
   
   // Debug: Log error files and available files
-  console.log("\n🔍 Step 3: File matching analysis...");
-  console.log("  📋 Error files:", Array.from(errorsByFile.keys()));
-  console.log("  📋 Available files:", railwayResult.files.map(f => f.filename));
+  logger.log("\n🔍 Step 3: File matching analysis...");
+  logger.log("  📋 Error files:", Array.from(errorsByFile.keys()));
+  logger.log("  📋 Available files:", railwayResult.files.map(f => f.filename));
   
   // Get files that need fixing - try multiple matching strategies
-  console.log("\n🔍 Step 4: Finding files that need fixing...");
+  logger.log("\n🔍 Step 4: Finding files that need fixing...");
   let filesToFix = railwayResult.files.filter(file => 
     errorsByFile.has(file.filename)
   );
-  console.log(`  📊 Exact matches found: ${filesToFix.length} files`);
+  logger.log(`  📊 Exact matches found: ${filesToFix.length} files`);
 
   // If no exact matches, try to match by basename or relative path
   if (filesToFix.length === 0) {
-    console.log("  🔍 No exact filename matches found, trying alternative matching strategies...");
+    logger.log("  🔍 No exact filename matches found, trying alternative matching strategies...");
     
     // Try matching by basename (filename without path)
-    console.log("  🔍 Attempting basename matching...");
+    logger.log("  🔍 Attempting basename matching...");
     const errorBasenames = new Map<string, RailwayValidationError[]>();
     for (const [errorFile, errors] of errorsByFile.entries()) {
       const basename = path.basename(errorFile);
@@ -3094,7 +3095,7 @@ async function fixRailwayCompilationErrors(
       }
       errorBasenames.get(basename)!.push(...errors);
     }
-    console.log(`  📋 Error basenames: ${Array.from(errorBasenames.keys())}`);
+    logger.log(`  📋 Error basenames: ${Array.from(errorBasenames.keys())}`);
     
     filesToFix = railwayResult.files.filter(file => {
       const fileBasename = path.basename(file.filename);
@@ -3102,8 +3103,8 @@ async function fixRailwayCompilationErrors(
     });
     
     if (filesToFix.length > 0) {
-      console.log(`  ✅ Found ${filesToFix.length} files using basename matching`);
-      console.log(`  📋 Matched files: ${filesToFix.map(f => f.filename)}`);
+      logger.log(`  ✅ Found ${filesToFix.length} files using basename matching`);
+      logger.log(`  📋 Matched files: ${filesToFix.map(f => f.filename)}`);
       
       // Update errorsByFile to use the matched filenames
       const newErrorsByFile = new Map<string, RailwayValidationError[]>();
@@ -3112,7 +3113,7 @@ async function fixRailwayCompilationErrors(
         const errors = errorBasenames.get(fileBasename) || [];
         if (errors.length > 0) {
           newErrorsByFile.set(file.filename, errors);
-          console.log(`  🔗 Mapped ${fileBasename} -> ${file.filename} (${errors.length} errors)`);
+          logger.log(`  🔗 Mapped ${fileBasename} -> ${file.filename} (${errors.length} errors)`);
         }
       }
       // Replace the original errorsByFile
@@ -3120,21 +3121,21 @@ async function fixRailwayCompilationErrors(
         errorsByFile.set(key, value);
       }
     } else {
-      console.log("  ❌ No basename matches found either");
+      logger.log("  ❌ No basename matches found either");
     }
   }
 
   if (filesToFix.length === 0) {
-    console.log("\n❌ CRITICAL: No files identified for fixing!");
-    console.log("📋 This indicates a serious issue with error parsing or file mapping");
-    console.log("📋 Error files:", Array.from(errorsByFile.keys()));
-    console.log("📋 Available files:", railwayResult.files.map(f => f.filename));
-    console.log("📋 Returning original files - manual review required");
+    logger.log("\n❌ CRITICAL: No files identified for fixing!");
+    logger.log("📋 This indicates a serious issue with error parsing or file mapping");
+    logger.log("📋 Error files:", Array.from(errorsByFile.keys()));
+    logger.log("📋 Available files:", railwayResult.files.map(f => f.filename));
+    logger.log("📋 Returning original files - manual review required");
     return railwayResult.files;
   }
 
   // Create detailed error messages for LLM
-  console.log("\n🔍 Step 5: Creating error messages for LLM...");
+  logger.log("\n🔍 Step 5: Creating error messages for LLM...");
   const errorMessages = Array.from(errorsByFile.entries()).map(([file, errors]) => {
     const errorList = errors.map(e => {
       const location = e.line ? `Line ${e.line}${e.column ? `:${e.column}` : ''}` : 'Unknown location';
@@ -3144,32 +3145,32 @@ async function fixRailwayCompilationErrors(
     return `${file}:\n${errorList}`;
   }).join('\n\n');
 
-  console.log(`  ✅ Prepared error messages for ${filesToFix.length} files`);
-  console.log(`  📋 Files to fix: ${filesToFix.map(f => f.filename)}`);
-  console.log("  📋 Error summary:");
+  logger.log(`  ✅ Prepared error messages for ${filesToFix.length} files`);
+  logger.log(`  📋 Files to fix: ${filesToFix.map(f => f.filename)}`);
+  logger.log("  📋 Error summary:");
   filesToFix.forEach(file => {
     const errors = errorsByFile.get(file.filename) || [];
-    console.log(`    - ${file.filename}: ${errors.length} errors`);
+    logger.log(`    - ${file.filename}: ${errors.length} errors`);
   });
 
   // Call LLM to fix errors
-  console.log("\n🤖 Step 6: Calling LLM to fix errors...");
-  console.log(`  📤 Preparing LLM prompt for ${filesToFix.length} files...`);
+  logger.log("\n🤖 Step 6: Calling LLM to fix errors...");
+  logger.log(`  📤 Preparing LLM prompt for ${filesToFix.length} files...`);
   
   const fixPrompt = getStage4CompilationFixPrompt(filesToFix, errorMessages, isInitialGeneration);
-  console.log(`  📏 Prompt length: ${fixPrompt.length} characters`);
-  console.log(`  🎯 Generation type: ${isInitialGeneration ? 'Complete files' : 'Surgical diffs'}`);
+  logger.log(`  📏 Prompt length: ${fixPrompt.length} characters`);
+  logger.log(`  🎯 Generation type: ${isInitialGeneration ? 'Complete files' : 'Surgical diffs'}`);
   
-  console.log("  🚀 Calling LLM...");
+  logger.log("  🚀 Calling LLM...");
   const fixResponse = await callLLM(
     fixPrompt,
     "Stage 4: Railway Compilation Error Fixes",
     "STAGE_4_VALIDATOR"
   );
-  console.log(`  ✅ LLM response received: ${fixResponse.length} characters`);
+  logger.log(`  ✅ LLM response received: ${fixResponse.length} characters`);
 
   if (projectId) {
-    console.log("  📝 Logging response for debugging...");
+    logger.log("  📝 Logging response for debugging...");
     logStageResponse(projectId, 'stage4-railway-compilation-fixes', fixResponse, {
       railwayErrors: railwayResult.errors,
       filesToFix: filesToFix.length,
@@ -3184,31 +3185,31 @@ async function fixRailwayCompilationErrors(
   }
 
   // Parse and return fixed files
-  console.log("\n🔍 Step 7: Parsing LLM response...");
+  logger.log("\n🔍 Step 7: Parsing LLM response...");
   const fixedFiles = parseStage4ValidatorResponse(fixResponse);
-  console.log(`  ✅ Parsed ${fixedFiles.length} fixed files from LLM response`);
+  logger.log(`  ✅ Parsed ${fixedFiles.length} fixed files from LLM response`);
   
   // Merge fixed files with unchanged files
-  console.log("\n🔍 Step 8: Merging fixed and unchanged files...");
+  logger.log("\n🔍 Step 8: Merging fixed and unchanged files...");
   const unchangedFiles = railwayResult.files.filter(file => 
     !errorsByFile.has(file.filename)
   );
-  console.log(`  📊 Unchanged files: ${unchangedFiles.length}`);
-  console.log(`  📊 Fixed files: ${fixedFiles.length}`);
+  logger.log(`  📊 Unchanged files: ${unchangedFiles.length}`);
+  logger.log(`  📊 Fixed files: ${fixedFiles.length}`);
 
   const finalFiles = [...unchangedFiles];
   
   // Add fixed files
-  console.log("  🔄 Processing fixed files...");
+  logger.log("  🔄 Processing fixed files...");
   for (const fixedFile of fixedFiles) {
     if (fixedFile.content) {
-      console.log(`    ✅ ${fixedFile.filename}: Complete content provided`);
+      logger.log(`    ✅ ${fixedFile.filename}: Complete content provided`);
       finalFiles.push({
         filename: fixedFile.filename,
         content: fixedFile.content
       });
     } else if (fixedFile.unifiedDiff) {
-      console.log(`    🔧 ${fixedFile.filename}: Applying unified diff...`);
+      logger.log(`    🔧 ${fixedFile.filename}: Applying unified diff...`);
       // Apply diff to get final content
       const originalFile = railwayResult.files.find(f => f.filename === fixedFile.filename);
       if (originalFile) {
@@ -3218,41 +3219,41 @@ async function fixRailwayCompilationErrors(
             filename: fixedFile.filename,
             content: updatedContent
           });
-          console.log(`    ✅ ${fixedFile.filename}: Diff applied successfully`);
+          logger.log(`    ✅ ${fixedFile.filename}: Diff applied successfully`);
         } catch (error) {
-          console.warn(`    ⚠️ ${fixedFile.filename}: Failed to apply diff:`, error);
+          logger.warn(`    ⚠️ ${fixedFile.filename}: Failed to apply diff:`, error);
           finalFiles.push(originalFile);
         }
       } else {
-        console.warn(`    ❌ ${fixedFile.filename}: Original file not found for diff application`);
+        logger.warn(`    ❌ ${fixedFile.filename}: Original file not found for diff application`);
       }
     } else {
-      console.warn(`    ⚠️ ${fixedFile.filename}: No content or diff provided`);
+      logger.warn(`    ⚠️ ${fixedFile.filename}: No content or diff provided`);
     }
   }
 
   // Validate ABI preservation before returning
-  console.log("\n🔍 Step 9: Validating ABI preservation...");
+  logger.log("\n🔍 Step 9: Validating ABI preservation...");
   const validationResult = validateABIPreservation(railwayResult.files, finalFiles);
 
   if (!validationResult.isValid) {
-    console.warn("\n⚠️ ABI VALIDATION WARNINGS:");
-    validationResult.warnings.forEach(warning => console.warn(`  ${warning}`));
-    console.warn("  → Original ABIs have been restored automatically");
+    logger.warn("\n⚠️ ABI VALIDATION WARNINGS:");
+    validationResult.warnings.forEach(warning => logger.warn(`  ${warning}`));
+    logger.warn("  → Original ABIs have been restored automatically");
   } else {
-    console.log("  ✅ No ABI modifications detected");
+    logger.log("  ✅ No ABI modifications detected");
   }
 
-  console.log("\n" + "=".repeat(60));
-  console.log("🎉 STAGE 4: Railway Compilation Error Fixing Complete!");
-  console.log("=".repeat(60));
-  console.log(`📊 Final Results:`);
-  console.log(`  - Total files: ${finalFiles.length}`);
-  console.log(`  - Files fixed: ${fixedFiles.length}`);
-  console.log(`  - Files unchanged: ${unchangedFiles.length}`);
-  console.log(`  - Original errors: ${railwayResult.errors.length}`);
-  console.log(`  - ABI validation: ${validationResult.isValid ? '✅ Passed' : '⚠️ Issues auto-fixed'}`);
-  console.log("=".repeat(60));
+  logger.log("\n" + "=".repeat(60));
+  logger.log("🎉 STAGE 4: Railway Compilation Error Fixing Complete!");
+  logger.log("=".repeat(60));
+  logger.log(`📊 Final Results:`);
+  logger.log(`  - Total files: ${finalFiles.length}`);
+  logger.log(`  - Files fixed: ${fixedFiles.length}`);
+  logger.log(`  - Files unchanged: ${unchangedFiles.length}`);
+  logger.log(`  - Original errors: ${railwayResult.errors.length}`);
+  logger.log(`  - ABI validation: ${validationResult.isValid ? '✅ Passed' : '⚠️ Issues auto-fixed'}`);
+  logger.log("=".repeat(60));
 
   return finalFiles;
 }
@@ -3271,44 +3272,44 @@ async function fixCompilationErrors(
   projectId?: string,
   isInitialGeneration: boolean = false
 ): Promise<{ filename: string; content: string }[]> {
-  console.log("\n" + "=".repeat(60));
-  console.log("🔧 STAGE 4: Compilation Error Fixing Process");
-  console.log("=".repeat(60));
-  console.log(`📊 Input Summary:`);
-  console.log(`  - Total files: ${compilationResult.files.length}`);
-  console.log(`  - Compilation errors: ${compilationResult.errors.length}`);
-  console.log(`  - Compilation warnings: ${compilationResult.warnings.length}`);
-  console.log(`  - Compilation info: ${compilationResult.info.length}`);
-  console.log(`  - Is Initial Generation: ${isInitialGeneration}`);
+  logger.log("\n" + "=".repeat(60));
+  logger.log("🔧 STAGE 4: Compilation Error Fixing Process");
+  logger.log("=".repeat(60));
+  logger.log(`📊 Input Summary:`);
+  logger.log(`  - Total files: ${compilationResult.files.length}`);
+  logger.log(`  - Compilation errors: ${compilationResult.errors.length}`);
+  logger.log(`  - Compilation warnings: ${compilationResult.warnings.length}`);
+  logger.log(`  - Compilation info: ${compilationResult.info.length}`);
+  logger.log(`  - Is Initial Generation: ${isInitialGeneration}`);
   
   // Use only compilation errors (common issues detection removed due to false positives)
-  console.log("\n🔍 Step 1: Processing compilation errors...");
+  logger.log("\n🔍 Step 1: Processing compilation errors...");
   const allErrors = compilationResult.errors;
-  console.log(`  ✅ Total errors to process: ${allErrors.length}`);
+  logger.log(`  ✅ Total errors to process: ${allErrors.length}`);
   
   // Group errors by file for easier processing
-  console.log("\n🔍 Step 2: Grouping errors by file...");
+  logger.log("\n🔍 Step 2: Grouping errors by file...");
   const errorsByFile = CompilationErrorUtils.groupErrorsByFile(allErrors);
-  console.log(`  ✅ Errors grouped into ${errorsByFile.size} files`);
+  logger.log(`  ✅ Errors grouped into ${errorsByFile.size} files`);
   
   // Debug: Log error files and available files
-  console.log("\n🔍 Step 3: File matching analysis...");
-  console.log("  📋 Error files:", Array.from(errorsByFile.keys()));
-  console.log("  📋 Available files:", compilationResult.files.map(f => f.filename));
+  logger.log("\n🔍 Step 3: File matching analysis...");
+  logger.log("  📋 Error files:", Array.from(errorsByFile.keys()));
+  logger.log("  📋 Available files:", compilationResult.files.map(f => f.filename));
   
   // Get files that need fixing - try multiple matching strategies
-  console.log("\n🔍 Step 4: Finding files that need fixing...");
+  logger.log("\n🔍 Step 4: Finding files that need fixing...");
   let filesToFix = compilationResult.files.filter(file => 
     errorsByFile.has(file.filename)
   );
-  console.log(`  📊 Exact matches found: ${filesToFix.length} files`);
+  logger.log(`  📊 Exact matches found: ${filesToFix.length} files`);
 
   // If no exact matches, try to match by basename or relative path
   if (filesToFix.length === 0) {
-    console.log("  🔍 No exact filename matches found, trying alternative matching strategies...");
+    logger.log("  🔍 No exact filename matches found, trying alternative matching strategies...");
     
     // Try matching by basename (filename without path)
-    console.log("  🔍 Attempting basename matching...");
+    logger.log("  🔍 Attempting basename matching...");
     const errorBasenames = new Map<string, CompilationError[]>();
     for (const [errorFile, errors] of errorsByFile.entries()) {
       const basename = path.basename(errorFile);
@@ -3317,7 +3318,7 @@ async function fixCompilationErrors(
       }
       errorBasenames.get(basename)!.push(...errors);
     }
-    console.log(`  📋 Error basenames: ${Array.from(errorBasenames.keys())}`);
+    logger.log(`  📋 Error basenames: ${Array.from(errorBasenames.keys())}`);
     
     filesToFix = compilationResult.files.filter(file => {
       const fileBasename = path.basename(file.filename);
@@ -3325,8 +3326,8 @@ async function fixCompilationErrors(
     });
     
     if (filesToFix.length > 0) {
-      console.log(`  ✅ Found ${filesToFix.length} files using basename matching`);
-      console.log(`  📋 Matched files: ${filesToFix.map(f => f.filename)}`);
+      logger.log(`  ✅ Found ${filesToFix.length} files using basename matching`);
+      logger.log(`  📋 Matched files: ${filesToFix.map(f => f.filename)}`);
       
       // Update errorsByFile to use the matched filenames
       const newErrorsByFile = new Map<string, CompilationError[]>();
@@ -3335,7 +3336,7 @@ async function fixCompilationErrors(
         const errors = errorBasenames.get(fileBasename) || [];
         if (errors.length > 0) {
           newErrorsByFile.set(file.filename, errors);
-          console.log(`  🔗 Mapped ${fileBasename} -> ${file.filename} (${errors.length} errors)`);
+          logger.log(`  🔗 Mapped ${fileBasename} -> ${file.filename} (${errors.length} errors)`);
         }
       }
       // Replace the original errorsByFile
@@ -3343,21 +3344,21 @@ async function fixCompilationErrors(
         errorsByFile.set(key, value);
       }
     } else {
-      console.log("  ❌ No basename matches found either");
+      logger.log("  ❌ No basename matches found either");
     }
   }
 
   if (filesToFix.length === 0) {
-    console.log("\n❌ CRITICAL: No files identified for fixing!");
-    console.log("📋 This indicates a serious issue with error parsing or file mapping");
-    console.log("📋 Error files:", Array.from(errorsByFile.keys()));
-    console.log("📋 Available files:", compilationResult.files.map(f => f.filename));
-    console.log("📋 Returning original files - manual review required");
+    logger.log("\n❌ CRITICAL: No files identified for fixing!");
+    logger.log("📋 This indicates a serious issue with error parsing or file mapping");
+    logger.log("📋 Error files:", Array.from(errorsByFile.keys()));
+    logger.log("📋 Available files:", compilationResult.files.map(f => f.filename));
+    logger.log("📋 Returning original files - manual review required");
     return compilationResult.files;
   }
 
   // Create detailed error messages for LLM
-  console.log("\n🔍 Step 5: Creating error messages for LLM...");
+  logger.log("\n🔍 Step 5: Creating error messages for LLM...");
   const errorMessages = Array.from(errorsByFile.entries()).map(([file, errors]) => {
     const errorList = errors.map(e => {
       const location = e.line ? `Line ${e.line}${e.column ? `:${e.column}` : ''}` : 'Unknown location';
@@ -3367,32 +3368,32 @@ async function fixCompilationErrors(
     return `${file}:\n${errorList}`;
   }).join('\n\n');
 
-  console.log(`  ✅ Prepared error messages for ${filesToFix.length} files`);
-  console.log(`  📋 Files to fix: ${filesToFix.map(f => f.filename)}`);
-  console.log("  📋 Error summary:");
+  logger.log(`  ✅ Prepared error messages for ${filesToFix.length} files`);
+  logger.log(`  📋 Files to fix: ${filesToFix.map(f => f.filename)}`);
+  logger.log("  📋 Error summary:");
   filesToFix.forEach(file => {
     const errors = errorsByFile.get(file.filename) || [];
-    console.log(`    - ${file.filename}: ${errors.length} errors`);
+    logger.log(`    - ${file.filename}: ${errors.length} errors`);
   });
 
   // Call LLM to fix errors
-  console.log("\n🤖 Step 6: Calling LLM to fix errors...");
-  console.log(`  📤 Preparing LLM prompt for ${filesToFix.length} files...`);
+  logger.log("\n🤖 Step 6: Calling LLM to fix errors...");
+  logger.log(`  📤 Preparing LLM prompt for ${filesToFix.length} files...`);
   
   const fixPrompt = getStage4CompilationFixPrompt(filesToFix, errorMessages, isInitialGeneration);
-  console.log(`  📏 Prompt length: ${fixPrompt.length} characters`);
-  console.log(`  🎯 Generation type: ${isInitialGeneration ? 'Complete files' : 'Surgical diffs'}`);
+  logger.log(`  📏 Prompt length: ${fixPrompt.length} characters`);
+  logger.log(`  🎯 Generation type: ${isInitialGeneration ? 'Complete files' : 'Surgical diffs'}`);
   
-  console.log("  🚀 Calling LLM...");
+  logger.log("  🚀 Calling LLM...");
   const fixResponse = await callLLM(
     fixPrompt,
     "Stage 4: Compilation Error Fixes",
     "STAGE_4_VALIDATOR"
   );
-  console.log(`  ✅ LLM response received: ${fixResponse.length} characters`);
+  logger.log(`  ✅ LLM response received: ${fixResponse.length} characters`);
 
   if (projectId) {
-    console.log("  📝 Logging response for debugging...");
+    logger.log("  📝 Logging response for debugging...");
     logStageResponse(projectId, 'stage4-compilation-fixes', fixResponse, {
       compilationErrors: compilationResult.errors,
       filesToFix: filesToFix.length,
@@ -3401,31 +3402,31 @@ async function fixCompilationErrors(
   }
 
   // Parse and return fixed files
-  console.log("\n🔍 Step 7: Parsing LLM response...");
+  logger.log("\n🔍 Step 7: Parsing LLM response...");
   const fixedFiles = parseStage4ValidatorResponse(fixResponse);
-  console.log(`  ✅ Parsed ${fixedFiles.length} fixed files from LLM response`);
+  logger.log(`  ✅ Parsed ${fixedFiles.length} fixed files from LLM response`);
   
   // Merge fixed files with unchanged files
-  console.log("\n🔍 Step 8: Merging fixed and unchanged files...");
+  logger.log("\n🔍 Step 8: Merging fixed and unchanged files...");
   const unchangedFiles = compilationResult.files.filter(file => 
     !errorsByFile.has(file.filename)
   );
-  console.log(`  📊 Unchanged files: ${unchangedFiles.length}`);
-  console.log(`  📊 Fixed files: ${fixedFiles.length}`);
+  logger.log(`  📊 Unchanged files: ${unchangedFiles.length}`);
+  logger.log(`  📊 Fixed files: ${fixedFiles.length}`);
 
   const finalFiles = [...unchangedFiles];
   
   // Add fixed files
-  console.log("  🔄 Processing fixed files...");
+  logger.log("  🔄 Processing fixed files...");
   for (const fixedFile of fixedFiles) {
     if (fixedFile.content) {
-      console.log(`    ✅ ${fixedFile.filename}: Complete content provided`);
+      logger.log(`    ✅ ${fixedFile.filename}: Complete content provided`);
       finalFiles.push({
         filename: fixedFile.filename,
         content: fixedFile.content
       });
     } else if (fixedFile.unifiedDiff) {
-      console.log(`    🔧 ${fixedFile.filename}: Applying unified diff...`);
+      logger.log(`    🔧 ${fixedFile.filename}: Applying unified diff...`);
       // Apply diff to get final content
       const originalFile = compilationResult.files.find(f => f.filename === fixedFile.filename);
       if (originalFile) {
@@ -3435,41 +3436,41 @@ async function fixCompilationErrors(
             filename: fixedFile.filename,
             content: updatedContent
           });
-          console.log(`    ✅ ${fixedFile.filename}: Diff applied successfully`);
+          logger.log(`    ✅ ${fixedFile.filename}: Diff applied successfully`);
         } catch (error) {
-          console.warn(`    ⚠️ ${fixedFile.filename}: Failed to apply diff:`, error);
+          logger.warn(`    ⚠️ ${fixedFile.filename}: Failed to apply diff:`, error);
           finalFiles.push(originalFile);
         }
       } else {
-        console.warn(`    ❌ ${fixedFile.filename}: Original file not found for diff application`);
+        logger.warn(`    ❌ ${fixedFile.filename}: Original file not found for diff application`);
       }
     } else {
-      console.warn(`    ⚠️ ${fixedFile.filename}: No content or diff provided`);
+      logger.warn(`    ⚠️ ${fixedFile.filename}: No content or diff provided`);
     }
   }
 
   // Validate ABI preservation before returning
-  console.log("\n🔍 Step 9: Validating ABI preservation...");
+  logger.log("\n🔍 Step 9: Validating ABI preservation...");
   const validationResult = validateABIPreservation(compilationResult.files, finalFiles);
 
   if (!validationResult.isValid) {
-    console.warn("\n⚠️ ABI VALIDATION WARNINGS:");
-    validationResult.warnings.forEach(warning => console.warn(`  ${warning}`));
-    console.warn("  → Original ABIs have been restored automatically");
+    logger.warn("\n⚠️ ABI VALIDATION WARNINGS:");
+    validationResult.warnings.forEach(warning => logger.warn(`  ${warning}`));
+    logger.warn("  → Original ABIs have been restored automatically");
   } else {
-    console.log("  ✅ No ABI modifications detected");
+    logger.log("  ✅ No ABI modifications detected");
   }
 
-  console.log("\n" + "=".repeat(60));
-  console.log("🎉 STAGE 4: Compilation Error Fixing Complete!");
-  console.log("=".repeat(60));
-  console.log(`📊 Final Results:`);
-  console.log(`  - Total files: ${finalFiles.length}`);
-  console.log(`  - Files fixed: ${fixedFiles.length}`);
-  console.log(`  - Files unchanged: ${unchangedFiles.length}`);
-  console.log(`  - Original errors: ${compilationResult.errors.length}`);
-  console.log(`  - ABI validation: ${validationResult.isValid ? '✅ Passed' : '⚠️ Issues auto-fixed'}`);
-  console.log("=".repeat(60));
+  logger.log("\n" + "=".repeat(60));
+  logger.log("🎉 STAGE 4: Compilation Error Fixing Complete!");
+  logger.log("=".repeat(60));
+  logger.log(`📊 Final Results:`);
+  logger.log(`  - Total files: ${finalFiles.length}`);
+  logger.log(`  - Files fixed: ${fixedFiles.length}`);
+  logger.log(`  - Files unchanged: ${unchangedFiles.length}`);
+  logger.log(`  - Original errors: ${compilationResult.errors.length}`);
+  logger.log(`  - ABI validation: ${validationResult.isValid ? '✅ Passed' : '⚠️ Issues auto-fixed'}`);
+  logger.log("=".repeat(60));
 
   return finalFiles;
 }
@@ -3691,7 +3692,7 @@ export async function executeMultiStagePipeline(
   isInitialGeneration: boolean = false
 ): Promise<{ files: { filename: string; content: string }[]; intentSpec: IntentSpec }> {
   // Delegate to the appropriate specialized pipeline
-  console.log("⚠️ Using legacy executeMultiStagePipeline - consider using specialized pipelines");
+  logger.log("⚠️ Using legacy executeMultiStagePipeline - consider using specialized pipelines");
   
   if (isInitialGeneration) {
     return executeInitialGenerationPipeline(userPrompt, currentFiles, callLLM, projectId);
@@ -3712,19 +3713,19 @@ export async function callLLMWithLogging(
   callLLM: (systemPrompt: string, userPrompt: string) => Promise<string>,
   stageName: string
 ): Promise<string> {
-  console.log(`\n🤖 LLM Call - ${stageName}`);
-  console.log("📤 Input:");
-  console.log("  System Prompt Length:", systemPrompt.length, "chars");
-  console.log("  User Prompt:", userPrompt);
+  logger.log(`\n🤖 LLM Call - ${stageName}`);
+  logger.log("📤 Input:");
+  logger.log("  System Prompt Length:", systemPrompt.length, "chars");
+  logger.log("  User Prompt:", userPrompt);
 
   const startTime = Date.now();
   const response = await callLLM(systemPrompt, userPrompt);
   const endTime = Date.now();
 
-  console.log("📥 Output:");
-  console.log("  Response Length:", response.length, "chars");
-  console.log("  Response Time:", endTime - startTime, "ms");
-  console.log("  Raw Response Preview:", response.substring(0, 300) + "...");
+  logger.log("📥 Output:");
+  logger.log("  Response Length:", response.length, "chars");
+  logger.log("  Response Time:", endTime - startTime, "ms");
+  logger.log("  Raw Response Preview:", response.substring(0, 300) + "...");
 
   return response;
 }

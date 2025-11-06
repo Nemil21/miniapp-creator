@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
@@ -60,22 +62,22 @@ const EXCLUDED_FILES = [
 async function fetchFileContent(filePath: string, projectId?: string, sessionToken?: string): Promise<string> {
     if (projectId && sessionToken) {
         try {
-            console.log(`🌐 Fetching file from API: /api/files?file=${encodeURIComponent(filePath)}&projectId=${projectId}`);
+            logger.log(`🌐 Fetching file from API: /api/files?file=${encodeURIComponent(filePath)}&projectId=${projectId}`);
             const response = await fetch(`/api/files?file=${encodeURIComponent(filePath)}&projectId=${projectId}`, {
                 headers: { 'Authorization': `Bearer ${sessionToken}` }
             });
-            console.log(`📡 API response status: ${response.status} ${response.statusText}`);
+            logger.log(`📡 API response status: ${response.status} ${response.statusText}`);
             if (response.ok) {
                 const content = await response.text();
-                console.log(`✅ File content received: ${content.length} characters`);
+                logger.log(`✅ File content received: ${content.length} characters`);
                 return content;
             } else {
-                console.error(`❌ API error: ${response.status} ${response.statusText}`);
+                logger.error(`❌ API error: ${response.status} ${response.statusText}`);
                 const errorText = await response.text();
-                console.error(`❌ Error response: ${errorText}`);
+                logger.error(`❌ Error response: ${errorText}`);
             }
         } catch (error) {
-            console.error(`❌ Network error fetching file ${filePath}:`, error);
+            logger.error(`❌ Network error fetching file ${filePath}:`, error);
         }
     }
     return '// File not found or error loading content';
@@ -86,7 +88,7 @@ async function fetchProjectFilesFromDB(projectId: string, sessionToken?: string)
     if (!sessionToken) return [];
     
     try {
-        console.log(`🔍 Fetching project files from database for project: ${projectId}`);
+        logger.log(`🔍 Fetching project files from database for project: ${projectId}`);
         const response = await fetch(`/api/projects/${projectId}`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
@@ -96,10 +98,10 @@ async function fetchProjectFilesFromDB(projectId: string, sessionToken?: string)
             const files = data.project?.files || [];
             return files.map((f: { filename: string }) => f.filename);
         } else {
-            console.error(`❌ HTTP error: ${response.status} ${response.statusText}`);
+            logger.error(`❌ HTTP error: ${response.status} ${response.statusText}`);
         }
     } catch (error) {
-        console.error('❌ Network error fetching project files from database:', error);
+        logger.error('❌ Network error fetching project files from database:', error);
     }
     return [];
 }
@@ -107,30 +109,30 @@ async function fetchProjectFilesFromDB(projectId: string, sessionToken?: string)
 // Fetch file content from database
 async function fetchFileContentFromDB(filePath: string, projectId: string, sessionToken: string): Promise<string> {
     try {
-        console.log(`🗄️ Fetching file from database: /api/projects/${projectId}`);
+        logger.log(`🗄️ Fetching file from database: /api/projects/${projectId}`);
         const response = await fetch(`/api/projects/${projectId}`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
 
-        console.log(`📡 Database API response status: ${response.status} ${response.statusText}`);
+        logger.log(`📡 Database API response status: ${response.status} ${response.statusText}`);
         if (response.ok) {
             const data = await response.json();
             const files = data.project?.files || [];
-            console.log(`📁 Database files found: ${files.length} files`);
+            logger.log(`📁 Database files found: ${files.length} files`);
             const file = files.find((f: { filename: string; content: string }) => f.filename === filePath);
             if (file) {
-                console.log(`✅ File found in database: ${filePath} (${file.content.length} chars)`);
+                logger.log(`✅ File found in database: ${filePath} (${file.content.length} chars)`);
                 return file.content;
             } else {
-                console.log(`❌ File not found in database: ${filePath}`);
+                logger.log(`❌ File not found in database: ${filePath}`);
             }
         } else {
-            console.error(`❌ Database API error: ${response.status} ${response.statusText}`);
+            logger.error(`❌ Database API error: ${response.status} ${response.statusText}`);
             const errorText = await response.text();
-            console.error(`❌ Database error response: ${errorText}`);
+            logger.error(`❌ Database error response: ${errorText}`);
         }
     } catch (error) {
-        console.error(`❌ Network error fetching file ${filePath} from database:`, error);
+        logger.error(`❌ Network error fetching file ${filePath} from database:`, error);
     }
     return '// File not found or error loading content';
 }
@@ -140,7 +142,7 @@ async function fetchProjectFiles(projectId: string, sessionToken?: string): Prom
     if (!sessionToken) return [];
     
     try {
-        console.log(`🔍 Fetching project files for project: ${projectId}`);
+        logger.log(`🔍 Fetching project files for project: ${projectId}`);
         const response = await fetch(`/api/files?projectId=${projectId}&listFiles=true`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
@@ -148,7 +150,7 @@ async function fetchProjectFiles(projectId: string, sessionToken?: string): Prom
         if (response.ok) {
             const responseText = await response.text();
             if (!responseText.trim()) {
-                console.warn('⚠️ Empty response from server');
+                logger.warn('⚠️ Empty response from server');
                 return [];
             }
 
@@ -156,14 +158,14 @@ async function fetchProjectFiles(projectId: string, sessionToken?: string): Prom
                 const data = JSON.parse(responseText);
                 return data.files || [];
             } catch (parseError) {
-                console.error('❌ JSON parsing failed:', parseError);
+                logger.error('❌ JSON parsing failed:', parseError);
                 return [];
             }
         } else {
-            console.error(`❌ HTTP error: ${response.status} ${response.statusText}`);
+            logger.error(`❌ HTTP error: ${response.status} ${response.statusText}`);
         }
     } catch (error) {
-        console.error('❌ Network error fetching project files:', error);
+        logger.error('❌ Network error fetching project files:', error);
     }
     return [];
 }
@@ -324,26 +326,26 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     // Global error handler for Monaco Editor
     useEffect(() => {
         const handleError = (event: ErrorEvent) => {
-            console.log('🔍 Global error detected:', event.message, event.filename);
+            logger.log('🔍 Global error detected:', event.message, event.filename);
             if (event.message && (
                 event.message.includes('monaco-editor') || 
                 event.message.includes('Monaco') ||
                 event.message.includes('Monaco initialization') ||
                 event.filename?.includes('monaco-editor')
             )) {
-                console.error('❌ Monaco Editor error detected:', event.message);
+                logger.error('❌ Monaco Editor error detected:', event.message);
                 setMonacoError(true);
             }
         };
 
         const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-            console.log('🔍 Unhandled promise rejection:', event.reason);
+            logger.log('🔍 Unhandled promise rejection:', event.reason);
             if (event.reason && (
                 event.reason.toString().includes('monaco-editor') ||
                 event.reason.toString().includes('Monaco') ||
                 event.reason.toString().includes('Monaco initialization')
             )) {
-                console.error('❌ Monaco Editor promise rejection:', event.reason);
+                logger.error('❌ Monaco Editor promise rejection:', event.reason);
                 setMonacoError(true);
             }
         };
@@ -352,7 +354,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
         const handleScriptError = (event: Event) => {
             const target = event.target as HTMLScriptElement;
             if (target && target.src && target.src.includes('monaco-editor')) {
-                console.log('❌ Monaco Editor script loading error detected');
+                logger.log('❌ Monaco Editor script loading error detected');
                 setMonacoError(true);
             }
         };
@@ -371,10 +373,10 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     // Monaco Editor load timeout - if Monaco doesn't load within 10 seconds, show fallback
     useEffect(() => {
         if (selectedFile && fileContent && !monacoError) {
-            console.log('⏰ Starting Monaco load timeout for file:', selectedFile);
+            logger.log('⏰ Starting Monaco load timeout for file:', selectedFile);
             const timeout = setTimeout(() => {
-                console.log('⏰ Monaco Editor load timeout (10s) - switching to fallback');
-                console.log('⏰ This means Monaco never called onMount()');
+                logger.log('⏰ Monaco Editor load timeout (10s) - switching to fallback');
+                logger.log('⏰ This means Monaco never called onMount()');
                 setMonacoError(true);
             }, 10000); // 10 second timeout - give Monaco plenty of time
 
@@ -392,9 +394,9 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     // Monaco load timeout increased to give it more time to load
     useEffect(() => {
         if (selectedFile && fileContent && !monacoError) {
-            console.log('⏰ Monaco load monitor started for:', selectedFile);
+            logger.log('⏰ Monaco load monitor started for:', selectedFile);
             const timeout = setTimeout(() => {
-                console.log('⏰ Monaco taking longer than expected, but staying patient...');
+                logger.log('⏰ Monaco taking longer than expected, but staying patient...');
                 // Increased timeout - Monaco can take time in production
             }, 5000); // 5 second monitoring
 
@@ -405,39 +407,39 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     // Debug logging for fallback editor
     useEffect(() => {
         if (monacoError && fileContent) {
-            console.log(`📝 Fallback editor active - fileContent length: ${fileContent?.length || 0}, content preview: ${fileContent?.substring(0, 100) || 'empty'}...`);
+            logger.log(`📝 Fallback editor active - fileContent length: ${fileContent?.length || 0}, content preview: ${fileContent?.substring(0, 100) || 'empty'}...`);
         }
     }, [monacoError, fileContent]);
 
     // Fetch project files when project is created
     useEffect(() => {
         if (currentProject && sessionToken) {
-            console.log(`🔍 Loading project files for project: ${currentProject.projectId}`);
+            logger.log(`🔍 Loading project files for project: ${currentProject.projectId}`);
             // Try database first, then fallback to file system
             fetchProjectFilesFromDB(currentProject.projectId, sessionToken).then(files => {
-                console.log(`📁 Database files found:`, files);
+                logger.log(`📁 Database files found:`, files);
                 if (files.length > 0) {
                     setFileTree(createFileTree(files));
                     // Set first available file as selected
                     const firstFile = files.find(f => f.includes('page.tsx')) || files[0];
-                    console.log(`📄 Setting first file as selected: ${firstFile}`);
+                    logger.log(`📄 Setting first file as selected: ${firstFile}`);
                     setSelectedFile(firstFile);
                 } else {
-                    console.log(`⚠️ No files found in database, trying file system for project: ${currentProject.projectId}`);
+                    logger.log(`⚠️ No files found in database, trying file system for project: ${currentProject.projectId}`);
                     // Fallback to file system
                     fetchProjectFiles(currentProject.projectId, sessionToken).then(files => {
-                        console.log(`📁 File system files found:`, files);
+                        logger.log(`📁 File system files found:`, files);
                         setFileTree(createFileTree(files));
                         if (files.length > 0) {
                             const firstFile = files.find(f => f.includes('page.tsx')) || files[0];
-                            console.log(`📄 Setting first file as selected: ${firstFile}`);
+                            logger.log(`📄 Setting first file as selected: ${firstFile}`);
                             setSelectedFile(firstFile);
                         }
                     });
                 }
             });
         } else {
-            console.log(`⚠️ Missing requirements for file tree loading:`, {
+            logger.log(`⚠️ Missing requirements for file tree loading:`, {
                 hasProject: !!currentProject,
                 hasSessionToken: !!sessionToken
             });
@@ -447,16 +449,16 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
     // Fetch file content when selected file changes
     useEffect(() => {
         if (currentProject && selectedFile && sessionToken) {
-            console.log(`🔍 Loading file content for: ${selectedFile} in project: ${currentProject.projectId}`);
-            console.log(`🌍 Environment: ${process.env.NODE_ENV} | URL: ${window.location.origin}`);
-            console.log(`🔑 Session token present: ${!!sessionToken}`);
+            logger.log(`🔍 Loading file content for: ${selectedFile} in project: ${currentProject.projectId}`);
+            logger.log(`🌍 Environment: ${process.env.NODE_ENV} | URL: ${window.location.origin}`);
+            logger.log(`🔑 Session token present: ${!!sessionToken}`);
             
             setIsLoadingContent(true);
             setFileContent(''); // Clear previous content
             
             // Set a timeout to prevent infinite loading
             const timeoutId = setTimeout(() => {
-                console.error(`⏰ Timeout loading file content for: ${selectedFile}`);
+                logger.error(`⏰ Timeout loading file content for: ${selectedFile}`);
                 setIsLoadingContent(false);
                 setFileContent('// File loading timeout - please try again');
             }, 10000); // 10 second timeout
@@ -464,31 +466,31 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
             // Try database first, then fallback to file system
             fetchFileContentFromDB(selectedFile, currentProject.projectId, sessionToken).then(content => {
                 clearTimeout(timeoutId);
-                console.log(`📄 Database content for ${selectedFile}:`, content.substring(0, 100) + '...');
+                logger.log(`📄 Database content for ${selectedFile}:`, content.substring(0, 100) + '...');
                 if (content !== '// File not found or error loading content') {
-                    console.log(`✅ Setting file content from database: ${content.length} characters`);
+                    logger.log(`✅ Setting file content from database: ${content.length} characters`);
                     setFileContent(content);
                     setOriginalContent(content);
                     setHasUnsavedChanges(false);
                     setIsLoadingContent(false); // Stop loading when content is successfully loaded
                 } else {
-                    console.log(`⚠️ File not found in database, trying file system for: ${selectedFile}`);
+                    logger.log(`⚠️ File not found in database, trying file system for: ${selectedFile}`);
                     // Fallback to file system
                     fetchFileContent(selectedFile, currentProject.projectId, sessionToken).then(fileSystemContent => {
-                        console.log(`📄 File system content for ${selectedFile}:`, fileSystemContent.substring(0, 100) + '...');
-                        console.log(`✅ Setting file content from file system: ${fileSystemContent.length} characters`);
+                        logger.log(`📄 File system content for ${selectedFile}:`, fileSystemContent.substring(0, 100) + '...');
+                        logger.log(`✅ Setting file content from file system: ${fileSystemContent.length} characters`);
                         setFileContent(fileSystemContent);
                         setIsLoadingContent(false);
                     });
                 }
             }).catch(error => {
                 clearTimeout(timeoutId);
-                console.error(`❌ Error loading file content:`, error);
+                logger.error(`❌ Error loading file content:`, error);
                 setFileContent('// Error loading file content');
                 setIsLoadingContent(false);
             });
         } else {
-            console.log(`⚠️ Missing requirements for file loading:`, {
+            logger.log(`⚠️ Missing requirements for file loading:`, {
                 hasProject: !!currentProject,
                 hasSelectedFile: !!selectedFile,
                 hasSessionToken: !!sessionToken
@@ -509,7 +511,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
         if (!selectedFile || !currentProject?.projectId) return;
         
         if (!sessionToken) {
-            console.error('❌ No session token available');
+            logger.error('❌ No session token available');
             alert('Authentication required. Please refresh the page and log in again.');
             return;
         }
@@ -536,9 +538,9 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
 
             setOriginalContent(fileContent);
             setHasUnsavedChanges(false);
-            console.log('✅ File saved successfully');
+            logger.log('✅ File saved successfully');
         } catch (error) {
-            console.error('❌ Error saving file:', error);
+            logger.error('❌ Error saving file:', error);
             const message = error instanceof Error ? error.message : 'Failed to save file';
             alert(message);
         } finally {
@@ -550,7 +552,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
         if (!selectedFile || !currentProject?.projectId) return;
         
         if (!sessionToken) {
-            console.error('❌ No session token available');
+            logger.error('❌ No session token available');
             alert('Authentication required. Please refresh the page and log in again.');
             return;
         }
@@ -580,12 +582,12 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
             setOriginalContent(fileContent);
             setHasUnsavedChanges(false);
             setDeploymentStatus('✅ Deployed successfully!');
-            console.log('✅ File saved and redeployed:', data.deploymentUrl);
+            logger.log('✅ File saved and redeployed:', data.deploymentUrl);
             
             // Clear status after 3 seconds
             setTimeout(() => setDeploymentStatus(''), 3000);
         } catch (error) {
-            console.error('❌ Error saving and redeploying:', error);
+            logger.error('❌ Error saving and redeploying:', error);
             const message = error instanceof Error ? error.message : 'Deployment failed';
             setDeploymentStatus(`❌ ${message}`);
             setTimeout(() => setDeploymentStatus(''), 5000);
@@ -664,7 +666,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                     <div className="flex-1">
                         {selectedFile ? (
                             <>
-                                {console.log(`🎨 Rendering Monaco editor for ${selectedFile} with content length: ${fileContent.length}, loading: ${isLoadingContent}`)}
+                                {logger.log(`🎨 Rendering Monaco editor for ${selectedFile} with content length: ${fileContent.length}, loading: ${isLoadingContent}`)}
                                 {isLoadingContent ? (
                                     <div className="text-black-60 text-sm text-center flex-1 flex items-center justify-center">
                                         Loading file content...
@@ -672,7 +674,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                 ) : fileContent && fileContent !== '// File not found or error loading content' && !fileContent.includes('timeout') && !fileContent.includes('Error loading') ? (
                                     !monacoError ? (
                                         <>
-                                            {console.log('🎯 Attempting to render Monaco Editor for:', selectedFile, 'monacoError:', monacoError)}
+                                            {logger.log('🎯 Attempting to render Monaco Editor for:', selectedFile, 'monacoError:', monacoError)}
                                             <MonacoEditor
                                                 height="100%"
                                                 language={getLanguage(selectedFile)}
@@ -686,9 +688,9 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                     </div>
                                                 }
                                                 onMount={(editor, monaco) => {
-                                                    console.log('✅ Monaco Editor mounted successfully!');
-                                                    console.log('✅ Editor instance:', !!editor);
-                                                    console.log('✅ Monaco instance:', !!monaco);
+                                                    logger.log('✅ Monaco Editor mounted successfully!');
+                                                    logger.log('✅ Editor instance:', !!editor);
+                                                    logger.log('✅ Monaco instance:', !!monaco);
                                                     setMonacoError(false);
                                                     // Clear the timeout since Monaco loaded successfully
                                                     if (monacoLoadTimeout) {
@@ -697,7 +699,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                     }
                                                 }}
                                                 onValidate={(markers) => {
-                                                    console.log('📊 Monaco validation markers:', markers.length);
+                                                    logger.log('📊 Monaco validation markers:', markers.length);
                                                 }}
                                             beforeMount={(monaco) => {
                                                 try {
@@ -713,7 +715,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                         typeRoots: ["node_modules/@types"]
                                                     });
                                                 } catch (error) {
-                                                    console.error('❌ Monaco Editor configuration error:', error);
+                                                    logger.error('❌ Monaco Editor configuration error:', error);
                                                     setMonacoError(true);
                                                 }
                                             }}
@@ -736,7 +738,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                                 {monacoRetryCount < 3 && (
                                                     <button
                                                         onClick={() => {
-                                                            console.log('🔄 Retrying Monaco Editor...');
+                                                            logger.log('🔄 Retrying Monaco Editor...');
                                                             setMonacoError(false);
                                                             setMonacoRetryCount(prev => prev + 1);
                                                         }}

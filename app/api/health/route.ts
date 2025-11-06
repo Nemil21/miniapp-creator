@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import { NextResponse } from 'next/server';
 import { db } from '../../../db';
 import { sql } from 'drizzle-orm';
@@ -21,7 +22,7 @@ export async function GET() {
   const timestamp = new Date().toISOString();
   const startTime = Date.now();
 
-  console.log('🏥 Health check requested at', timestamp);
+  logger.log('🏥 Health check requested at', timestamp);
 
   // Check database connection
   let databaseStatus = 'connected';
@@ -30,10 +31,10 @@ export async function GET() {
     const dbStart = Date.now();
     await db.execute(sql`SELECT 1 as health_check`);
     databaseLatency = Date.now() - dbStart;
-    console.log(`✅ Database: connected (${databaseLatency}ms)`);
+    logger.log(`✅ Database: connected (${databaseLatency}ms)`);
   } catch (error) {
     databaseStatus = 'disconnected';
-    console.error('❌ Database: disconnected', error);
+    logger.error('❌ Database: disconnected', error);
   }
 
   // Check preview host connection
@@ -51,18 +52,18 @@ export async function GET() {
       
       if (response.ok) {
         previewHostStatus = 'connected';
-        console.log(`✅ Preview host: connected (${previewHostLatency}ms)`);
+        logger.log(`✅ Preview host: connected (${previewHostLatency}ms)`);
       } else {
         previewHostStatus = 'error';
-        console.warn(`⚠️ Preview host: returned ${response.status}`);
+        logger.warn(`⚠️ Preview host: returned ${response.status}`);
       }
     } catch (error) {
       previewHostStatus = 'disconnected';
-      console.error('❌ Preview host: disconnected', error);
+      logger.error('❌ Preview host: disconnected', error);
     }
   } else {
     previewHostStatus = 'not_configured';
-    console.warn('⚠️ Preview host: PREVIEW_API_BASE not configured');
+    logger.warn('⚠️ Preview host: PREVIEW_API_BASE not configured');
   }
 
   // Determine overall status
@@ -114,7 +115,7 @@ export async function GET() {
   };
 
   // Log overall status
-  console.log(`🏥 Health check complete: ${status} (${responseTime}ms)\n`);
+  logger.log(`🏥 Health check complete: ${status} (${responseTime}ms)\n`);
 
   // Return appropriate HTTP status code
   const httpStatus = status === 'healthy' ? 200 : status === 'degraded' ? 200 : 503;

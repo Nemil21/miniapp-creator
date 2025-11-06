@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 // Railway validation client for minidev
 // Handles communication with Railway's validation API
 
@@ -73,17 +74,17 @@ export class RailwayValidationClient {
     },
     projectDir?: string // Optional: path to complete project directory (boilerplate + generated files)
   ): Promise<RailwayValidationResult> {
-    console.log(`🚂 Calling Railway validation API for project: ${projectId}`);
-    console.log(`📁 Generated files to validate: ${files.length}`);
-    console.log(`⚙️  Validation config:`, validationConfig);
+    logger.log(`🚂 Calling Railway validation API for project: ${projectId}`);
+    logger.log(`📁 Generated files to validate: ${files.length}`);
+    logger.log(`⚙️  Validation config:`, validationConfig);
 
     // Use complete project directory if provided, otherwise build from scratch
     const completeFilesObject = projectDir 
       ? await this.buildCompleteProjectFilesFromDir(projectDir, files)
       : await this.buildCompleteProjectFiles(files);
     
-    console.log(`📁 Complete project files: ${Object.keys(completeFilesObject).length}`);
-    console.log(`📋 Files included:`, Object.keys(completeFilesObject).slice(0, 10).join(', ') + (Object.keys(completeFilesObject).length > 10 ? '...' : ''));
+    logger.log(`📁 Complete project files: ${Object.keys(completeFilesObject).length}`);
+    logger.log(`📋 Files included:`, Object.keys(completeFilesObject).slice(0, 10).join(', ') + (Object.keys(completeFilesObject).length > 10 ? '...' : ''));
 
     const requestBody: RailwayValidationRequest = {
       projectId,
@@ -91,8 +92,8 @@ export class RailwayValidationClient {
       validationConfig
     };
 
-    console.log(`📤 Sending validation request to: ${this.apiBase}/validate`);
-    console.log(`📏 Request size: ${JSON.stringify(requestBody).length} characters`);
+    logger.log(`📤 Sending validation request to: ${this.apiBase}/validate`);
+    logger.log(`📏 Request size: ${JSON.stringify(requestBody).length} characters`);
 
     // Retry logic with exponential backoff
     const maxRetries = 3;
@@ -100,46 +101,46 @@ export class RailwayValidationClient {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🔄 Railway validation attempt ${attempt}/${maxRetries}`);
+        logger.log(`🔄 Railway validation attempt ${attempt}/${maxRetries}`);
         
         const startTime = Date.now();
         const response = await this.makeRequest('/validate', requestBody);
         const requestTime = Date.now() - startTime;
         
-        console.log(`📥 Railway validation response received in ${requestTime}ms`);
-        console.log(`✅ Success: ${response.success}`);
-        console.log(`❌ Errors: ${response.errors?.length || 0}`);
-        console.log(`⚠️  Warnings: ${response.warnings?.length || 0}`);
+        logger.log(`📥 Railway validation response received in ${requestTime}ms`);
+        logger.log(`✅ Success: ${response.success}`);
+        logger.log(`❌ Errors: ${response.errors?.length || 0}`);
+        logger.log(`⚠️  Warnings: ${response.warnings?.length || 0}`);
         
         // Log detailed response for debugging
-        console.log(`📋 Full validation response:`, JSON.stringify(response, null, 2));
+        logger.log(`📋 Full validation response:`, JSON.stringify(response, null, 2));
         
         // Log error details if present
         if (response.errors && response.errors.length > 0) {
-          console.log(`🔍 Error details:`);
+          logger.log(`🔍 Error details:`);
           response.errors.forEach((error, index) => {
-            console.log(`  ${index + 1}. ${error.file}:${error.line}:${error.column} - ${error.message}`);
-            if (error.severity) console.log(`     Severity: ${error.severity}, Category: ${error.category}`);
+            logger.log(`  ${index + 1}. ${error.file}:${error.line}:${error.column} - ${error.message}`);
+            if (error.severity) logger.log(`     Severity: ${error.severity}, Category: ${error.category}`);
           });
         }
         
         // Log warning details if present
         if (response.warnings && response.warnings.length > 0) {
-          console.log(`⚠️  Warning details:`);
+          logger.log(`⚠️  Warning details:`);
           response.warnings.forEach((warning, index) => {
-            console.log(`  ${index + 1}. ${warning.file}:${warning.line}:${warning.column} - ${warning.message}`);
-            if (warning.severity) console.log(`     Severity: ${warning.severity}, Category: ${warning.category}`);
+            logger.log(`  ${index + 1}. ${warning.file}:${warning.line}:${warning.column} - ${warning.message}`);
+            if (warning.severity) logger.log(`     Severity: ${warning.severity}, Category: ${warning.category}`);
           });
         }
         
         // Log validation summary if present
         if (response.validationSummary) {
-          console.log(`📊 Validation summary:`, response.validationSummary);
+          logger.log(`📊 Validation summary:`, response.validationSummary);
         }
         
         // Log compilation time if present
         if (response.compilationTime) {
-          console.log(`⏱️  Compilation time: ${response.compilationTime}ms`);
+          logger.log(`⏱️  Compilation time: ${response.compilationTime}ms`);
         }
 
         return response as RailwayValidationResult;
@@ -147,23 +148,23 @@ export class RailwayValidationClient {
       } catch (error) {
         const isLastAttempt = attempt === maxRetries;
         
-        console.error(`❌ Railway validation attempt ${attempt} failed:`, error);
+        logger.error(`❌ Railway validation attempt ${attempt} failed:`, error);
         
         // Log detailed error information
         if (error instanceof Error) {
-          console.error(`🔍 Error details:`, {
+          logger.error(`🔍 Error details:`, {
             message: error.message,
             stack: error.stack,
             name: error.name
           });
         } else {
-          console.error(`🔍 Error object:`, error);
+          logger.error(`🔍 Error object:`, error);
         }
         
         // Check if error has response data (HTTP error)
         if (error && typeof error === 'object' && 'response' in error) {
           const httpError = error as { response?: { status?: number; statusText?: string; data?: unknown } };
-          console.error(`🌐 HTTP Error Response:`, {
+          logger.error(`🌐 HTTP Error Response:`, {
             status: httpError.response?.status,
             statusText: httpError.response?.statusText,
             data: httpError.response?.data
@@ -171,13 +172,13 @@ export class RailwayValidationClient {
         }
         
         if (isLastAttempt) {
-          console.error(`❌ All ${maxRetries} Railway validation attempts failed`);
+          logger.error(`❌ All ${maxRetries} Railway validation attempts failed`);
           throw new Error(`Railway validation failed after ${maxRetries} attempts: ${error instanceof Error ? error.message : String(error)}`);
         }
         
         // Calculate delay with exponential backoff
         const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`⏳ Retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        logger.log(`⏳ Retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
         
         // Wait before retry
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -194,7 +195,7 @@ export class RailwayValidationClient {
   private async buildCompleteProjectFilesFromDir(projectDir: string, generatedFiles: { filename: string; content: string }[]): Promise<{ [filename: string]: string }> {
     const completeFiles: { [filename: string]: string } = {};
     
-    console.log(`📁 Reading complete project from directory: ${projectDir}`);
+    logger.log(`📁 Reading complete project from directory: ${projectDir}`);
     
     // Read all files from the project directory
     const readDirRecursive = async (dir: string, baseDir: string = dir): Promise<void> => {
@@ -216,15 +217,15 @@ export class RailwayValidationClient {
               try {
                 const content = fs.readFileSync(fullPath, 'utf8');
                 completeFiles[relativePath] = content;
-                console.log(`✅ Included project file: ${relativePath}`);
+                logger.log(`✅ Included project file: ${relativePath}`);
               } catch (error) {
-                console.warn(`⚠️ Failed to read project file ${relativePath}:`, error);
+                logger.warn(`⚠️ Failed to read project file ${relativePath}:`, error);
               }
             }
           }
         }
       } catch (error) {
-        console.warn(`⚠️ Failed to read directory ${dir}:`, error);
+        logger.warn(`⚠️ Failed to read directory ${dir}:`, error);
       }
     };
     
@@ -233,13 +234,13 @@ export class RailwayValidationClient {
     // Override with generated files (they take precedence)
     for (const file of generatedFiles) {
       completeFiles[file.filename] = file.content;
-      console.log(`✅ Overrode with generated file: ${file.filename}`);
+      logger.log(`✅ Overrode with generated file: ${file.filename}`);
     }
     
-    console.log(`📊 Complete project structure from directory:`);
-    console.log(`  - Project files: ${Object.keys(completeFiles).length - generatedFiles.length}`);
-    console.log(`  - Generated files: ${generatedFiles.length}`);
-    console.log(`  - Total files: ${Object.keys(completeFiles).length}`);
+    logger.log(`📊 Complete project structure from directory:`);
+    logger.log(`  - Project files: ${Object.keys(completeFiles).length - generatedFiles.length}`);
+    logger.log(`  - Generated files: ${generatedFiles.length}`);
+    logger.log(`  - Total files: ${Object.keys(completeFiles).length}`);
     
     return completeFiles;
   }
@@ -272,7 +273,7 @@ export class RailwayValidationClient {
     for (const possiblePath of possibleBoilerplatePaths) {
       if (fs.existsSync(possiblePath)) {
         boilerplatePath = possiblePath;
-        console.log(`📁 Found boilerplate at: ${boilerplatePath}`);
+        logger.log(`📁 Found boilerplate at: ${boilerplatePath}`);
         break;
       }
     }
@@ -285,14 +286,14 @@ export class RailwayValidationClient {
           try {
             const content = fs.readFileSync(configPath, 'utf8');
             completeFiles[configFile] = content;
-            console.log(`✅ Included boilerplate file: ${configFile}`);
+            logger.log(`✅ Included boilerplate file: ${configFile}`);
           } catch (error) {
-            console.warn(`⚠️ Failed to read boilerplate file ${configFile}:`, error);
+            logger.warn(`⚠️ Failed to read boilerplate file ${configFile}:`, error);
           }
         }
       }
     } else {
-      console.warn(`⚠️ Boilerplate directory not found, using minimal config files`);
+      logger.warn(`⚠️ Boilerplate directory not found, using minimal config files`);
       
       // Fallback: Create minimal essential config files
       completeFiles['package.json'] = JSON.stringify({
@@ -384,7 +385,7 @@ const eslintConfig = [...compat.extends("next/core-web-vitals", "next/typescript
 
 export default eslintConfig;`;
       
-      console.log(`✅ Created minimal config files as fallback`);
+      logger.log(`✅ Created minimal config files as fallback`);
     }
     
     // Include all generated files
@@ -392,10 +393,10 @@ export default eslintConfig;`;
       completeFiles[file.filename] = file.content;
     }
     
-    console.log(`📊 Complete project structure:`);
-    console.log(`  - Boilerplate config files: ${boilerplateConfigFiles.length}`);
-    console.log(`  - Generated files: ${generatedFiles.length}`);
-    console.log(`  - Total files: ${Object.keys(completeFiles).length}`);
+    logger.log(`📊 Complete project structure:`);
+    logger.log(`  - Boilerplate config files: ${boilerplateConfigFiles.length}`);
+    logger.log(`  - Generated files: ${generatedFiles.length}`);
+    logger.log(`  - Total files: ${Object.keys(completeFiles).length}`);
     
     return completeFiles;
   }
@@ -409,7 +410,7 @@ export default eslintConfig;`;
     // Use native fetch with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log(`⏱️ Railway validation request timeout after ${this.timeout}ms`);
+      logger.log(`⏱️ Railway validation request timeout after ${this.timeout}ms`);
       controller.abort();
     }, this.timeout);
 
@@ -428,20 +429,20 @@ export default eslintConfig;`;
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`🚨 Railway API HTTP Error:`);
-        console.error(`  Status: ${response.status} ${response.statusText}`);
-        console.error(`  URL: ${url}`);
-        console.error(`  Response Body: ${errorText}`);
+        logger.error(`🚨 Railway API HTTP Error:`);
+        logger.error(`  Status: ${response.status} ${response.statusText}`);
+        logger.error(`  URL: ${url}`);
+        logger.error(`  Response Body: ${errorText}`);
         throw new Error(`Railway API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
       
       // Log successful response details
-      console.log(`✅ Railway API request successful:`);
-      console.log(`  Status: ${response.status} ${response.statusText}`);
-      console.log(`  URL: ${url}`);
-      console.log(`  Response size: ${JSON.stringify(result).length} characters`);
+      logger.log(`✅ Railway API request successful:`);
+      logger.log(`  Status: ${response.status} ${response.statusText}`);
+      logger.log(`  URL: ${url}`);
+      logger.log(`  Response size: ${JSON.stringify(result).length} characters`);
       
       return result;
 
@@ -476,7 +477,7 @@ export default eslintConfig;`;
       return health.status === 'healthy' && health.validation?.available === true;
 
     } catch (error) {
-      console.warn('Railway health check failed:', error);
+      logger.warn('Railway health check failed:', error);
       return false;
     }
   }
@@ -503,10 +504,10 @@ export function createRailwayValidationClient(): RailwayValidationClient {
   // Set timeout based on environment - increased for better reliability
   const timeout = process.env.NODE_ENV === 'production' ? 300000 : 300000; // 2min prod, 1min dev
 
-  console.log(`🚂 Railway validation client configured:`);
-  console.log(`  API Base: ${apiBase}`);
-  console.log(`  Timeout: ${timeout}ms`);
-  console.log(`  Token: ${accessToken ? 'Present' : 'Missing'}`);
+  logger.log(`🚂 Railway validation client configured:`);
+  logger.log(`  API Base: ${apiBase}`);
+  logger.log(`  Timeout: ${timeout}ms`);
+  logger.log(`  Token: ${accessToken ? 'Present' : 'Missing'}`);
 
   return new RailwayValidationClient(apiBase, accessToken, timeout);
 }

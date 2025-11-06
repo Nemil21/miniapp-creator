@@ -1,3 +1,4 @@
+import { logger } from "../../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getProjectPatches, revertPatch } from "../../../../../lib/database";
 import { authenticateRequest } from "../../../../../lib/auth";
@@ -32,7 +33,7 @@ export async function GET(
       total: patches.length,
     });
   } catch (err) {
-    console.error("Error fetching project patches:", err);
+    logger.error("Error fetching project patches:", err);
     return NextResponse.json(
       {
         error: "Failed to fetch project patches",
@@ -84,7 +85,7 @@ export async function POST(
       { status: 400 }
     );
   } catch (err) {
-    console.error("Error managing patch:", err);
+    logger.error("Error managing patch:", err);
     return NextResponse.json(
       {
         error: "Failed to manage patch",

@@ -4,6 +4,7 @@ import {
   parseContractAddressesFromDeployment,
   updateFilesWithContractAddresses
 } from "./contractAddressInjector";
+import { logger } from "./logger";
 
 // Store active previews for management
 const activePreviews = new Map<string, PreviewResponse>();
@@ -21,10 +22,10 @@ async function pollDeploymentStatus(
   maxAttempts: number = 30, // 30 attempts * 10 seconds = 5 minutes max
   pollInterval: number = 10000 // 10 seconds
 ): Promise<{ status: string; deploymentUrl?: string; error?: string; logs?: string }> {
-  console.log(`🔄 Polling deployment status for ${projectId} (max ${maxAttempts} attempts, ${pollInterval}ms interval)`);
+  logger.log(`🔄 Polling deployment status for ${projectId} (max ${maxAttempts} attempts, ${pollInterval}ms interval)`);
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    console.log(`📊 Poll attempt ${attempt}/${maxAttempts}...`);
+    logger.log(`📊 Poll attempt ${attempt}/${maxAttempts}...`);
     
     try {
       const response = await fetch(`${PREVIEW_API_BASE}/deploy/status/${projectId}`, {
@@ -34,7 +35,7 @@ async function pollDeploymentStatus(
       });
       
       if (!response.ok) {
-        console.error(`❌ Status poll failed: ${response.status}`);
+        logger.error(`❌ Status poll failed: ${response.status}`);
         if (response.status === 404) {
           return {
             status: 'failed',
@@ -45,17 +46,17 @@ async function pollDeploymentStatus(
       }
       
       const statusData = await response.json();
-      console.log(`📊 Status: ${statusData.status}, Duration: ${Math.round(statusData.duration / 1000)}s`);
+      logger.log(`📊 Status: ${statusData.status}, Duration: ${Math.round(statusData.duration / 1000)}s`);
       
       // Check if deployment completed or failed
       if (statusData.status === 'completed') {
-        console.log(`✅ Deployment completed! URL: ${statusData.deploymentUrl}`);
+        logger.log(`✅ Deployment completed! URL: ${statusData.deploymentUrl}`);
         return {
           status: 'completed',
           deploymentUrl: statusData.deploymentUrl,
         };
       } else if (statusData.status === 'failed') {
-        console.error(`❌ Deployment failed: ${statusData.error}`);
+        logger.error(`❌ Deployment failed: ${statusData.error}`);
         return {
           status: 'failed',
           error: statusData.error,
@@ -65,11 +66,11 @@ async function pollDeploymentStatus(
       
       // Still in progress, wait before next poll
       if (attempt < maxAttempts) {
-        console.log(`⏳ Still in progress, waiting ${pollInterval}ms before next poll...`);
+        logger.log(`⏳ Still in progress, waiting ${pollInterval}ms before next poll...`);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
       }
     } catch (error) {
-      console.error(`❌ Error polling status:`, error);
+      logger.error(`❌ Error polling status:`, error);
       if (attempt === maxAttempts) {
         return {
           status: 'failed',
@@ -82,7 +83,7 @@ async function pollDeploymentStatus(
   }
   
   // Max attempts reached
-  console.error(`❌ Polling timeout after ${maxAttempts} attempts`);
+  logger.error(`❌ Polling timeout after ${maxAttempts} attempts`);
   return {
     status: 'failed',
     error: `Deployment status polling timeout after ${maxAttempts * pollInterval / 1000} seconds`,
@@ -135,9 +136,9 @@ export async function deployContractsFirst(
   accessToken: string
 ): Promise<{ [key: string]: string }> {
 
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`🔗 DEPLOYING CONTRACTS FIRST FOR PROJECT: ${projectId}`);
-  console.log(`${"=".repeat(60)}\n`);
+  logger.log(`\n${"=".repeat(60)}`);
+  logger.log(`🔗 DEPLOYING CONTRACTS FIRST FOR PROJECT: ${projectId}`);
+  logger.log(`${"=".repeat(60)}\n`);
 
   try {
     // Convert files to API format
@@ -146,7 +147,7 @@ export async function deployContractsFirst(
       content: f.content
     }));
 
-    console.log(`📤 Sending ${filesArray.length} files to contract deployment endpoint...`);
+    logger.log(`📤 Sending ${filesArray.length} files to contract deployment endpoint...`);
 
     const response = await fetch(`${PREVIEW_API_BASE}/deploy-contracts`, {
       method: "POST",
@@ -162,28 +163,28 @@ export async function deployContractsFirst(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Contract deployment API returned error: ${response.status}`);
-      console.error(`❌ Error details: ${errorText}`);
+      logger.error(`❌ Contract deployment API returned error: ${response.status}`);
+      logger.error(`❌ Error details: ${errorText}`);
       throw new Error(`Contract deployment failed: ${response.status} ${errorText}`);
     }
 
     const result = await response.json();
 
     if (!result.success) {
-      console.error(`❌ Contract deployment failed:`, result.error);
+      logger.error(`❌ Contract deployment failed:`, result.error);
       throw new Error(result.error || "Contract deployment failed");
     }
 
-    console.log(`✅ Contracts deployed successfully!`);
-    console.log(`📝 Contract addresses received:`, JSON.stringify(result.contractAddresses, null, 2));
-    console.log(`🌐 Network: ${result.network}`);
-    console.log(`⏱️  Deployment time: ${result.deploymentTime}ms`);
+    logger.log(`✅ Contracts deployed successfully!`);
+    logger.log(`📝 Contract addresses received:`, JSON.stringify(result.contractAddresses, null, 2));
+    logger.log(`🌐 Network: ${result.network}`);
+    logger.log(`⏱️  Deployment time: ${result.deploymentTime}ms`);
 
     return result.contractAddresses || {};
 
   } catch (error) {
-    console.error(`❌ Failed to deploy contracts for ${projectId}:`, error);
-    console.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+    logger.error(`❌ Failed to deploy contracts for ${projectId}:`, error);
+    logger.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
     throw error;
   }
 }
@@ -197,13 +198,13 @@ export async function createPreview(
   skipContracts?: boolean, // NEW: Allow caller to specify if contracts already deployed
   jobId?: string // NEW: Job ID for background deployment error reporting
 ): Promise<PreviewResponse> {
-  console.log(`🚀 Creating preview for project: ${projectId}`);
-  console.log(`📁 Files count: ${files.length}`);
-  console.log(`🔑 Access token: ${accessToken ? 'Present' : 'Missing'}`);
-  console.log(`🌐 Preview API Base: ${PREVIEW_API_BASE}`);
-  console.log(`🔧 isWeb3: ${isWeb3 !== undefined ? isWeb3 : 'not specified'}`);
-  console.log(`🔧 skipContracts: ${skipContracts !== undefined ? skipContracts : 'not specified'}`);
-  console.log(`🆔 jobId: ${jobId || 'not specified'}`);
+  logger.log(`🚀 Creating preview for project: ${projectId}`);
+  logger.log(`📁 Files count: ${files.length}`);
+  logger.log(`🔑 Access token: ${accessToken ? 'Present' : 'Missing'}`);
+  logger.log(`🌐 Preview API Base: ${PREVIEW_API_BASE}`);
+  logger.log(`🔧 isWeb3: ${isWeb3 !== undefined ? isWeb3 : 'not specified'}`);
+  logger.log(`🔧 skipContracts: ${skipContracts !== undefined ? skipContracts : 'not specified'}`);
+  logger.log(`🆔 jobId: ${jobId || 'not specified'}`);
 
   try {
     // Convert files array to object format expected by the API
@@ -212,7 +213,7 @@ export async function createPreview(
       filesObject[file.filename] = file.content;
     });
 
-    console.log(`📦 Converted ${Object.keys(filesObject).length} files to object format`);
+    logger.log(`📦 Converted ${Object.keys(filesObject).length} files to object format`);
 
     // Skip contracts if:
     // 1. Explicitly told to skip (contracts already deployed)
@@ -228,8 +229,8 @@ export async function createPreview(
       jobId, // Pass jobId for background deployment error reporting
     };
 
-    console.log(`📤 Sending request to: ${PREVIEW_API_BASE}/deploy`);
-    console.log(`📤 Request body keys: ${Object.keys(requestBody)}`);
+    logger.log(`📤 Sending request to: ${PREVIEW_API_BASE}/deploy`);
+    logger.log(`📤 Request body keys: ${Object.keys(requestBody)}`);
 
     // Make API request to create preview with extended timeout for Vercel deployment
     // Set to 7 minutes to allow first deployment to complete (typical: 4-5 min)
@@ -237,8 +238,8 @@ export async function createPreview(
     let timeoutId: NodeJS.Timeout | undefined;
 
     try {
-      console.log(`⏱️ Starting deployment request (timeout: 7 min)...`);
-      console.log(`🔑 Debug - Access Token: ${accessToken ? `Bearer ${accessToken.substring(0, 20)}...` : 'MISSING'}`);
+      logger.log(`⏱️ Starting deployment request (timeout: 7 min)...`);
+      logger.log(`🔑 Debug - Access Token: ${accessToken ? `Bearer ${accessToken.substring(0, 20)}...` : 'MISSING'}`);
 
       // Use native http module for better timeout control
       const http = await import('http');
@@ -262,18 +263,18 @@ export async function createPreview(
       const response: { success: boolean; error?: string; previewUrl?: string; vercelUrl?: string; [key: string]: unknown } = await new Promise((resolve, reject) => {
         const protocol = url.protocol === 'https:' ? https : http;
         const req = protocol.request(options, (res) => {
-          console.log(`📥 Response received - Status: ${res.statusCode}, Headers:`, res.headers);
+          logger.log(`📥 Response received - Status: ${res.statusCode}, Headers:`, res.headers);
           let data = '';
           let dataChunks = 0;
           res.on('data', (chunk) => {
             data += chunk;
             dataChunks++;
             if (dataChunks % 10 === 0) {
-              console.log(`📥 Received ${dataChunks} chunks, ${data.length} bytes so far...`);
+              logger.log(`📥 Received ${dataChunks} chunks, ${data.length} bytes so far...`);
             }
           });
           res.on('end', () => {
-            console.log(`📥 Response complete - Total size: ${data.length} bytes from ${dataChunks} chunks`);
+            logger.log(`📥 Response complete - Total size: ${data.length} bytes from ${dataChunks} chunks`);
             clearTimeout(timeoutId);
             const success = res.statusCode! >= 200 && res.statusCode! < 300;
             try {
@@ -297,20 +298,20 @@ export async function createPreview(
 
         req.on('error', (error) => {
           clearTimeout(timeoutId);
-          console.error(`❌ Request error:`, error);
+          logger.error(`❌ Request error:`, error);
           reject(error);
         });
 
         req.on('timeout', () => {
           clearTimeout(timeoutId);
           req.destroy();
-          console.error(`❌ Request timeout after 7 minutes`);
+          logger.error(`❌ Request timeout after 7 minutes`);
           reject(new Error('Request timeout after 7 minutes'));
         });
 
         // Set up our own timeout to destroy the request
         timeoutId = setTimeout(() => {
-          console.log(`⏱️ Manual timeout after 7 minutes, destroying request...`);
+          logger.log(`⏱️ Manual timeout after 7 minutes, destroying request...`);
           req.destroy();
           reject(new Error('Request timeout after 7 minutes'));
         }, 420000); // 7 minute timeout
@@ -319,22 +320,22 @@ export async function createPreview(
         req.end();
       });
 
-      console.log(`✅ Received response from deploy endpoint`);
+      logger.log(`✅ Received response from deploy endpoint`);
 
-      console.log(`📥 Response status: ${response.status}`);
-      console.log(`📥 Response statusText: ${response.statusText}`);
+      logger.log(`📥 Response status: ${response.status}`);
+      logger.log(`📥 Response statusText: ${response.statusText}`);
 
       if (!response.success) {
-        console.error(`❌ Preview API returned error: ${response.status}`);
-        console.error(`❌ Error details: ${response.error || 'Unknown error'}`);
-        console.log(`📋 Response has logs field: ${!!response.logs}`);
-        console.log(`📋 Response has output field: ${!!response.output}`);
-        console.log(`📋 Response has details field: ${!!response.details}`);
+        logger.error(`❌ Preview API returned error: ${response.status}`);
+        logger.error(`❌ Error details: ${response.error || 'Unknown error'}`);
+        logger.log(`📋 Response has logs field: ${!!response.logs}`);
+        logger.log(`📋 Response has output field: ${!!response.output}`);
+        logger.log(`📋 Response has details field: ${!!response.details}`);
         
         // Return deployment error info instead of throwing
         // This allows the caller to parse errors and retry with fixes
         const deploymentLogs = (response.logs as string) || (response.output as string) || (response.details as string) || '';
-        console.log(`📋 Deployment logs length: ${deploymentLogs.length} characters`);
+        logger.log(`📋 Deployment logs length: ${deploymentLogs.length} characters`);
         
         const errorResponse: PreviewResponse = {
           url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
@@ -349,26 +350,26 @@ export async function createPreview(
 
       const apiResponse = response;
 
-      console.log("📦 API Response:", JSON.stringify(apiResponse, null, 2));
+      logger.log("📦 API Response:", JSON.stringify(apiResponse, null, 2));
       
       // Check if deployment is still in progress (hybrid approach)
       if (apiResponse.status === 'in_progress') {
-        console.log(`⏳ Deployment in progress, starting polling...`);
-        console.log(`📊 Message: ${apiResponse.message}`);
-        console.log(`⏱️  Estimated time: ${apiResponse.estimatedTime}`);
+        logger.log(`⏳ Deployment in progress, starting polling...`);
+        logger.log(`📊 Message: ${apiResponse.message}`);
+        logger.log(`⏱️  Estimated time: ${apiResponse.estimatedTime}`);
         
         // Poll for deployment status
         const pollResult = await pollDeploymentStatus(projectId, accessToken);
         
         if (pollResult.status === 'completed' && pollResult.deploymentUrl) {
-          console.log(`✅ Polled deployment completed successfully`);
+          logger.log(`✅ Polled deployment completed successfully`);
           // Update apiResponse with completed deployment data
           apiResponse.previewUrl = pollResult.deploymentUrl;
           apiResponse.vercelUrl = pollResult.deploymentUrl;
           apiResponse.status = 'completed';
           apiResponse.success = true;
         } else if (pollResult.status === 'failed') {
-          console.error(`❌ Polled deployment failed: ${pollResult.error}`);
+          logger.error(`❌ Polled deployment failed: ${pollResult.error}`);
           // Return deployment failure
           return {
             url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
@@ -388,11 +389,11 @@ export async function createPreview(
       // NOTE: With the new flow, contracts are deployed FIRST via /deploy-contracts,
       // so this code should rarely execute. It's kept for backward compatibility.
       if (contractAddresses && Object.keys(contractAddresses).length > 0) {
-        console.log(`\n${"=".repeat(60)}`);
-        console.log(`📝 LEGACY: CONTRACT ADDRESSES DETECTED FROM ORCHESTRATOR`);
-        console.log(`📝 (This shouldn't happen with new deploy-contracts-first flow)`);
-        console.log(`${"=".repeat(60)}`);
-        console.log(`Deployed contracts:`, contractAddresses);
+        logger.log(`\n${"=".repeat(60)}`);
+        logger.log(`📝 LEGACY: CONTRACT ADDRESSES DETECTED FROM ORCHESTRATOR`);
+        logger.log(`📝 (This shouldn't happen with new deploy-contracts-first flow)`);
+        logger.log(`${"=".repeat(60)}`);
+        logger.log(`Deployed contracts:`, contractAddresses);
 
         // Update files with contract addresses
         const updatedFiles = updateFilesWithContractAddresses(files, contractAddresses);
@@ -400,23 +401,23 @@ export async function createPreview(
         // Save updated files to generated directory
         try {
           await saveFilesToGenerated(projectId, updatedFiles);
-          console.log(`✅ Updated files saved with contract addresses`);
+          logger.log(`✅ Updated files saved with contract addresses`);
 
           // Auto-redeploy to Vercel with real contract addresses
-          console.log(`\n${"=".repeat(60)}`);
-          console.log(`🔄 REDEPLOYING TO VERCEL WITH REAL CONTRACT ADDRESSES`);
-          console.log(`${"=".repeat(60)}`);
+          logger.log(`\n${"=".repeat(60)}`);
+          logger.log(`🔄 REDEPLOYING TO VERCEL WITH REAL CONTRACT ADDRESSES`);
+          logger.log(`${"=".repeat(60)}`);
 
           try {
             await updatePreviewFiles(projectId, updatedFiles, accessToken);
-            console.log(`✅ Vercel deployment updated with real contract addresses`);
+            logger.log(`✅ Vercel deployment updated with real contract addresses`);
           } catch (redeployError) {
-            console.error(`⚠️  Failed to redeploy with contract addresses:`, redeployError);
-            console.log(`📁 Files have been saved locally but Vercel deployment may have old addresses`);
+            logger.error(`⚠️  Failed to redeploy with contract addresses:`, redeployError);
+            logger.log(`📁 Files have been saved locally but Vercel deployment may have old addresses`);
             // Don't fail the entire deployment - local files are updated
           }
         } catch (saveError) {
-          console.error(`⚠️  Failed to save updated files:`, saveError);
+          logger.error(`⚠️  Failed to save updated files:`, saveError);
         }
       }
 
@@ -441,12 +442,12 @@ export async function createPreview(
       // Store the preview info
       activePreviews.set(projectId, previewData);
 
-      console.log(`✅ Preview created successfully!`);
-      console.log(`   URL: ${previewData.url}`);
-      console.log(`   Preview URL: ${previewData.previewUrl}`);
-      console.log(`   Vercel URL: ${previewData.vercelUrl}`);
-      console.log(`   Status: ${previewData.status}`);
-      console.log(`   Port: ${previewData.port}`);
+      logger.log(`✅ Preview created successfully!`);
+      logger.log(`   URL: ${previewData.url}`);
+      logger.log(`   Preview URL: ${previewData.previewUrl}`);
+      logger.log(`   Vercel URL: ${previewData.vercelUrl}`);
+      logger.log(`   Status: ${previewData.status}`);
+      logger.log(`   Port: ${previewData.port}`);
 
       return previewData;
     } catch (fetchError) {
@@ -454,8 +455,8 @@ export async function createPreview(
       throw fetchError;
     }
   } catch (error) {
-    console.error(`❌ Failed to create preview for ${projectId}:`, error);
-    console.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+    logger.error(`❌ Failed to create preview for ${projectId}:`, error);
+    logger.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
     throw error;
   }
 }
@@ -467,7 +468,7 @@ export async function updatePreviewFiles(
   accessToken: string,
   validationResult?: { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }> }
 ): Promise<void> {
-  console.log(
+  logger.log(
     `🔄 Updating ${changedFiles.length} files in preview for project: ${projectId}`
   );
 
@@ -503,8 +504,8 @@ export async function updatePreviewFiles(
 
     // Handle the response from the update API
     const updateResponse = await response.json();
-    console.log(`✅ Preview files updated successfully for ${projectId}`);
-    console.log(`📊 Update Response:`, updateResponse);
+    logger.log(`✅ Preview files updated successfully for ${projectId}`);
+    logger.log(`📊 Update Response:`, updateResponse);
     
     // Update the stored preview info with the Vercel URL if it was updated
     if (updateResponse.vercelUrl) {
@@ -513,14 +514,14 @@ export async function updatePreviewFiles(
         existingPreview.vercelUrl = updateResponse.vercelUrl;
         existingPreview.url = updateResponse.vercelUrl;
         activePreviews.set(projectId, existingPreview);
-        console.log(`🌐 Updated Vercel URL: ${updateResponse.vercelUrl}`);
+        logger.log(`🌐 Updated Vercel URL: ${updateResponse.vercelUrl}`);
       }
     }
   } catch (error) {
-    console.error(`❌ Failed to update preview files for ${projectId}:`, error);
+    logger.error(`❌ Failed to update preview files for ${projectId}:`, error);
     // Don't throw - just log the error. The files are already saved to database.
     // The preview will be out of sync but the user can still access the project.
-    console.warn(`⚠️  Preview update failed for ${projectId}, but files are saved to database`);
+    logger.warn(`⚠️  Preview update failed for ${projectId}, but files are saved to database`);
   }
 }
 
@@ -532,8 +533,8 @@ export async function redeployToVercel(
   isWeb3?: boolean,
   jobId?: string
 ): Promise<PreviewResponse> {
-  console.log(`🚀 Redeploying project to Vercel: ${projectId}`);
-  console.log(`📁 Files count: ${files.length}`);
+  logger.log(`🚀 Redeploying project to Vercel: ${projectId}`);
+  logger.log(`📁 Files count: ${files.length}`);
 
   try {
     // Convert files array to object format expected by the API
@@ -542,7 +543,7 @@ export async function redeployToVercel(
       filesObject[file.filename] = file.content;
     });
 
-    console.log(`📦 Converted ${Object.keys(filesObject).length} files to object format`);
+    logger.log(`📦 Converted ${Object.keys(filesObject).length} files to object format`);
 
     const requestBody = {
       hash: projectId,
@@ -553,7 +554,7 @@ export async function redeployToVercel(
       jobId,
     };
 
-    console.log(`📤 Sending redeploy request to: ${PREVIEW_API_BASE}/deploy`);
+    logger.log(`📤 Sending redeploy request to: ${PREVIEW_API_BASE}/deploy`);
 
     // Make API request with extended timeout for Vercel deployment
     const response = await fetch(`${PREVIEW_API_BASE}/deploy`, {
@@ -568,7 +569,7 @@ export async function redeployToVercel(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Redeploy request failed: ${response.status} ${errorText}`);
+      logger.error(`❌ Redeploy request failed: ${response.status} ${errorText}`);
       throw new Error(
         `Failed to redeploy to Vercel: ${response.status} ${errorText}`
       );
@@ -587,7 +588,7 @@ export async function redeployToVercel(
         warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }> 
       };
     };
-    console.log(`✅ Redeploy API response received:`, {
+    logger.log(`✅ Redeploy API response received:`, {
       success: apiResponse.success,
       vercelUrl: apiResponse.vercelUrl,
       hasDeploymentError: !!apiResponse.deploymentError,
@@ -595,7 +596,7 @@ export async function redeployToVercel(
 
     // Check for deployment errors
     if (apiResponse.deploymentError) {
-      console.error(`❌ Vercel deployment failed:`, apiResponse.deploymentError);
+      logger.error(`❌ Vercel deployment failed:`, apiResponse.deploymentError);
       throw new Error(`Vercel deployment failed: ${apiResponse.deploymentError}`);
     }
 
@@ -604,12 +605,12 @@ export async function redeployToVercel(
     const vercelUrl = apiResponse.vercelUrl;
 
     if (!previewUrl && !vercelUrl) {
-      console.warn(`⚠️ No deployment URL in response:`, apiResponse);
+      logger.warn(`⚠️ No deployment URL in response:`, apiResponse);
     }
 
-    console.log(`✅ Redeploy successful!`);
-    console.log(`📍 Vercel URL: ${vercelUrl || 'N/A'}`);
-    console.log(`📍 Preview URL: ${previewUrl || 'N/A'}`);
+    logger.log(`✅ Redeploy successful!`);
+    logger.log(`📍 Vercel URL: ${vercelUrl || 'N/A'}`);
+    logger.log(`📍 Preview URL: ${previewUrl || 'N/A'}`);
 
     return {
       url: previewUrl || "",
@@ -618,8 +619,8 @@ export async function redeployToVercel(
       validationResult: apiResponse.validationResult,
     };
   } catch (error) {
-    console.error(`❌ Redeploy error:`, error);
-    console.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+    logger.error(`❌ Redeploy error:`, error);
+    logger.error(`❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
     throw error;
   }
 }
@@ -642,7 +643,7 @@ export async function saveFilesToGenerated(
 ): Promise<void> {
   const generatedDir = getProjectBaseDir(projectId);
 
-  console.log(
+  logger.log(
     `💾 Saving ${files.length} files to generated directory: ${generatedDir}`
   );
 
@@ -655,12 +656,12 @@ export async function saveFilesToGenerated(
       const filePath = path.join(generatedDir, file.filename);
       await fs.ensureDir(path.dirname(filePath));
       await fs.writeFile(filePath, file.content, "utf8");
-      console.log(`✅ Saved: ${file.filename}`);
+      logger.log(`✅ Saved: ${file.filename}`);
     }
 
-    console.log(`✅ All files saved to generated directory`);
+    logger.log(`✅ All files saved to generated directory`);
   } catch (error) {
-    console.error(`❌ Failed to save files to generated directory:`, error);
+    logger.error(`❌ Failed to save files to generated directory:`, error);
     throw error;
   }
 }
@@ -720,7 +721,7 @@ export async function listGeneratedFiles(projectId: string): Promise<string[]> {
     await scanDirectory(generatedDir);
     return files.sort();
   } catch (error) {
-    console.error(`❌ Failed to list generated files for ${projectId}:`, error);
+    logger.error(`❌ Failed to list generated files for ${projectId}:`, error);
     return [];
   }
 }
@@ -739,7 +740,7 @@ export async function getGeneratedFile(
     }
     return null;
   } catch (error) {
-    console.error(`❌ Failed to read generated file ${filePath}:`, error);
+    logger.error(`❌ Failed to read generated file ${filePath}:`, error);
     return null;
   }
 }
@@ -756,9 +757,9 @@ export async function updateGeneratedFile(
   try {
     await fs.ensureDir(path.dirname(filePath));
     await fs.writeFile(filePath, content, "utf8");
-    console.log(`✅ Updated generated file: ${filename}`);
+    logger.log(`✅ Updated generated file: ${filename}`);
   } catch (error) {
-    console.error(`❌ Failed to update generated file ${filename}:`, error);
+    logger.error(`❌ Failed to update generated file ${filename}:`, error);
     throw error;
   }
 }
@@ -774,10 +775,10 @@ export async function deleteGeneratedFile(
   try {
     if (await fs.pathExists(filePath)) {
       await fs.remove(filePath);
-      console.log(`✅ Deleted generated file: ${filename}`);
+      logger.log(`✅ Deleted generated file: ${filename}`);
     }
   } catch (error) {
-    console.error(`❌ Failed to delete generated file ${filename}:`, error);
+    logger.error(`❌ Failed to delete generated file ${filename}:`, error);
     throw error;
   }
 }
@@ -789,9 +790,9 @@ export async function updatePreviewWithDiffs(
   accessToken: string,
   diffs?: Array<{ filename: string; hunks: unknown[]; unifiedDiff: string }>
 ): Promise<PreviewResponse> {
-  console.log(`🔄 Updating preview with diffs for project ${projectId}`);
-  console.log(`📁 Files to update: ${files.length}`);
-  console.log(`🔧 Diffs to apply: ${diffs?.length || 0}`);
+  logger.log(`🔄 Updating preview with diffs for project ${projectId}`);
+  logger.log(`📁 Files to update: ${files.length}`);
+  logger.log(`🔧 Diffs to apply: ${diffs?.length || 0}`);
 
   try {
     // Use the existing updatePreviewFiles function
@@ -803,10 +804,10 @@ export async function updatePreviewWithDiffs(
       status: 'updated',
       port: 3000 // Default port
     };
-    console.log(`✅ Preview updated with diffs: ${previewResponse.url}`);
+    logger.log(`✅ Preview updated with diffs: ${previewResponse.url}`);
     return previewResponse;
   } catch (error) {
-    console.error(`❌ Failed to update preview with diffs:`, error);
+    logger.error(`❌ Failed to update preview with diffs:`, error);
     throw error;
   }
 }
@@ -825,9 +826,9 @@ export async function storeDiffs(
     const diffFile = path.join(patchesDir, `diff-${timestamp}.json`);
     
     await fs.writeFile(diffFile, JSON.stringify(diffs, null, 2));
-    console.log(`📦 Stored ${diffs.length} diffs for project ${projectId}`);
+    logger.log(`📦 Stored ${diffs.length} diffs for project ${projectId}`);
   } catch (error) {
-    console.error(`❌ Failed to store diffs:`, error);
+    logger.error(`❌ Failed to store diffs:`, error);
     throw error;
   }
 }
@@ -855,7 +856,7 @@ export async function getStoredDiffs(projectId: string): Promise<Array<{ filenam
     const diffContent = await fs.readFile(diffPath, 'utf8');
     return JSON.parse(diffContent);
   } catch (error) {
-    console.error(`❌ Failed to get stored diffs:`, error);
+    logger.error(`❌ Failed to get stored diffs:`, error);
     return [];
   }
 }

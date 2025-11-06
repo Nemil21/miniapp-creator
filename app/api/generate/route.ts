@@ -62,7 +62,7 @@ async function readAllFiles(
         
         // Check for null bytes and other binary content
         if (content.includes('\0') || content.includes('\x00')) {
-          console.log(`⚠️ Skipping binary file: ${relPath}`);
+          logger.log(`⚠️ Skipping binary file: ${relPath}`);
           continue;
         }
         
@@ -74,7 +74,7 @@ async function readAllFiles(
         files.push({ filename: relPath, content: sanitizedContent });
       } catch (error) {
         // If reading as UTF-8 fails, it's likely a binary file
-        console.log(`⚠️ Skipping binary file: ${relPath} (${error})`);
+        logger.log(`⚠️ Skipping binary file: ${relPath} (${error})`);
         continue;
       }
     }
@@ -141,7 +141,7 @@ async function fetchBoilerplateFromGitHub(targetDir: string) {
         // Fetch file content
         const fileResponse = await fetch(item.download_url);
         if (!fileResponse.ok) {
-          console.warn(`⚠️ Failed to fetch file ${itemPath}: ${fileResponse.status}`);
+          logger.warn(`⚠️ Failed to fetch file ${itemPath}: ${fileResponse.status}`);
           continue;
         }
         
@@ -149,7 +149,7 @@ async function fetchBoilerplateFromGitHub(targetDir: string) {
         
         // Check for binary content
         if (content.includes('\0') || content.includes('\x00')) {
-          console.log(`⚠️ Skipping binary file: ${itemPath}`);
+          logger.log(`⚠️ Skipping binary file: ${itemPath}`);
           continue;
         }
         
@@ -192,24 +192,24 @@ async function callClaudeWithLogging(
     } as typeof modelConfig;
   }
 
-  console.log(`\n🤖 LLM Call - ${stageName}`);
-  console.log("📤 Input:");
-  console.log("  System Prompt Length:", systemPrompt.length, "chars");
-  console.log("  User Prompt:", userPrompt);
-  console.log("  Model:", modelConfig.model);
-  console.log("  Max Tokens:", modelConfig.maxTokens);
-  console.log("  Reason:", modelConfig.reason);
+  logger.log(`\n🤖 LLM Call - ${stageName}`);
+  logger.log("📤 Input:");
+  logger.log("  System Prompt Length:", systemPrompt.length, "chars");
+  logger.log("  User Prompt:", userPrompt);
+  logger.log("  Model:", modelConfig.model);
+  logger.log("  Max Tokens:", modelConfig.maxTokens);
+  logger.log("  Reason:", modelConfig.reason);
   
   // Warn about large prompts that might cause rate limiting or truncation
   if (systemPrompt.length > 50000) {
     const estimatedTokens = Math.ceil(systemPrompt.length / 3.5); // Rough estimate
-    console.warn(`⚠️ Large system prompt: ${systemPrompt.length} chars (~${estimatedTokens} tokens)`);
-    console.warn(`   This may cause:`);
-    console.warn(`   - Rate limiting from API`);
-    console.warn(`   - Response truncation if input + output exceeds context window`);
-    console.warn(`   - Higher costs per request`);
+    logger.warn(`⚠️ Large system prompt: ${systemPrompt.length} chars (~${estimatedTokens} tokens)`);
+    logger.warn(`   This may cause:`);
+    logger.warn(`   - Rate limiting from API`);
+    logger.warn(`   - Response truncation if input + output exceeds context window`);
+    logger.warn(`   - Higher costs per request`);
     if (stageType === 'STAGE_2_PATCH_PLANNER') {
-      console.warn(`   💡 Stage 2 now filters to target files only - check targetFiles in Intent Spec`);
+      logger.warn(`   💡 Stage 2 now filters to target files only - check targetFiles in Intent Spec`);
     }
   }
 
@@ -229,7 +229,7 @@ async function callClaudeWithLogging(
     // Add small delay between requests to prevent rate limiting
     if (attempt > 1) {
       const throttleDelay = Math.min(500 * attempt, 2000); // Max 2 seconds
-      console.log(`⏱️ Throttling request (attempt ${attempt}), waiting ${throttleDelay}ms...`);
+      logger.log(`⏱️ Throttling request (attempt ${attempt}), waiting ${throttleDelay}ms...`);
       await new Promise(resolve => setTimeout(resolve, throttleDelay));
     }
     try {
@@ -256,12 +256,12 @@ async function callClaudeWithLogging(
 
             // Try fallback model on last retry
             if (attempt === maxRetries - 1 && modelConfig.fallbackModel) {
-              console.log(
+              logger.log(
                 `⚠️ API ${response.status} error (attempt ${attempt}/${maxRetries}), switching to fallback model: ${modelConfig.fallbackModel}`
               );
               body.model = modelConfig.fallbackModel;
             } else {
-              console.log(
+              logger.log(
                 `⚠️ API ${response.status} error (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`
               );
             }
@@ -269,7 +269,7 @@ async function callClaudeWithLogging(
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           } else {
-            console.error(
+            logger.error(
               `❌ LLM API Error (${stageName}): Max retries exceeded`
             );
             throw new Error(
@@ -283,12 +283,12 @@ async function callClaudeWithLogging(
 
             // Try fallback model on last retry
             if (attempt === maxRetries - 1 && modelConfig.fallbackModel) {
-              console.log(
+              logger.log(
                 `⚠️ Server error ${response.status} (attempt ${attempt}/${maxRetries}), switching to fallback model: ${modelConfig.fallbackModel}`
               );
               body.model = modelConfig.fallbackModel;
             } else {
-              console.log(
+              logger.log(
                 `⚠️ Server error ${response.status} (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`
               );
             }
@@ -296,7 +296,7 @@ async function callClaudeWithLogging(
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           } else {
-            console.error(
+            logger.error(
               `❌ LLM API Error (${stageName}): Max retries exceeded`
             );
             throw new Error(
@@ -305,7 +305,7 @@ async function callClaudeWithLogging(
           }
         } else {
           // Client errors - don't retry
-          console.error(
+          logger.error(
             `❌ LLM API Error (${stageName}):`,
             response.status,
             errorText
@@ -327,30 +327,30 @@ async function callClaudeWithLogging(
       // Calculate actual cost based on real token usage
       const actualCost = calculateActualCost(inputTokens, outputTokens, modelConfig.model);
 
-      console.log("📥 Output:");
-      console.log("  Response Length:", responseText.length, "chars");
-      console.log("  Response Time:", endTime - startTime, "ms");
-      console.log("  Token Usage:");
-      console.log("    Input Tokens:", inputTokens);
-      console.log("    Output Tokens:", outputTokens);
-      console.log("    Total Tokens:", totalTokens);
-      console.log("  Actual Cost:", actualCost);
-      console.log(
+      logger.log("📥 Output:");
+      logger.log("  Response Length:", responseText.length, "chars");
+      logger.log("  Response Time:", endTime - startTime, "ms");
+      logger.log("  Token Usage:");
+      logger.log("    Input Tokens:", inputTokens);
+      logger.log("    Output Tokens:", outputTokens);
+      logger.log("    Total Tokens:", totalTokens);
+      logger.log("  Actual Cost:", actualCost);
+      logger.log(
         "  Raw Response Preview:",
         responseText.substring(0, 100) + "..."
       );
 
       // Log token usage summary for analysis
-      console.log("📊 Token Usage Summary:");
-      console.log(`    Model: ${modelConfig.model}`);
-      console.log(`    Stage: ${stageName}`);
-      console.log(`    Input/Output Ratio: ${inputTokens > 0 ? (outputTokens / inputTokens).toFixed(2) : 'N/A'}`);
-      console.log(`    Efficiency: ${totalTokens > 0 ? ((responseText.length / totalTokens) * 4).toFixed(2) : 'N/A'} chars/token`);
+      logger.log("📊 Token Usage Summary:");
+      logger.log(`    Model: ${modelConfig.model}`);
+      logger.log(`    Stage: ${stageName}`);
+      logger.log(`    Input/Output Ratio: ${inputTokens > 0 ? (outputTokens / inputTokens).toFixed(2) : 'N/A'}`);
+      logger.log(`    Efficiency: ${totalTokens > 0 ? ((responseText.length / totalTokens) * 4).toFixed(2) : 'N/A'} chars/token`);
 
       return responseText;
     } catch (error) {
       if (attempt === maxRetries) {
-        console.error(
+        logger.error(
           `❌ LLM API Error (${stageName}) after ${maxRetries} attempts:`,
           error
         );
@@ -363,7 +363,7 @@ async function callClaudeWithLogging(
         (error instanceof Error && error.message.includes("fetch"))
       ) {
         const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(
+        logger.log(
           `⚠️ Network error (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -466,12 +466,12 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    logApiRequest('POST', '/api/generate', { requestId, startTime });
+    logApiRequest('POST', '/api/generate', requestId);
 
     // TEST MODE: Quick return for debugging duplicate calls
     const testMode = request.headers.get("X-Test-Quick-Return") === "true";
     if (testMode) {
-      console.log(`🧪 TEST MODE: Request ${requestId} - Returning after 30 seconds`);
+      logger.log(`🧪 TEST MODE: Request ${requestId} - Returning after 30 seconds`);
       await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
 
       return NextResponse.json({
@@ -494,7 +494,7 @@ export async function POST(request: NextRequest) {
                                 process.env.USE_ASYNC_PROCESSING === "true";
 
     if (useAsyncProcessing) {
-      console.log(`🔄 ASYNC MODE: Creating job and returning immediately`);
+      logger.log(`🔄 ASYNC MODE: Creating job and returning immediately`);
 
       // Import async dependencies
       const { createGenerationJob } = await import("../../../lib/database");
@@ -555,8 +555,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
       }
 
-      console.log(`📝 Creating generation job for user: ${user.email || user.id}`);
-      console.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
+      logger.log(`📝 Creating generation job for user: ${user.email || user.id}`);
+      logger.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
 
       // Create job in database
       const job = await createGenerationJob(
@@ -570,15 +570,15 @@ export async function POST(request: NextRequest) {
         existingProjectId
       );
 
-      console.log(`✅ Job created with ID: ${job.id}`);
+      logger.log(`✅ Job created with ID: ${job.id}`);
 
       // Trigger background processing asynchronously
       // Note: This uses fetch to call the worker endpoint without waiting
       const workerToken = process.env.WORKER_AUTH_TOKEN || 'dev-worker-token';
       const workerUrl = process.env.WORKER_URL || `${request.nextUrl.origin}/api/jobs/process`;
 
-      console.log(`🔧 Triggering background worker at: ${workerUrl}`);
-      console.log(`🔑 Using worker token: ${workerToken ? 'Bearer ' + workerToken.substring(0, 10) + '...' : 'NOT SET'}`);
+      logger.log(`🔧 Triggering background worker at: ${workerUrl}`);
+      logger.log(`🔑 Using worker token: ${workerToken ? 'Bearer ' + workerToken.substring(0, 10) + '...' : 'NOT SET'}`);
 
       // Fire and forget - don't await this
       fetch(workerUrl, {
@@ -589,7 +589,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({ jobId: job.id }),
       }).catch(error => {
-        console.error('⚠️ Failed to trigger background worker:', error);
+        logger.error('⚠️ Failed to trigger background worker:', error);
         // Job will be picked up by scheduled worker polling
       });
 
@@ -640,7 +640,7 @@ export async function POST(request: NextRequest) {
           displayName: dbUser.displayName ?? "Test User",
         };
       } catch (dbError) {
-        console.error("⚠️ Failed to create/get test user:", dbError);
+        logger.error("⚠️ Failed to create/get test user:", dbError);
         // Fallback to mock user (database save will be skipped)
         user = {
           id: testUserId,
@@ -666,7 +666,7 @@ export async function POST(request: NextRequest) {
 
     const { prompt, useMultiStage = true, projectId: existingProjectId } = await request.json();
     const accessToken = process.env.PREVIEW_AUTH_TOKEN;
-    console.log("🔑 Preview auth token:", accessToken);
+    logger.log("🔑 Preview auth token:", accessToken);
     if (!accessToken) {
       return NextResponse.json(
         { error: "Missing preview auth token" },
@@ -678,8 +678,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
     }
 
-    console.log(`🚀 Starting project generation for prompt: ${prompt}`);
-    console.log(
+    logger.log(`🚀 Starting project generation for prompt: ${prompt}`);
+    logger.log(
       `🔧 Using ${useMultiStage ? "multi-stage" : "single-stage"} pipeline`
     );
 
@@ -693,8 +693,8 @@ export async function POST(request: NextRequest) {
       if (buildMatch) {
         userRequest = buildMatch[1].trim();
       }
-      console.log(`📋 Confirmed Project Request: ${userRequest}`);
-      console.log(`📋 Full Confirmed Prompt: ${prompt.substring(0, 300)}...`);
+      logger.log(`📋 Confirmed Project Request: ${userRequest}`);
+      logger.log(`📋 Full Confirmed Prompt: ${prompt.substring(0, 300)}...`);
     } else {
       const userMatch = lines.find((line: string) =>
         line.startsWith("User wants to create:")
@@ -702,17 +702,17 @@ export async function POST(request: NextRequest) {
       if (userMatch) {
         userRequest = userMatch;
       }
-      console.log(`📋 User Request: ${userRequest}`);
-      console.log(`📋 Full Prompt: ${prompt.substring(0, 200)}...`);
+      logger.log(`📋 User Request: ${userRequest}`);
+      logger.log(`📋 Full Prompt: ${prompt.substring(0, 200)}...`);
     }
 
     // Use existing project ID if provided (for chat preservation), otherwise generate new one
     const projectId = existingProjectId || uuidv4();
 
     if (existingProjectId) {
-      console.log(`📦 Using existing project ID from chat: ${existingProjectId}`);
+      logger.log(`📦 Using existing project ID from chat: ${existingProjectId}`);
     } else {
-      console.log(`🆕 Generated new project ID: ${projectId}`);
+      logger.log(`🆕 Generated new project ID: ${projectId}`);
     }
     
     // Use local generated folder for development, /tmp/generated for production
@@ -725,35 +725,35 @@ export async function POST(request: NextRequest) {
     // Ensure output directory exists
     fs.mkdirSync(outputDir, { recursive: true });
 
-    console.log(`📁 Project ID: ${projectId}`);
-    console.log(`📁 User directory: ${userDir}`);
-    console.log(`📁 Boilerplate directory: ${boilerplateDir}`);
+    logger.log(`📁 Project ID: ${projectId}`);
+    logger.log(`📁 User directory: ${userDir}`);
+    logger.log(`📁 Boilerplate directory: ${boilerplateDir}`);
 
     // Use local boilerplate in development, GitHub API in production
     if (process.env.NODE_ENV === 'production') {
-      console.log("📋 Fetching boilerplate from GitHub API (production mode)...");
+      logger.log("📋 Fetching boilerplate from GitHub API (production mode)...");
       try {
         await fetchBoilerplateFromGitHub(boilerplateDir);
-        console.log("✅ Boilerplate fetched successfully");
+        logger.log("✅ Boilerplate fetched successfully");
       } catch (error) {
-        console.error("❌ Failed to fetch boilerplate:", error);
+        logger.error("❌ Failed to fetch boilerplate:", error);
         throw new Error(`Failed to fetch boilerplate: ${error}`);
       }
     } else {
       // Development mode: use local boilerplate
-      console.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
+      logger.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
       const localBoilerplatePath = path.join(process.cwd(), '..', 'minidev-boilerplate');
       try {
         await fs.copy(localBoilerplatePath, boilerplateDir);
-        console.log("✅ Boilerplate copied successfully from local folder");
+        logger.log("✅ Boilerplate copied successfully from local folder");
       } catch (error) {
-        console.error("❌ Failed to copy local boilerplate:", error);
+        logger.error("❌ Failed to copy local boilerplate:", error);
         throw new Error(`Failed to copy boilerplate: ${error}`);
       }
     }
 
     // Copy boilerplate to user directory
-    console.log("📋 Copying boilerplate to user directory...");
+    logger.log("📋 Copying boilerplate to user directory...");
     await fs.copy(boilerplateDir, userDir, {
       filter: (src) => {
         const excludePatterns = [
@@ -769,24 +769,24 @@ export async function POST(request: NextRequest) {
         return !excludePatterns.some((pattern) => src.includes(pattern));
       },
     });
-    console.log("✅ Boilerplate copied successfully");
+    logger.log("✅ Boilerplate copied successfully");
 
     // Clean up cloned boilerplate directory
-    console.log("🧹 Cleaning up boilerplate directory...");
+    logger.log("🧹 Cleaning up boilerplate directory...");
     try {
       await fs.remove(boilerplateDir);
-      console.log("✅ Boilerplate directory cleaned up");
+      logger.log("✅ Boilerplate directory cleaned up");
     } catch (error) {
-      console.warn("⚠️ Failed to clean up boilerplate directory:", error);
+      logger.warn("⚠️ Failed to clean up boilerplate directory:", error);
     }
 
     // Read boilerplate files
-    console.log("📖 Reading boilerplate files...");
+    logger.log("📖 Reading boilerplate files...");
     const boilerplateFiles = await readAllFiles(userDir);
-    console.log(`📁 Found ${boilerplateFiles.length} boilerplate files`);
+    logger.log(`📁 Found ${boilerplateFiles.length} boilerplate files`);
 
     // Generate files using selected pipeline
-    console.log("🔄 Using multi-stage pipeline...");
+    logger.log("🔄 Using multi-stage pipeline...");
 
     // Create LLM caller function for multi-stage pipeline
     const callLLM = async (
@@ -843,23 +843,23 @@ export async function POST(request: NextRequest) {
         reason:
           "Basic miniapp requested, boilerplate provides all needed functionality",
       };
-      console.log("📋 No changes needed - using boilerplate as-is");
+      logger.log("📋 No changes needed - using boilerplate as-is");
     } else {
       pipelineResult = {
         needsChanges: true,
         reason: "Custom functionality requested, modifications applied",
       };
-      console.log("📋 Changes applied - custom functionality added");
+      logger.log("📋 Changes applied - custom functionality added");
     }
 
-    console.log(`✅ Successfully generated ${generatedFiles.length} files`);
-    console.log(
+    logger.log(`✅ Successfully generated ${generatedFiles.length} files`);
+    logger.log(
       `📋 Pipeline Result: ${
         pipelineResult.needsChanges ? "Changes Applied" : "No Changes Needed"
       }`
     );
     if (pipelineResult.reason) {
-      console.log(`📝 Reason: ${pipelineResult.reason}`);
+      logger.log(`📝 Reason: ${pipelineResult.reason}`);
     }
 
     // Validate generated files
@@ -874,17 +874,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Write files to disk
-    console.log("💾 Writing generated files to disk...");
+    logger.log("💾 Writing generated files to disk...");
     await writeFilesToDir(userDir, generatedFiles);
-    console.log("✅ Files written successfully");
+    logger.log("✅ Files written successfully");
 
     // Save files to generated directory
-    console.log("💾 Saving files to generated directory...");
+    logger.log("💾 Saving files to generated directory...");
     await saveFilesToGenerated(projectId, generatedFiles);
-    console.log("✅ Files saved to generated directory");
+    logger.log("✅ Files saved to generated directory");
 
     // Create preview with all generated files
-    console.log("🚀 Creating preview with generated files...");
+    logger.log("🚀 Creating preview with generated files...");
     let previewData;
     let projectUrl;
 
@@ -894,20 +894,20 @@ export async function POST(request: NextRequest) {
         generatedFiles,
         accessToken
       );
-      console.log("✅ Preview created successfully");
+      logger.log("✅ Preview created successfully");
 
       // Get the full preview URL
       const previewUrl = getPreviewUrl(projectId);
-      console.log(`🌐 Preview URL: ${previewUrl}`);
-      console.log(
+      logger.log(`🌐 Preview URL: ${previewUrl}`);
+      logger.log(
         `📊 Preview Status: ${previewData.status}, Port: ${previewData.port}`
       );
 
       projectUrl = getPreviewUrl(projectId) || `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
-      console.log(`🎉 Project ready at: ${projectUrl}`);
+      logger.log(`🎉 Project ready at: ${projectUrl}`);
     } catch (previewError) {
-      console.error("❌ Failed to create preview:", previewError);
-      console.error("❌ Preview error details:", previewError instanceof Error ? previewError.message : String(previewError));
+      logger.error("❌ Failed to create preview:", previewError);
+      logger.error("❌ Preview error details:", previewError instanceof Error ? previewError.message : String(previewError));
 
       // Create a fallback preview data object
       previewData = {
@@ -919,8 +919,8 @@ export async function POST(request: NextRequest) {
 
       projectUrl = `https://${projectId}.${CUSTOM_DOMAIN_BASE}`;
 
-      console.log("⚠️ Using fallback preview URL:", projectUrl);
-      console.log("⚠️ Continuing with project creation despite preview error");
+      logger.log("⚠️ Using fallback preview URL:", projectUrl);
+      logger.log("⚠️ Continuing with project creation despite preview error");
     }
 
     // Handle package.json changes (dependencies will be handled by preview server)
@@ -929,14 +929,14 @@ export async function POST(request: NextRequest) {
     );
 
     if (packageJsonChanged) {
-      console.log(
+      logger.log(
         "📦 Package.json changed - dependencies will be handled by the preview server"
       );
     }
 
     // Save project to database
     try {
-      console.log("💾 Saving project to database...");
+      logger.log("💾 Saving project to database...");
       
       // Generate meaningful project name based on LLM-generated intent
       const projectName = enhancedResult.intentSpec 
@@ -953,24 +953,24 @@ export async function POST(request: NextRequest) {
       
       // Save ALL project files to database (boilerplate + generated)
       const allFiles = await readAllFiles(userDir);
-      console.log(`📁 Found ${allFiles.length} files to save to database`);
+      logger.log(`📁 Found ${allFiles.length} files to save to database`);
       
       // Filter out any files that might cause encoding issues
       const safeFiles = allFiles.filter(file => {
         // Check for potential encoding issues
         if (file.content.includes('\0') || file.content.includes('\x00')) {
-          console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
+          logger.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
           return false;
         }
         return true;
       });
       
-      console.log(`📁 Saving ${safeFiles.length} safe files to database`);
+      logger.log(`📁 Saving ${safeFiles.length} safe files to database`);
       await saveProjectFiles(project.id, safeFiles);
       
-      console.log("✅ Project saved to database successfully");
+      logger.log("✅ Project saved to database successfully");
     } catch (dbError) {
-      console.error("⚠️ Failed to save project to database:", dbError);
+      logger.error("⚠️ Failed to save project to database:", dbError);
       // Don't fail the request if database save fails
     }
 
@@ -992,7 +992,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const duration = Date.now() - startTime;
-    logErrorWithContext(err as Error, 'Project generation request', requestId);
+    logErrorWithContext(err as Error, 'Project generation request', { requestId });
     logger.error("Project generation failed", {
       requestId,
       duration,
@@ -1017,7 +1017,7 @@ export async function PATCH(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    logApiRequest('PATCH', '/api/generate', { requestId, startTime });
+    logApiRequest('PATCH', '/api/generate', requestId);
     // Check for auth bypass (testing only)
     const bypassAuth = request.headers.get("X-Bypass-Auth") === "true";
     const testUserId = request.headers.get("X-Test-User-Id");
@@ -1026,13 +1026,13 @@ export async function PATCH(request: NextRequest) {
     let isAuthorized;
 
     if (bypassAuth && testUserId) {
-      console.log("⚠️ AUTH BYPASS ENABLED FOR TESTING");
+      logger.log("⚠️ AUTH BYPASS ENABLED FOR TESTING");
 
       // Check if test user exists in database, create if not
       try {
         let dbUser = await getUserById(testUserId);
         if (!dbUser) {
-          console.log("🔧 Creating test user in database...");
+          logger.log("🔧 Creating test user in database...");
           try {
             dbUser = await createUser(
               testUserId, // Use UUID as privyUserId too
@@ -1040,12 +1040,12 @@ export async function PATCH(request: NextRequest) {
               "Test User",
               undefined
             );
-            console.log(`✅ Test user created with ID: ${dbUser.id}`);
+            logger.log(`✅ Test user created with ID: ${dbUser.id}`);
           } catch (createError: unknown) {
             // Handle duplicate key error gracefully
             if (createError && typeof createError === 'object' && 'code' in createError && 'constraint' in createError && 
                 createError.code === '23505' && createError.constraint === 'users_privy_user_id_unique') {
-              console.log("ℹ️ Test user already exists, fetching from database...");
+              logger.log("ℹ️ Test user already exists, fetching from database...");
               dbUser = await getUserById(testUserId);
             } else {
               throw createError;
@@ -1060,7 +1060,7 @@ export async function PATCH(request: NextRequest) {
           displayName: dbUser.displayName ?? "Test User",
         };
       } catch (dbError) {
-        console.error("⚠️ Failed to create/get test user:", dbError);
+        logger.error("⚠️ Failed to create/get test user:", dbError);
         // Fallback to mock user (database save will be skipped)
         user = {
           id: testUserId,
@@ -1086,7 +1086,7 @@ export async function PATCH(request: NextRequest) {
 
     const { projectId, prompt, stream = false, useDiffBased = true } = await request.json();
     const accessToken = process.env.PREVIEW_AUTH_TOKEN;
-    console.log("🔑 Preview auth token:", accessToken);
+    logger.log("🔑 Preview auth token:", accessToken);
     if (!accessToken) {
       return NextResponse.json(
         { error: "Missing preview auth token" },
@@ -1116,10 +1116,10 @@ export async function PATCH(request: NextRequest) {
     try {
       // Check if the directory exists
       if (await fs.pathExists(userDir)) {
-        console.log(`📁 Reading files from disk: ${userDir}`);
+        logger.log(`📁 Reading files from disk: ${userDir}`);
         currentFiles = await readAllFiles(userDir);
       } else {
-        console.log(`💾 Directory not found on disk, fetching from database for project: ${projectId}`);
+        logger.log(`💾 Directory not found on disk, fetching from database for project: ${projectId}`);
         // Fetch files from database
         const dbFiles = await getProjectFiles(projectId);
         currentFiles = dbFiles.map(f => ({
@@ -1128,18 +1128,18 @@ export async function PATCH(request: NextRequest) {
         }));
 
         if (currentFiles.length > 0) {
-          console.log(`✅ Loaded ${currentFiles.length} files from database`);
+          logger.log(`✅ Loaded ${currentFiles.length} files from database`);
           // Recreate the directory structure on disk for processing
-          console.log(`📁 Recreating project directory: ${userDir}`);
+          logger.log(`📁 Recreating project directory: ${userDir}`);
           await writeFilesToDir(userDir, currentFiles);
-          console.log(`✅ Project files restored to disk`);
+          logger.log(`✅ Project files restored to disk`);
         }
       }
     } catch (error) {
-      console.error(`❌ Error reading project files:`, error);
+      logger.error(`❌ Error reading project files:`, error);
       // Try database as final fallback
       try {
-        console.log(`💾 Attempting database fallback for project: ${projectId}`);
+        logger.log(`💾 Attempting database fallback for project: ${projectId}`);
         const dbFiles = await getProjectFiles(projectId);
         currentFiles = dbFiles.map(f => ({
           filename: f.filename,
@@ -1147,13 +1147,13 @@ export async function PATCH(request: NextRequest) {
         }));
 
         if (currentFiles.length > 0) {
-          console.log(`✅ Loaded ${currentFiles.length} files from database (fallback)`);
+          logger.log(`✅ Loaded ${currentFiles.length} files from database (fallback)`);
           // Recreate the directory structure on disk for processing
           await writeFilesToDir(userDir, currentFiles);
-          console.log(`✅ Project files restored to disk (fallback)`);
+          logger.log(`✅ Project files restored to disk (fallback)`);
         }
       } catch (dbError) {
-        console.error(`❌ Database fallback also failed:`, dbError);
+        logger.error(`❌ Database fallback also failed:`, dbError);
         throw error; // Re-throw the original error
       }
     }
@@ -1170,7 +1170,7 @@ export async function PATCH(request: NextRequest) {
                                 process.env.USE_ASYNC_PROCESSING === "true";
 
     if (useAsyncProcessing && !stream) {
-      console.log(`🔄 ASYNC MODE: Creating follow-up edit job for project ${projectId}`);
+      logger.log(`🔄 ASYNC MODE: Creating follow-up edit job for project ${projectId}`);
 
       // Import async dependencies
       const { createGenerationJob } = await import("../../../lib/database");
@@ -1190,14 +1190,14 @@ export async function PATCH(request: NextRequest) {
         projectId  // Link to existing project
       );
 
-      console.log(`✅ Follow-up job created with ID: ${job.id}`);
+      logger.log(`✅ Follow-up job created with ID: ${job.id}`);
 
       // Trigger background processing
       const workerToken = process.env.WORKER_AUTH_TOKEN || 'dev-worker-token';
       const workerUrl = process.env.WORKER_URL || `${request.nextUrl.origin}/api/jobs/process`;
 
-      console.log(`🔧 Triggering background worker at: ${workerUrl}`);
-      console.log(`🔑 Using worker token: ${workerToken ? 'Bearer ' + workerToken.substring(0, 10) + '...' : 'NOT SET'}`);
+      logger.log(`🔧 Triggering background worker at: ${workerUrl}`);
+      logger.log(`🔑 Using worker token: ${workerToken ? 'Bearer ' + workerToken.substring(0, 10) + '...' : 'NOT SET'}`);
 
       // Fire and forget - don't await this
       fetch(workerUrl, {
@@ -1208,7 +1208,7 @@ export async function PATCH(request: NextRequest) {
         },
         body: JSON.stringify({ jobId: job.id }),
       }).catch(error => {
-        console.error('⚠️ Failed to trigger background worker:', error);
+        logger.error('⚠️ Failed to trigger background worker:', error);
         // Job will be picked up by scheduled worker polling
       });
 
@@ -1288,8 +1288,8 @@ export async function PATCH(request: NextRequest) {
       });
     } else if (useDiffBased) {
       // Handle diff-based updates
-      console.log(`🔄 Diff-based update for project ${projectId}`);
-      console.log("User prompt:", prompt);
+      logger.log(`🔄 Diff-based update for project ${projectId}`);
+      logger.log("User prompt:", prompt);
 
       // Execute diff-based pipeline
       const result = await executeDiffBasedPipeline(
@@ -1305,7 +1305,7 @@ export async function PATCH(request: NextRequest) {
         userDir
       );
 
-      console.log(`✅ Generated ${result.files.length} files with ${result.diffs.length} diffs`);
+      logger.log(`✅ Generated ${result.files.length} files with ${result.diffs.length} diffs`);
 
       // Check validation result and retry with LLM if there are errors
       let finalResult = result;
@@ -1314,9 +1314,9 @@ export async function PATCH(request: NextRequest) {
       
       while (finalResult.validationResult && !finalResult.validationResult.success && retryCount < maxRetries) {
         retryCount++;
-        console.log(`\n⚠️  Validation failed on attempt ${retryCount}. Sending errors to LLM for fixing...`);
-        console.log(`❌ Errors: ${finalResult.validationResult.errors.length}`);
-        console.log(`⚠️  Warnings: ${finalResult.validationResult.warnings.length}`);
+        logger.log(`\n⚠️  Validation failed on attempt ${retryCount}. Sending errors to LLM for fixing...`);
+        logger.log(`❌ Errors: ${finalResult.validationResult.errors.length}`);
+        logger.log(`⚠️  Warnings: ${finalResult.validationResult.warnings.length}`);
         
         // Format validation errors with file content for better context
         const errorsByFile = new Map<string, Array<{ file: string; line?: number; column?: number; message: string; severity: string }>>();
@@ -1357,7 +1357,7 @@ export async function PATCH(request: NextRequest) {
         // Create retry prompt with detailed error context
         const retryPrompt = `${prompt}\n\n⚠️  VALIDATION ERRORS DETECTED - PLEASE FIX:\n\nThe previous generation had ${finalResult.validationResult.errors.length} compilation errors. Here are the errors with code context:\n${errorContext}\n\nPlease analyze these errors carefully and fix them. Common issues to check:\n- Missing type imports\n- Incorrect type definitions\n- JSX syntax errors (use {{'>'}} instead of > in JSX)\n- Type mismatches\n\nRegenerate the corrected code with all errors fixed.`;
         
-        console.log(`🔄 Retry ${retryCount}/${maxRetries}: Calling LLM with error context...`);
+        logger.log(`🔄 Retry ${retryCount}/${maxRetries}: Calling LLM with error context...`);
         
         // Retry with error context
         try {
@@ -1374,23 +1374,23 @@ export async function PATCH(request: NextRequest) {
             userDir
           );
           
-          console.log(`✅ Retry ${retryCount} generated ${finalResult.files.length} files`);
+          logger.log(`✅ Retry ${retryCount} generated ${finalResult.files.length} files`);
           
           if (finalResult.validationResult?.success) {
-            console.log(`🎉 Validation passed on retry ${retryCount}!`);
+            logger.log(`🎉 Validation passed on retry ${retryCount}!`);
             break;
           }
         } catch (retryError) {
-          console.error(`❌ Retry ${retryCount} failed:`, retryError);
+          logger.error(`❌ Retry ${retryCount} failed:`, retryError);
           break; // Stop retrying on errors
         }
       }
       
       // If still failing after retries, log but continue (save best attempt)
       if (finalResult.validationResult && !finalResult.validationResult.success) {
-        console.error(`❌ Validation still failing after ${retryCount} retries`);
-        console.error(`❌ Final error count: ${finalResult.validationResult.errors.length}`);
-        console.log(`📝 Saving best attempt to database with validation warnings...`);
+        logger.error(`❌ Validation still failing after ${retryCount} retries`);
+        logger.error(`❌ Final error count: ${finalResult.validationResult.errors.length}`);
+        logger.log(`📝 Saving best attempt to database with validation warnings...`);
       }
 
       // Write changes to generated directory
@@ -1398,30 +1398,30 @@ export async function PATCH(request: NextRequest) {
 
       // Update files in the preview - only deploy if validation passed
       try {
-        console.log("Updating files in preview...");
+        logger.log("Updating files in preview...");
         await updatePreviewFiles(projectId, finalResult.files, accessToken, finalResult.validationResult);
-        console.log("Preview files updated successfully");
+        logger.log("Preview files updated successfully");
       } catch (previewError) {
         // Check if this is a validation failure (400 status)
         const errorMessage = previewError instanceof Error ? previewError.message : String(previewError);
         if (errorMessage.includes('400') && errorMessage.includes('Validation failed')) {
-          console.error("❌ Validation failed - preview deployment blocked");
+          logger.error("❌ Validation failed - preview deployment blocked");
           // Continue to save to database even if preview blocked
         } else {
           // For other errors (network, Railway issues), treat as optional
-          console.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
+          logger.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
         }
-        console.log("📁 Files will be saved to database");
+        logger.log("📁 Files will be saved to database");
       }
 
       // Update project files in database
       try {
-        console.log("💾 Updating project files in database...");
+        logger.log("💾 Updating project files in database...");
         
         // First, check if the project exists in the database
         const existingProject = await getProjectById(projectId);
         if (!existingProject) {
-          console.log(`⚠️ Project ${projectId} not found in database, creating it...`);
+          logger.log(`⚠️ Project ${projectId} not found in database, creating it...`);
           
           // Create the project in the database
           await createProject(
@@ -1431,28 +1431,28 @@ export async function PATCH(request: NextRequest) {
             getPreviewUrl(projectId) || undefined,
             projectId
           );
-          console.log(`✅ Created project ${projectId} in database`);
+          logger.log(`✅ Created project ${projectId} in database`);
         }
         
         // Read all files from the updated directory and save them
         const allFiles = await readAllFiles(userDir);
-        console.log(`📁 Found ${allFiles.length} files to save to database`);
+        logger.log(`📁 Found ${allFiles.length} files to save to database`);
         
         // Filter out any files that might cause encoding issues
         const safeFiles = allFiles.filter(file => {
           // Check for potential encoding issues
           if (file.content.includes('\0') || file.content.includes('\x00')) {
-            console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
+            logger.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
             return false;
           }
           return true;
         });
         
-        console.log(`📁 Saving ${safeFiles.length} safe files to database`);
+        logger.log(`📁 Saving ${safeFiles.length} safe files to database`);
         await saveProjectFiles(projectId, safeFiles);
-        console.log("✅ Project files updated in database successfully");
+        logger.log("✅ Project files updated in database successfully");
       } catch (dbError) {
-        console.error("⚠️ Failed to update project files in database:", dbError);
+        logger.error("⚠️ Failed to update project files in database:", dbError);
         // Don't fail the request if database update fails
       }
 
@@ -1460,7 +1460,7 @@ export async function PATCH(request: NextRequest) {
       let savedPatch = null;
       if (result.diffs.length > 0) {
         try {
-          console.log(`📦 Storing patch with ${result.diffs.length} diffs for rollback`);
+          logger.log(`📦 Storing patch with ${result.diffs.length} diffs for rollback`);
 
           // Create a descriptive summary of changes
           const changedFiles = result.diffs.map(d => d.filename);
@@ -1474,9 +1474,9 @@ export async function PATCH(request: NextRequest) {
             timestamp: new Date().toISOString(),
           }, description);
 
-          console.log(`✅ Patch saved with ID: ${savedPatch.id}`);
+          logger.log(`✅ Patch saved with ID: ${savedPatch.id}`);
         } catch (patchError) {
-          console.error("⚠️ Failed to save patch to database:", patchError);
+          logger.error("⚠️ Failed to save patch to database:", patchError);
           // Don't fail the request if patch save fails
         }
       }
@@ -1513,7 +1513,7 @@ export async function PATCH(request: NextRequest) {
       };
 
       // Use the enhanced pipeline with context gathering for follow-up changes
-      console.log(
+      logger.log(
         "🔄 Starting enhanced pipeline with context gathering..."
       );
       let enhancedResult = await executeEnhancedPipeline(
@@ -1536,9 +1536,9 @@ export async function PATCH(request: NextRequest) {
       
       while (enhancedResult.validationResult && !enhancedResult.validationResult.success && retryCount < maxRetries) {
         retryCount++;
-        console.log(`\n⚠️  Validation failed on attempt ${retryCount}. Sending errors to LLM for fixing...`);
-        console.log(`❌ Errors: ${enhancedResult.validationResult.errors.length}`);
-        console.log(`⚠️  Warnings: ${enhancedResult.validationResult.warnings.length}`);
+        logger.log(`\n⚠️  Validation failed on attempt ${retryCount}. Sending errors to LLM for fixing...`);
+        logger.log(`❌ Errors: ${enhancedResult.validationResult.errors.length}`);
+        logger.log(`⚠️  Warnings: ${enhancedResult.validationResult.warnings.length}`);
         
         // Format validation errors with file content for better context
         const errorsByFile = new Map<string, Array<{ file: string; line?: number; column?: number; message: string; severity: string }>>();
@@ -1579,7 +1579,7 @@ export async function PATCH(request: NextRequest) {
         // Create retry prompt with detailed error context
         const retryPrompt = `${prompt}\n\n⚠️  VALIDATION ERRORS DETECTED - PLEASE FIX:\n\nThe previous generation had ${enhancedResult.validationResult.errors.length} compilation errors. Here are the errors with code context:\n${errorContext}\n\nPlease analyze these errors carefully and fix them. Common issues to check:\n- Missing type imports\n- Incorrect type definitions\n- JSX syntax errors (use {{'>'}} instead of > in JSX)\n- Type mismatches\n\nRegenerate the corrected code with all errors fixed.`;
         
-        console.log(`🔄 Retry ${retryCount}/${maxRetries}: Calling LLM with error context...`);
+        logger.log(`🔄 Retry ${retryCount}/${maxRetries}: Calling LLM with error context...`);
         
         // Retry with error context
         try {
@@ -1594,27 +1594,27 @@ export async function PATCH(request: NextRequest) {
           );
           
           if (!enhancedResult.success) {
-            console.error(`❌ Retry ${retryCount} pipeline failed`);
+            logger.error(`❌ Retry ${retryCount} pipeline failed`);
             break;
           }
           
-          console.log(`✅ Retry ${retryCount} generated ${enhancedResult.files.length} files`);
+          logger.log(`✅ Retry ${retryCount} generated ${enhancedResult.files.length} files`);
           
           if (enhancedResult.validationResult?.success) {
-            console.log(`🎉 Validation passed on retry ${retryCount}!`);
+            logger.log(`🎉 Validation passed on retry ${retryCount}!`);
             break;
           }
         } catch (retryError) {
-          console.error(`❌ Retry ${retryCount} failed:`, retryError);
+          logger.error(`❌ Retry ${retryCount} failed:`, retryError);
           break; // Stop retrying on errors
         }
       }
       
       // If still failing after retries, log but continue (save best attempt)
       if (enhancedResult.validationResult && !enhancedResult.validationResult.success) {
-        console.error(`❌ Validation still failing after ${retryCount} retries`);
-        console.error(`❌ Final error count: ${enhancedResult.validationResult.errors.length}`);
-        console.log(`📝 Saving best attempt to database with validation warnings...`);
+        logger.error(`❌ Validation still failing after ${retryCount} retries`);
+        logger.error(`❌ Final error count: ${enhancedResult.validationResult.errors.length}`);
+        logger.log(`📝 Saving best attempt to database with validation warnings...`);
       }
 
       const generatedFiles = enhancedResult.files.map(f => ({
@@ -1627,44 +1627,44 @@ export async function PATCH(request: NextRequest) {
 
       // Update files in the preview - only deploy if validation passed
       try {
-        console.log("Updating files in preview...");
+        logger.log("Updating files in preview...");
         await updatePreviewFiles(projectId, generatedFiles, accessToken, enhancedResult.validationResult);
-        console.log("Preview files updated successfully");
+        logger.log("Preview files updated successfully");
       } catch (previewError) {
         // Check if this is a validation failure (400 status)
         const errorMessage = previewError instanceof Error ? previewError.message : String(previewError);
         if (errorMessage.includes('400') && errorMessage.includes('Validation failed')) {
-          console.error("❌ Validation failed - preview deployment blocked");
+          logger.error("❌ Validation failed - preview deployment blocked");
           // Continue to save to database even if preview blocked
         } else {
           // For other errors (network, Railway issues), treat as optional
-          console.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
+          logger.warn("⚠️  Failed to update preview files (this is expected on Railway):", previewError);
         }
-        console.log("📁 Files will be saved to database");
+        logger.log("📁 Files will be saved to database");
       }
 
       // Update project files in database
       try {
-        console.log("💾 Updating project files in database...");
+        logger.log("💾 Updating project files in database...");
         // Read all files from the updated directory and save them
         const allFiles = await readAllFiles(userDir);
-        console.log(`📁 Found ${allFiles.length} files to save to database`);
+        logger.log(`📁 Found ${allFiles.length} files to save to database`);
         
         // Filter out any files that might cause encoding issues
         const safeFiles = allFiles.filter(file => {
           // Check for potential encoding issues
           if (file.content.includes('\0') || file.content.includes('\x00')) {
-            console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
+            logger.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
             return false;
           }
           return true;
         });
         
-        console.log(`📁 Saving ${safeFiles.length} safe files to database`);
+        logger.log(`📁 Saving ${safeFiles.length} safe files to database`);
         await saveProjectFiles(projectId, safeFiles);
-        console.log("✅ Project files updated in database successfully");
+        logger.log("✅ Project files updated in database successfully");
       } catch (dbError) {
-        console.error("⚠️ Failed to update project files in database:", dbError);
+        logger.error("⚠️ Failed to update project files in database:", dbError);
         // Don't fail the request if database update fails
       }
 
@@ -1674,7 +1674,7 @@ export async function PATCH(request: NextRequest) {
       );
 
       if (packageJsonChanged) {
-        console.log(
+        logger.log(
           "Package.json changed - dependencies will be handled by the preview server"
         );
       }
@@ -1692,7 +1692,7 @@ export async function PATCH(request: NextRequest) {
     }
   } catch (err) {
     const duration = Date.now() - startTime;
-    logErrorWithContext(err as Error, 'LLM PATCH request', requestId);
+    logErrorWithContext(err as Error, 'LLM PATCH request', { requestId });
     logger.error("Request failed", { 
       requestId, 
       duration, 

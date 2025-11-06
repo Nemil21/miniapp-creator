@@ -1,3 +1,4 @@
+import { logger } from "../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticatePrivyUser } from "../../../../lib/auth";
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Auth error:", error);
+    logger.error("Auth error:", error);
     return NextResponse.json(
       { success: false, message: "Authentication failed" },
       { status: 500 }

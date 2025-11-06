@@ -1,3 +1,4 @@
+import { logger } from "../../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { 
   saveChatMessage,
@@ -29,7 +30,7 @@ export async function GET(
       messages: chatMessages,
     });
   } catch (error) {
-    console.error("Error fetching chat messages:", error);
+    logger.error("Error fetching chat messages:", error);
     return NextResponse.json(
       { error: "Failed to fetch chat messages" },
       { status: 500 }
@@ -75,7 +76,7 @@ export async function POST(
       message,
     });
   } catch (error) {
-    console.error("Error saving chat message:", error);
+    logger.error("Error saving chat message:", error);
     return NextResponse.json(
       { error: "Failed to save chat message" },
       { status: 500 }
@@ -106,7 +107,7 @@ export async function DELETE(
       message: "Chat messages cleared successfully",
     });
   } catch (error) {
-    console.error("Error clearing chat messages:", error);
+    logger.error("Error clearing chat messages:", error);
     return NextResponse.json(
       { error: "Failed to clear chat messages" },
       { status: 500 }

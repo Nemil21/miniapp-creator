@@ -1,4 +1,5 @@
 "use client";
+import { logger } from "../../lib/logger";
 
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { Button } from "./ui/button";
@@ -17,7 +18,7 @@ export default function WalletButton() {
         w.walletClientType === 'wallet_connect'
     );
 
-    console.log('🔐 WalletButton render:', { 
+    logger.log('🔐 WalletButton render:', { 
         ready, 
         authenticated, 
         walletsCount: wallets.length,

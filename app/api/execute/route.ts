@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/auth';
 
@@ -14,14 +15,14 @@ import { authenticateRequest } from '../../../lib/auth';
  */
 export async function POST(req: NextRequest) {
   try {
-    console.log('\n========================================');
-    console.log('🔧 EXECUTE API REQUEST RECEIVED');
-    console.log('========================================');
+    logger.log('\n========================================');
+    logger.log('🔧 EXECUTE API REQUEST RECEIVED');
+    logger.log('========================================');
 
     // 1. Authenticate request
     const authResult = await authenticateRequest(req);
     if (!authResult.isAuthorized || !authResult.user) {
-      console.error('❌ Authentication failed:', authResult.error || 'No valid session');
+      logger.error('❌ Authentication failed:', authResult.error || 'No valid session');
       return NextResponse.json(
         { success: false, error: authResult.error || 'Unauthorized' },
         { status: 401 }
@@ -29,15 +30,15 @@ export async function POST(req: NextRequest) {
     }
 
     const user = authResult.user;
-    console.log('✅ User authenticated:', user.privyUserId);
+    logger.log('✅ User authenticated:', user.privyUserId);
 
     // 2. Parse request body
     let requestBody;
     try {
       requestBody = await req.json();
-      console.log('✅ Request body parsed successfully');
+      logger.log('✅ Request body parsed successfully');
     } catch (parseError) {
-      console.error('❌ Failed to parse request body:', parseError);
+      logger.error('❌ Failed to parse request body:', parseError);
       return NextResponse.json(
         { success: false, error: 'Invalid JSON in request body' },
         { status: 400 }
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const { projectId, command, args, workingDirectory } = requestBody;
 
-    console.log('📦 Request data:', {
+    logger.log('📦 Request data:', {
       projectId,
       command,
       argsCount: args?.length || 0,
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Validate required fields
     if (!projectId) {
-      console.error('❌ Validation failed: Missing projectId');
+      logger.error('❌ Validation failed: Missing projectId');
       return NextResponse.json(
         { success: false, error: 'Missing required field: projectId' },
         { status: 400 }
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!command) {
-      console.error('❌ Validation failed: Missing command');
+      logger.error('❌ Validation failed: Missing command');
       return NextResponse.json(
         { success: false, error: 'Missing required field: command' },
         { status: 400 }
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
     const previewAuthToken = process.env.PREVIEW_AUTH_TOKEN;
 
     if (!previewApiBase) {
-      console.error('❌ Configuration error: PREVIEW_API_BASE not set');
+      logger.error('❌ Configuration error: PREVIEW_API_BASE not set');
       return NextResponse.json(
         { success: false, error: 'Preview host not configured' },
         { status: 500 }
@@ -83,14 +84,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (!previewAuthToken) {
-      console.error('❌ Configuration error: PREVIEW_AUTH_TOKEN not set');
+      logger.error('❌ Configuration error: PREVIEW_AUTH_TOKEN not set');
       return NextResponse.json(
         { success: false, error: 'Preview authentication not configured' },
         { status: 500 }
       );
     }
 
-    console.log('🔗 Forwarding to preview host:', `${previewApiBase}/previews/${projectId}/execute`);
+    logger.log('🔗 Forwarding to preview host:', `${previewApiBase}/previews/${projectId}/execute`);
 
     // 5. Forward request to preview host
     const previewUrl = `${previewApiBase}/previews/${projectId}/execute`;
@@ -111,10 +112,10 @@ export async function POST(req: NextRequest) {
         signal: AbortSignal.timeout(30000), // 30 second timeout
       });
 
-      console.log('✅ Preview host response status:', response.status);
+      logger.log('✅ Preview host response status:', response.status);
 
     } catch (fetchError) {
-      console.error('❌ Failed to connect to preview host:', fetchError);
+      logger.error('❌ Failed to connect to preview host:', fetchError);
       return NextResponse.json(
         {
           success: false,
@@ -129,12 +130,12 @@ export async function POST(req: NextRequest) {
     let result;
     try {
       result = await response.json();
-      console.log('✅ Preview host response parsed:', {
+      logger.log('✅ Preview host response parsed:', {
         success: result.success,
         hasOutput: !!result.output
       });
     } catch (parseError) {
-      console.error('❌ Failed to parse preview host response:', parseError);
+      logger.error('❌ Failed to parse preview host response:', parseError);
       return NextResponse.json(
         {
           success: false,
@@ -145,14 +146,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 7. Return result
-    console.log('✅ Execute request completed successfully');
-    console.log('========================================\n');
+    logger.log('✅ Execute request completed successfully');
+    logger.log('========================================\n');
     
     return NextResponse.json(result, { status: response.status });
 
   } catch (error) {
-    console.error('❌ Execute API error:', error);
-    console.log('========================================\n');
+    logger.error('❌ Execute API error:', error);
+    logger.log('========================================\n');
     
     return NextResponse.json(
       {

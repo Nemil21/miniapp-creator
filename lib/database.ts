@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { db, users, projects, projectFiles, projectPatches, projectDeployments, userSessions, chatMessages, generationJobs } from '../db';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
@@ -34,7 +35,7 @@ export async function getUserByPrivyId(privyUserId: string) {
     const [user] = await Promise.race([queryPromise, timeoutPromise]) as typeof users.$inferSelect[];
     return user;
   } catch (error) {
-    console.error('❌ getUserByPrivyId error:', error);
+    logger.error('❌ getUserByPrivyId error:', error);
     throw error;
   }
 }
@@ -89,28 +90,28 @@ export async function deleteProject(projectId: string) {
 
 // Project files management
 export async function saveProjectFiles(projectId: string, files: { filename: string; content: string }[]) {
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`💾 SAVING PROJECT FILES TO DATABASE`);
-  console.log(`📁 Project ID: ${projectId}`);
-  console.log(`📂 Total files to save: ${files.length}`);
-  console.log(`${"=".repeat(60)}\n`);
+  logger.log(`\n${"=".repeat(60)}`);
+  logger.log(`💾 SAVING PROJECT FILES TO DATABASE`);
+  logger.log(`📁 Project ID: ${projectId}`);
+  logger.log(`📂 Total files to save: ${files.length}`);
+  logger.log(`${"=".repeat(60)}\n`);
   
   // Delete existing files for this project
-  console.log(`🗑️  Deleting existing files for project ${projectId}...`);
+  logger.log(`🗑️  Deleting existing files for project ${projectId}...`);
   const deletedFiles = await db.delete(projectFiles).where(eq(projectFiles.projectId, projectId)).returning();
-  console.log(`✅ Deleted ${deletedFiles.length} existing files`);
+  logger.log(`✅ Deleted ${deletedFiles.length} existing files`);
   
   // Filter out files that might cause encoding issues
   const safeFiles = files.filter(file => {
     // Check for potential encoding issues
     if (file.content.includes('\0') || file.content.includes('\x00')) {
-      console.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
+      logger.log(`⚠️ Skipping file with null bytes: ${file.filename}`);
       return false;
     }
     return true;
   });
   
-  console.log(`📁 Saving ${safeFiles.length} safe files to database (${files.length - safeFiles.length} filtered out)`);
+  logger.log(`📁 Saving ${safeFiles.length} safe files to database (${files.length - safeFiles.length} filtered out)`);
   
   // Insert new files
   const fileRecords = safeFiles.map(file => ({
@@ -121,27 +122,27 @@ export async function saveProjectFiles(projectId: string, files: { filename: str
   }));
   
   const inserted = await db.insert(projectFiles).values(fileRecords).returning();
-  console.log(`✅ Successfully inserted ${inserted.length} files into database`);
-  console.log(`📝 Sample filenames:`, inserted.slice(0, 5).map(f => f.filename));
-  console.log(`${"=".repeat(60)}\n`);
+  logger.log(`✅ Successfully inserted ${inserted.length} files into database`);
+  logger.log(`📝 Sample filenames:`, inserted.slice(0, 5).map(f => f.filename));
+  logger.log(`${"=".repeat(60)}\n`);
   
   return inserted;
 }
 
 export async function getProjectFiles(projectId: string) {
-  console.log(`\n📥 FETCHING PROJECT FILES FROM DATABASE`);
-  console.log(`📁 Project ID: ${projectId}`);
+  logger.log(`\n📥 FETCHING PROJECT FILES FROM DATABASE`);
+  logger.log(`📁 Project ID: ${projectId}`);
   
   const files = await db.select().from(projectFiles)
     .where(eq(projectFiles.projectId, projectId))
     .orderBy(projectFiles.filename);
   
-  console.log(`✅ Fetched ${files.length} files from database`);
+  logger.log(`✅ Fetched ${files.length} files from database`);
   if (files.length > 0) {
-    console.log(`📝 Sample filenames:`, files.slice(0, 5).map(f => f.filename));
-    console.log(`📅 Last updated:`, files[0].updatedAt);
+    logger.log(`📝 Sample filenames:`, files.slice(0, 5).map(f => f.filename));
+    logger.log(`📅 Last updated:`, files[0].updatedAt);
   }
-  console.log(`${"=".repeat(60)}\n`);
+  logger.log(`${"=".repeat(60)}\n`);
   
   return files;
 }
@@ -325,7 +326,7 @@ export async function migrateChatMessages(fromProjectId: string, toProjectId: st
     .where(eq(chatMessages.projectId, fromProjectId));
   
   if (messages.length === 0) {
-    console.log(`No chat messages to migrate from ${fromProjectId} to ${toProjectId}`);
+    logger.log(`No chat messages to migrate from ${fromProjectId} to ${toProjectId}`);
     return [];
   }
   
@@ -340,7 +341,7 @@ export async function migrateChatMessages(fromProjectId: string, toProjectId: st
   
   const migratedMessages = await db.insert(chatMessages).values(updatedMessages).returning();
   
-  console.log(`✅ Migrated ${migratedMessages.length} chat messages from ${fromProjectId} to ${toProjectId}`);
+  logger.log(`✅ Migrated ${migratedMessages.length} chat messages from ${fromProjectId} to ${toProjectId}`);
   return migratedMessages;
 }
 

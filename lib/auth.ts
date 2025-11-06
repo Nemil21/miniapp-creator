@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getUserBySessionToken, getUserByPrivyId, createUser, createUserSession } from "./database";
 import { v4 as uuidv4 } from "uuid";
@@ -64,7 +65,7 @@ export async function authenticateRequest(request: NextRequest): Promise<{
       isAuthorized: true
     };
   } catch (error) {
-    console.error("Authentication error:", error);
+    logger.error("Authentication error:", error);
     return {
       user: null,
       isAuthorized: false,
@@ -82,11 +83,11 @@ export async function authenticatePrivyUser(privyUserId: string, email?: string,
       try {
         // Create new user automatically
         user = await createUser(privyUserId, email, displayName, pfpUrl);
-        console.log(`✅ Created new user: ${user.id}`);
+        logger.log(`✅ Created new user: ${user.id}`);
       } catch (createError: unknown) {
         // Handle duplicate key constraint - user was created by another request
         if ((createError as { code?: string; constraint?: string })?.code === '23505' && (createError as { code?: string; constraint?: string })?.constraint === 'users_privy_user_id_unique') {
-          console.log(`⚠️ User already exists (race condition), fetching existing user: ${privyUserId}`);
+          logger.log(`⚠️ User already exists (race condition), fetching existing user: ${privyUserId}`);
           user = await getUserByPrivyId(privyUserId);
           if (!user) {
             throw new Error("Failed to create or fetch user");
@@ -115,7 +116,7 @@ export async function authenticatePrivyUser(privyUserId: string, email?: string,
       sessionToken,
     };
   } catch (error) {
-    console.error("Privy authentication error:", error);
+    logger.error("Privy authentication error:", error);
     return {
       success: false,
       error: "Authentication failed"

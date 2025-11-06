@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/auth';
 import { db, projects, projectDeployments } from '../../../db';
@@ -19,14 +20,14 @@ import fs from 'fs-extra';
  */
 export async function POST(req: NextRequest) {
   try {
-    console.log('\n========================================');
-    console.log('🔨 BUILD API REQUEST RECEIVED');
-    console.log('========================================');
+    logger.log('\n========================================');
+    logger.log('🔨 BUILD API REQUEST RECEIVED');
+    logger.log('========================================');
 
     // 1. Authenticate request
     const authResult = await authenticateRequest(req);
     if (!authResult.isAuthorized || !authResult.user) {
-      console.error('❌ Authentication failed:', authResult.error || 'No valid session');
+      logger.error('❌ Authentication failed:', authResult.error || 'No valid session');
       return NextResponse.json(
         { success: false, error: authResult.error || 'Unauthorized' },
         { status: 401 }
@@ -34,15 +35,15 @@ export async function POST(req: NextRequest) {
     }
 
     const user = authResult.user;
-    console.log('✅ User authenticated:', user.id);
+    logger.log('✅ User authenticated:', user.id);
 
     // 2. Parse request body
     let requestBody;
     try {
       requestBody = await req.json();
-      console.log('✅ Request body parsed successfully');
+      logger.log('✅ Request body parsed successfully');
     } catch (parseError) {
-      console.error('❌ Failed to parse request body:', parseError);
+      logger.error('❌ Failed to parse request body:', parseError);
       return NextResponse.json(
         { success: false, error: 'Invalid JSON in request body' },
         { status: 400 }
@@ -51,11 +52,11 @@ export async function POST(req: NextRequest) {
 
     const { projectId } = requestBody;
 
-    console.log('📦 Request data:', { projectId });
+    logger.log('📦 Request data:', { projectId });
 
     // 3. Validate projectId
     if (!projectId) {
-      console.error('❌ Validation failed: Missing projectId');
+      logger.error('❌ Validation failed: Missing projectId');
       return NextResponse.json(
         { success: false, error: 'Missing required field: projectId' },
         { status: 400 }
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (projectRecords.length === 0) {
-      console.error('❌ Project not found:', projectId);
+      logger.error('❌ Project not found:', projectId);
       return NextResponse.json(
         { success: false, error: 'Project not found' },
         { status: 404 }
@@ -80,35 +81,35 @@ export async function POST(req: NextRequest) {
     const project = projectRecords[0];
 
     if (project.userId !== user.id) {
-      console.error('❌ Unauthorized: Project does not belong to user');
+      logger.error('❌ Unauthorized: Project does not belong to user');
       return NextResponse.json(
         { success: false, error: 'Unauthorized: Project does not belong to user' },
         { status: 403 }
       );
     }
 
-    console.log('✅ Project ownership verified');
+    logger.log('✅ Project ownership verified');
 
     // 5. Get project directory
     const projectDir = path.join(process.cwd(), 'generated', projectId);
 
     // Check if directory exists
     if (!await fs.pathExists(projectDir)) {
-      console.error('❌ Project directory not found:', projectDir);
+      logger.error('❌ Project directory not found:', projectDir);
       return NextResponse.json(
         { success: false, error: 'Project directory not found' },
         { status: 404 }
       );
     }
 
-    console.log('📂 Project directory:', projectDir);
+    logger.log('📂 Project directory:', projectDir);
 
     // 6. Run build
-    console.log('🔨 Starting build process...');
+    logger.log('🔨 Starting build process...');
     
     const buildResult = await runBuild(projectDir);
 
-    console.log('✅ Build process completed:', {
+    logger.log('✅ Build process completed:', {
       success: buildResult.success,
       exitCode: buildResult.exitCode,
       duration: buildResult.executionTime
@@ -125,16 +126,16 @@ export async function POST(req: NextRequest) {
           buildLogs: buildResult.output,
           deployedAt: new Date(),
         });
-        console.log('✅ Deployment info saved to database');
+        logger.log('✅ Deployment info saved to database');
       } catch (dbError) {
-        console.warn('⚠️ Failed to save deployment info:', dbError);
+        logger.warn('⚠️ Failed to save deployment info:', dbError);
         // Don't fail the request if DB save fails
       }
     }
 
     // 8. Return result
-    console.log('✅ Build request completed');
-    console.log('========================================\n');
+    logger.log('✅ Build request completed');
+    logger.log('========================================\n');
 
     return NextResponse.json({
       success: buildResult.success,
@@ -146,8 +147,8 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Build API error:', error);
-    console.log('========================================\n');
+    logger.error('❌ Build API error:', error);
+    logger.log('========================================\n');
     
     return NextResponse.json(
       {
@@ -187,14 +188,14 @@ async function runBuild(projectDir: string): Promise<{
     buildProcess.stdout.on('data', (data) => {
       const chunk = data.toString();
       stdout += chunk;
-      console.log('[BUILD]', chunk.trim());
+      logger.log('[BUILD]', chunk.trim());
     });
 
     // Capture stderr
     buildProcess.stderr.on('data', (data) => {
       const chunk = data.toString();
       stderr += chunk;
-      console.error('[BUILD ERROR]', chunk.trim());
+      logger.error('[BUILD ERROR]', chunk.trim());
     });
 
     // Handle completion

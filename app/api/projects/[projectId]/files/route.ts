@@ -1,3 +1,4 @@
+import { logger } from "../../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { createPreview } from "@/lib/previewManager";
@@ -31,8 +32,8 @@ export async function POST(
       );
     }
 
-    console.log(`📝 Updating file: ${filePath} in project: ${projectId}`);
-    console.log(`🔄 Redeploy requested: ${redeploy}`);
+    logger.log(`📝 Updating file: ${filePath} in project: ${projectId}`);
+    logger.log(`🔄 Redeploy requested: ${redeploy}`);
 
     // Get project directory
     const projectDir = getProjectBaseDir(projectId);
@@ -51,11 +52,11 @@ export async function POST(
 
     // Write the updated content
     await fs.writeFile(fullFilePath, content, "utf-8");
-    console.log(`✅ File updated: ${filePath}`);
+    logger.log(`✅ File updated: ${filePath}`);
 
     // If redeploy is requested, trigger a new deployment
     if (redeploy) {
-      console.log(`🚀 Triggering redeployment for project: ${projectId}`);
+      logger.log(`🚀 Triggering redeployment for project: ${projectId}`);
 
       try {
         // Read all files from the project directory
@@ -92,7 +93,7 @@ export async function POST(
         }
         
         await readDir(projectDir, projectDir);
-        console.log(`📦 Read ${files.length} files for redeployment`);
+        logger.log(`📦 Read ${files.length} files for redeployment`);
 
         // Use PREVIEW_AUTH_TOKEN to authenticate with orchestrator
         // NOT the user's session token
@@ -107,8 +108,8 @@ export async function POST(
           true  // skipContracts - already deployed
         );
 
-        console.log(`✅ Redeployment triggered`);
-        console.log(`🌐 Preview URL: ${previewData.previewUrl || previewData.vercelUrl}`);
+        logger.log(`✅ Redeployment triggered`);
+        logger.log(`🌐 Preview URL: ${previewData.previewUrl || previewData.vercelUrl}`);
 
         return NextResponse.json({
           success: true,
@@ -118,7 +119,7 @@ export async function POST(
           status: previewData.status
         });
       } catch (deployError) {
-        console.error(`❌ Redeployment failed:`, deployError);
+        logger.error(`❌ Redeployment failed:`, deployError);
         return NextResponse.json({
           success: false,
           message: "File updated but redeployment failed",
@@ -134,7 +135,7 @@ export async function POST(
       filePath
     });
   } catch (error) {
-    console.error("Error updating file:", error);
+    logger.error("Error updating file:", error);
     return NextResponse.json(
       { error: "Failed to update file" },
       { status: 500 }

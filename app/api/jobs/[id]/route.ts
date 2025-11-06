@@ -1,3 +1,4 @@
+import { logger } from "../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getGenerationJobById, getUserByPrivyId } from "../../../../lib/database";
 import { authenticateRequest } from "../../../../lib/auth";
@@ -91,7 +92,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("❌ Error fetching job status:", error);
+    logger.error("❌ Error fetching job status:", error);
     return NextResponse.json(
       {
         error: "Failed to fetch job status",

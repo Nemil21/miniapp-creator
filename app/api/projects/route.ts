@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { 
   createProject, 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       projects,
     });
   } catch (error) {
-    console.error("Error fetching projects:", error);
+    logger.error("Error fetching projects:", error);
     return NextResponse.json(
       { error: "Failed to fetch projects" },
       { status: 500 }
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       project,
     });
   } catch (error) {
-    console.error("Error creating project:", error);
+    logger.error("Error creating project:", error);
     return NextResponse.json(
       { error: "Failed to create project" },
       { status: 500 }
@@ -111,7 +112,7 @@ export async function PUT(request: NextRequest) {
       project: updatedProject,
     });
   } catch (error) {
-    console.error("Error updating project:", error);
+    logger.error("Error updating project:", error);
     return NextResponse.json(
       { error: "Failed to update project" },
       { status: 500 }
@@ -155,7 +156,7 @@ export async function DELETE(request: NextRequest) {
       message: "Project deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting project:", error);
+    logger.error("Error deleting project:", error);
     return NextResponse.json(
       { error: "Failed to delete project" },
       { status: 500 }

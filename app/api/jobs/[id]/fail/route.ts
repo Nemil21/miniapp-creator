@@ -1,3 +1,4 @@
+import { logger } from "../../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { updateGenerationJobStatus } from "../../../../../lib/database";
 
@@ -15,7 +16,7 @@ export async function POST(
 
     // Auth check - orchestrator must authenticate
     if (!orchestratorToken || authHeader !== `Bearer ${orchestratorToken}`) {
-      console.error("❌ Orchestrator authentication failed");
+      logger.error("❌ Orchestrator authentication failed");
       return NextResponse.json(
         { error: "Unauthorized - Invalid orchestrator token" },
         { status: 401 }
@@ -26,9 +27,9 @@ export async function POST(
     const body = await request.json();
     const { error, logs, deploymentError } = body;
 
-    console.log(`🔄 Retroactively marking job ${jobId} as failed`);
-    console.log(`   Error: ${error?.substring(0, 200) || 'No error message'}`);
-    console.log(`   Logs: ${logs ? `${logs.length} chars` : 'No logs'}`);
+    logger.log(`🔄 Retroactively marking job ${jobId} as failed`);
+    logger.log(`   Error: ${error?.substring(0, 200) || 'No error message'}`);
+    logger.log(`   Logs: ${logs ? `${logs.length} chars` : 'No logs'}`);
 
     // Create error details object
     const errorDetails = {
@@ -46,7 +47,7 @@ export async function POST(
       deploymentError || error || 'Background deployment failed'
     );
 
-    console.log(`✅ Job ${jobId} marked as failed in database`);
+    logger.log(`✅ Job ${jobId} marked as failed in database`);
 
     return NextResponse.json({
       success: true,
@@ -55,7 +56,7 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error('❌ Error updating job status:', error);
+    logger.error('❌ Error updating job status:', error);
     return NextResponse.json(
       { 
         error: 'Failed to update job status',

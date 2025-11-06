@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
@@ -40,7 +42,7 @@ export function ProjectList({ onProjectSelect, onNewProject }: ProjectListProps)
 
       setProjects(data.projects || []);
     } catch (err) {
-      console.error('Error fetching projects:', err);
+      logger.error('Error fetching projects:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch projects');
     } finally {
       setLoading(false);

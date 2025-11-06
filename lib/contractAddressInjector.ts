@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 /**
  * Contract Address Injector
  *
@@ -31,7 +32,7 @@ function injectSingleContractAddress(
 
     // Verify it worked
     if (updated.includes(contractAddress)) {
-      console.log('✅ Contract address injected via simple replace');
+      logger.log('✅ Contract address injected via simple replace');
       return { updated, success: true };
     }
   }
@@ -39,7 +40,7 @@ function injectSingleContractAddress(
   // ============================================================
   // FALLBACK: Line-by-Line Search
   // ============================================================
-  console.log('⚠️ Simple replace failed, trying fallback...');
+  logger.log('⚠️ Simple replace failed, trying fallback...');
 
   const lines = content.split('\n');
   let found = false;
@@ -48,7 +49,7 @@ function injectSingleContractAddress(
     if (lines[i].includes('CONTRACT_ADDRESS') && lines[i].includes(ZERO_ADDRESS)) {
       lines[i] = lines[i].replace(ZERO_ADDRESS, contractAddress);
       found = true;
-      console.log(`✅ Contract address injected via fallback (line ${i + 1})`);
+      logger.log(`✅ Contract address injected via fallback (line ${i + 1})`);
       break; // Only replace first occurrence
     }
   }
@@ -58,8 +59,8 @@ function injectSingleContractAddress(
   }
 
   // Failed
-  console.error('❌ Contract address injection failed');
-  console.error('📄 File content preview:', content.substring(0, 300));
+  logger.error('❌ Contract address injection failed');
+  logger.error('📄 File content preview:', content.substring(0, 300));
   return { updated: content, success: false };
 }
 
@@ -81,15 +82,15 @@ export function injectContractAddresses(
   const firstContractName = Object.keys(contractAddresses)[0];
 
   if (!firstContractAddress) {
-    console.warn('⚠️ No contract addresses provided');
+    logger.warn('⚠️ No contract addresses provided');
     return contractFileContent;
   }
 
-  console.log(`🔍 Attempting to inject contract address: ${firstContractName} -> ${firstContractAddress}`);
+  logger.log(`🔍 Attempting to inject contract address: ${firstContractName} -> ${firstContractAddress}`);
 
   // Validate address format
   if (!isValidEthereumAddress(firstContractAddress)) {
-    console.error(`❌ Invalid address format: ${firstContractAddress}`);
+    logger.error(`❌ Invalid address format: ${firstContractAddress}`);
     return contractFileContent;
   }
 
@@ -98,14 +99,14 @@ export function injectContractAddresses(
 
   if (result.success) {
     updatedContent = result.updated;
-    console.log(`✅ Successfully injected ${firstContractName} address`);
+    logger.log(`✅ Successfully injected ${firstContractName} address`);
   } else {
-    console.error(`❌ Failed to inject ${firstContractName} address`);
+    logger.error(`❌ Failed to inject ${firstContractName} address`);
   }
 
   // If there are multiple contracts, try to inject them too
   if (Object.keys(contractAddresses).length > 1) {
-    console.log(`🔍 Found ${Object.keys(contractAddresses).length} total contracts, attempting to inject remaining...`);
+    logger.log(`🔍 Found ${Object.keys(contractAddresses).length} total contracts, attempting to inject remaining...`);
 
     for (const [contractName, address] of Object.entries(contractAddresses)) {
       if (contractName === firstContractName) continue; // Skip first one, already done
@@ -115,7 +116,7 @@ export function injectContractAddresses(
         const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
         if (updatedContent.includes(ZERO_ADDRESS)) {
           updatedContent = updatedContent.replace(ZERO_ADDRESS, address);
-          console.log(`✅ Injected additional contract: ${contractName} -> ${address}`);
+          logger.log(`✅ Injected additional contract: ${contractName} -> ${address}`);
         }
       }
     }
@@ -143,10 +144,10 @@ export function updateFilesWithContractAddresses(
   files: { filename: string; content: string }[],
   contractAddresses: ContractAddressMap
 ): { filename: string; content: string }[] {
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`🔧 INJECTING CONTRACT ADDRESSES`);
-  console.log(`${"=".repeat(60)}`);
-  console.log(`📋 Contract addresses to inject:`, contractAddresses);
+  logger.log(`\n${"=".repeat(60)}`);
+  logger.log(`🔧 INJECTING CONTRACT ADDRESSES`);
+  logger.log(`${"=".repeat(60)}`);
+  logger.log(`📋 Contract addresses to inject:`, contractAddresses);
 
   return files.map(file => {
     // Only process contract configuration files
@@ -154,17 +155,17 @@ export function updateFilesWithContractAddresses(
         file.filename === 'lib/contracts.ts' ||
         file.filename.includes('contractConfig')) {
 
-      console.log(`\n📄 Processing file: ${file.filename}`);
+      logger.log(`\n📄 Processing file: ${file.filename}`);
       const updatedContent = injectContractAddresses(file.content, contractAddresses);
 
       if (updatedContent !== file.content) {
-        console.log(`✅ Updated ${file.filename} with deployed addresses`);
+        logger.log(`✅ Updated ${file.filename} with deployed addresses`);
         return {
           ...file,
           content: updatedContent
         };
       } else {
-        console.warn(`⚠️ No changes made to ${file.filename} - check if zero address is present`);
+        logger.warn(`⚠️ No changes made to ${file.filename} - check if zero address is present`);
       }
     }
 
@@ -193,7 +194,7 @@ export function parseContractAddressesFromDeployment(
 
   // 1. Direct contractAddresses field
   if (response.contractAddresses && typeof response.contractAddresses === 'object') {
-    console.log(`✅ Found contractAddresses in deployment response`);
+    logger.log(`✅ Found contractAddresses in deployment response`);
     return response.contractAddresses as ContractAddressMap;
   }
 
@@ -211,12 +212,12 @@ export function parseContractAddressesFromDeployment(
           /^0x[a-fA-F0-9]{40}$/.test(value) &&
           !metadataFields.includes(key.toLowerCase())) {
         addresses[key] = value;
-        console.log(`  📝 Found contract: ${key} -> ${value}`);
+        logger.log(`  📝 Found contract: ${key} -> ${value}`);
       }
     }
 
     if (Object.keys(addresses).length > 0) {
-      console.log(`✅ Extracted ${Object.keys(addresses).length} contract addresses from contractDeployment`);
+      logger.log(`✅ Extracted ${Object.keys(addresses).length} contract addresses from contractDeployment`);
       return addresses;
     }
   }
@@ -234,7 +235,7 @@ export function parseContractAddressesFromDeployment(
     }
 
     if (Object.keys(addresses).length > 0) {
-      console.log(`✅ Extracted ${Object.keys(addresses).length} contract addresses from deploymentInfo`);
+      logger.log(`✅ Extracted ${Object.keys(addresses).length} contract addresses from deploymentInfo`);
       return addresses;
     }
   }
@@ -251,10 +252,10 @@ export function parseContractAddressesFromDeployment(
   }
 
   if (Object.keys(addresses).length > 0) {
-    console.log(`✅ Found ${Object.keys(addresses).length} potential contract addresses in response`);
+    logger.log(`✅ Found ${Object.keys(addresses).length} potential contract addresses in response`);
     return addresses;
   }
 
-  console.log(`⚠️  No contract addresses found in deployment response`);
+  logger.log(`⚠️  No contract addresses found in deployment response`);
   return null;
 }

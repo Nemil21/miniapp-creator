@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { useCallback } from 'react';
 import { useAuthContext } from '../app/contexts/AuthContext';
 
@@ -21,7 +22,7 @@ export async function handleApiResponse<T>(
 
     // Check if the error is due to session expiration
     if (response.status === 401 && errorData.error === 'Session expired') {
-      console.log('🔄 Session expired detected, redirecting to login');
+      logger.log('🔄 Session expired detected, redirecting to login');
       await handleSessionExpired();
       throw new Error('Session expired - redirecting to login');
     }

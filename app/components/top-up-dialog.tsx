@@ -1,4 +1,5 @@
 "use client";
+import { logger } from "../../lib/logger";
 
 import {
     Dialog,
@@ -61,12 +62,12 @@ export default function TopUpDialog({
                 setLoading(true);
                 try {
                     const response = await activeAgent.getTopUpDetails();
-                    console.log(response, "api response top up details");
+                    logger.log(response, "api response top up details");
 
                     setTopUpOptions(response.options);
                     setEscrowContract(response.escrowContract);
                 } catch (error) {
-                    console.error("Error fetching top-up details:", error);
+                    logger.error("Error fetching top-up details:", error);
                     toast.error("Failed to load top-up options. Please try again.");
                 } finally {
                     setLoading(false);
@@ -132,7 +133,7 @@ export default function TopUpDialog({
                 value: BigInt(option.value)
             });
 
-            console.log("Transaction hash:", hash);
+            logger.log("Transaction hash:", hash);
             toast.dismiss(toastSending);
             toast.success("Transaction sent! Processing...", { id: txToast });
 
@@ -144,13 +145,13 @@ export default function TopUpDialog({
                 amountInEth: option.amountInEth,
                 creditsToTopUp: option.creditsToTopUp,
             });
-            console.log("submitTopUpTransaction");
+            logger.log("submitTopUpTransaction");
 
             // Get current balance for polling comparison
             const currentBalance = await activeAgent.getBalance({
                 walletAddress: wallet.address,
             });
-            console.log(currentBalance, "currentBalance");
+            logger.log(currentBalance, "currentBalance");
 
             // Poll for balance update
             activeAgent.pollForBalanceUpdate({
@@ -173,7 +174,7 @@ export default function TopUpDialog({
                 },
             });
         } catch (error) {
-            console.log("Top-up error:", error);
+            logger.log("Top-up error:", error);
             toast.error("Top-up failed. See console for details.");
         } finally {
             setProcessingOption(null);

@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
@@ -60,7 +62,7 @@ export function PatchHistory({ projectId, onPatchSelect }: PatchHistoryProps) {
       const data = await response.json();
       setPatches(data.patches || []);
     } catch (err) {
-      console.error('Error fetching patches:', err);
+      logger.error('Error fetching patches:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch patches');
     } finally {
       setLoading(false);
@@ -96,7 +98,7 @@ export function PatchHistory({ projectId, onPatchSelect }: PatchHistoryProps) {
       // Refresh patches
       await fetchPatches();
     } catch (err) {
-      console.error('Error reverting patch:', err);
+      logger.error('Error reverting patch:', err);
       alert('Failed to revert patch');
     }
   };

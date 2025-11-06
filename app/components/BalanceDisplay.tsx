@@ -1,4 +1,5 @@
 "use client";
+import { logger } from "../../lib/logger";
 
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
     const hasOnlyEmbeddedWallet = wallets.length > 0 && 
         wallets.every(w => w.walletClientType === 'privy');
 
-    console.log('💰 BalanceDisplay render:', {
+    logger.log('💰 BalanceDisplay render:', {
         ready,
         authenticated,
         hasWallet: !!wallets[0],

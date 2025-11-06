@@ -1,3 +1,4 @@
+import { logger } from "../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { 
   getProjectById,
@@ -26,24 +27,24 @@ export async function GET(
     }
 
     const { projectId } = await params;
-    console.log('🔍 GET /api/projects/[projectId] - projectId:', projectId, 'user.id:', user.id);
+    logger.log('🔍 GET /api/projects/[projectId] - projectId:', projectId, 'user.id:', user.id);
 
     const project = await getProjectById(projectId);
-    console.log('🔍 getProjectById result:', project ? 'found' : 'not found');
+    logger.log('🔍 getProjectById result:', project ? 'found' : 'not found');
     
     if (!project) {
-      console.log('🔍 Project not found in database');
+      logger.log('🔍 Project not found in database');
       return NextResponse.json(
         { error: "Project not found" },
         { status: 404 }
       );
     }
 
-    console.log('🔍 Project found - userId:', project.userId, 'matches current user:', project.userId === user.id);
+    logger.log('🔍 Project found - userId:', project.userId, 'matches current user:', project.userId === user.id);
 
     // Check if user owns this project
     if (project.userId !== user.id) {
-      console.log('🔍 Access denied - user does not own project');
+      logger.log('🔍 Access denied - user does not own project');
       return NextResponse.json(
         { error: "Access denied" },
         { status: 403 }
@@ -73,7 +74,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("Error fetching project:", error);
+    logger.error("Error fetching project:", error);
     return NextResponse.json(
       { error: "Failed to fetch project" },
       { status: 500 }
@@ -123,7 +124,7 @@ export async function PUT(
       project: updatedProject,
     });
   } catch (error) {
-    console.error("Error updating project:", error);
+    logger.error("Error updating project:", error);
     return NextResponse.json(
       { error: "Failed to update project" },
       { status: 500 }
@@ -172,7 +173,7 @@ export async function DELETE(
       message: "Project deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting project:", error);
+    logger.error("Error deleting project:", error);
     return NextResponse.json(
       { error: "Failed to delete project" },
       { status: 500 }

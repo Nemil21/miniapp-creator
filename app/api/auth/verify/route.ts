@@ -1,3 +1,4 @@
+import { logger } from "../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "../../../../lib/auth";
 
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
       user,
     });
   } catch (error) {
-    console.error("Session verification error:", error);
+    logger.error("Session verification error:", error);
     return NextResponse.json(
       { error: "Session verification failed" },
       { status: 500 }

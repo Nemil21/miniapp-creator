@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { saveChatMessage, createProject, migrateChatMessages } from "../../../lib/database";
 import { authenticateRequest } from "../../../lib/auth";
@@ -42,7 +43,7 @@ async function loadChatMessagesFromDB(projectId: string): Promise<ChatMessage[]>
       changedFiles: msg.changedFiles as string[] | undefined
     }));
   } catch (error) {
-    console.warn("Failed to load chat messages from DB:", error);
+    logger.warn("Failed to load chat messages from DB:", error);
     return [];
   }
 }
@@ -71,7 +72,7 @@ async function saveMessageToDBAndCache(
       });
     }
   } catch (error) {
-    console.warn("Failed to save message to DB and cache:", error);
+    logger.warn("Failed to save message to DB and cache:", error);
   }
 }
 
@@ -138,7 +139,7 @@ async function callClaude(
   stream: boolean = false
 ): Promise<string | ReadableStream> {
   const apiKey = process.env.CLAUDE_API_KEY;
-  // console.log("Claude API key:", apiKey);
+  // logger.log("Claude API key:", apiKey);
   if (!apiKey) throw new Error("Claude API key not set");
 
   const requestBody = {
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
       // Track credits before processing
       try {
         creditEventId = await trackCredits(walletAddress, 1);
-        console.log('Server-side credit tracking initiated:', creditEventId);
+        logger.log('Server-side credit tracking initiated:', creditEventId);
       } catch {
         return NextResponse.json(
           { error: 'Insufficient credits', details: 'Unable to reserve credits for this operation' },
@@ -244,7 +245,7 @@ export async function POST(request: NextRequest) {
             const jitter = Math.random() * 1000; // Add random jitter up to 1 second
             const totalDelay = exponentialDelay + jitter;
             
-            console.log(`Claude API overloaded, retry attempt ${i + 1} of ${maxRetries}. Waiting ${totalDelay}ms`);
+            logger.log(`Claude API overloaded, retry attempt ${i + 1} of ${maxRetries}. Waiting ${totalDelay}ms`);
             await new Promise(resolve => setTimeout(resolve, totalDelay));
             continue;
           }
@@ -275,9 +276,9 @@ export async function POST(request: NextRequest) {
           );
           currentProjectId = draftProject.id;
           sessionToProjectMap.set(sessionId, currentProjectId);
-          console.log(`Created project ${currentProjectId} for session ${sessionId}`);
+          logger.log(`Created project ${currentProjectId} for session ${sessionId}`);
         } catch (error) {
-          console.warn("Failed to create project:", error);
+          logger.warn("Failed to create project:", error);
           return NextResponse.json(
             { error: "Failed to create project for chat" },
             { status: 500 }
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
         projectConfirmed: false,
       };
       chatSessions.set(currentProjectId, session);
-      console.log(`Loaded ${existingMessages.length} messages from DB for project ${currentProjectId}`);
+      logger.log(`Loaded ${existingMessages.length} messages from DB for project ${currentProjectId}`);
     }
 
     // Save user message to database and update cache
@@ -394,7 +395,7 @@ export async function POST(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error("Chat API error:", error);
+    logger.error("Chat API error:", error);
     return NextResponse.json(
       {
         error: "Failed to process chat message",
@@ -429,7 +430,7 @@ export async function GET(request: NextRequest) {
       projectId,
     });
   } catch (error) {
-    console.error("Chat messages retrieval error:", error);
+    logger.error("Chat messages retrieval error:", error);
     return NextResponse.json(
       {
         error: "Failed to retrieve chat messages",
@@ -471,7 +472,7 @@ export async function PUT(request: NextRequest) {
       toProjectId,
     });
   } catch (error) {
-    console.error("Chat migration error:", error);
+    logger.error("Chat migration error:", error);
     return NextResponse.json(
       {
         error: "Failed to migrate chat messages",

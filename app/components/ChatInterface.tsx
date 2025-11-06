@@ -1,5 +1,7 @@
 'use client';
 
+import { logger } from "../../lib/logger";
+
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -118,7 +120,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             try {
                 sessionStorage.removeItem('minidev_chat_session_id');
             } catch (e) {
-                console.error('Failed to clear session storage:', e);
+                logger.error('Failed to clear session storage:', e);
             }
         },
         focusInput: () => {
@@ -131,7 +133,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // Load chat messages when project changes
     useEffect(() => {
         const loadChatMessages = async () => {
-            console.log('🔍 ChatInterface useEffect triggered:', {
+            logger.log('🔍 ChatInterface useEffect triggered:', {
                 currentProject: currentProject?.projectId,
                 sessionToken: !!sessionToken,
                 currentPhase,
@@ -141,17 +143,17 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
             // Skip loading if we're currently sending a message to prevent state overwrites
             if (isSendingMessageRef.current) {
-                console.log('⏭️ Skipping chat load - message sending in progress');
+                logger.log('⏭️ Skipping chat load - message sending in progress');
                 return;
             }
 
             if (currentProject?.projectId && sessionToken) {
                 // Set phase to 'editing' when an existing project is loaded
                 if (currentPhase !== 'editing') {
-                    console.log('🔍 Setting phase to editing for existing project:', currentProject.projectId);
+                    logger.log('🔍 Setting phase to editing for existing project:', currentProject.projectId);
                     setCurrentPhase('editing');
                 } else {
-                    console.log('🔍 Phase already set to editing, skipping');
+                    logger.log('🔍 Phase already set to editing, skipping');
                 }
 
                 try {
@@ -174,12 +176,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         }
                     }
                 } catch (error) {
-                    console.warn('Failed to load chat messages:', error);
+                    logger.warn('Failed to load chat messages:', error);
                 }
             } else if (!currentProject && currentPhase === 'editing') {
                 // Only reset phase if we're in editing mode and project is cleared
                 // Don't reset during building phase to avoid interrupting generation
-                console.log('🔄 Project cleared, resetting phase to requirements');
+                logger.log('🔄 Project cleared, resetting phase to requirements');
                 setCurrentPhase('requirements');
             }
 
@@ -214,7 +216,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     useEffect(() => {
         if (aiLoading) {
             const timeout = setTimeout(() => {
-                console.log('⏰ AI response timeout after 30 seconds');
+                logger.log('⏰ AI response timeout after 30 seconds');
                 setAiLoading(false);
             }, 30000); // 30 second timeout for chat responses
             
@@ -224,7 +226,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
     // Notify parent when generating state changes
     useEffect(() => {
-        console.log('🔄 onGeneratingChange called with isGenerating:', isGenerating);
+        logger.log('🔄 onGeneratingChange called with isGenerating:', isGenerating);
         onGeneratingChange(isGenerating);
     }, [isGenerating, onGeneratingChange]);
 
@@ -233,7 +235,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     useEffect(() => {
         return () => {
             if (generationTimeoutRef.current) {
-                console.log('🧹 Cleaning up generation timeout on unmount');
+                logger.log('🧹 Cleaning up generation timeout on unmount');
                 clearTimeout(generationTimeoutRef.current);
                 generationTimeoutRef.current = null;
             }
@@ -269,31 +271,13 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
         // User message will be saved to database by the chat API
 
-        // Credit tracking variables
-        let eventId: string | null = null;
+        // Credit tracking - handled entirely server-side to prevent double charging
+        // Previously, both client and server were tracking credits, causing double charges
         const walletAddress = wallets[0]?.address;
 
         try {
-            // Track event - hold 1 credit before calling AI API (only if credits not disabled)
-            if (!credsOff && activeAgent && walletAddress) {
-                // Note: Some EarnKit versions may not support the 'credits' parameter
-                // If not supported, it will track with default amount (usually 1 credit)
-                const trackResponse = await activeAgent.track({
-                    walletAddress: walletAddress,
-                    credits: 1, // Each chat message costs 1 credit
-                } as { walletAddress: string; credits: number })
-
-                if (trackResponse.insufficientCredits) {
-                    toast.error('Insufficient credits. Please top up your balance to continue chatting.');
-                    setAiLoading(false);
-                    setPrompt('');
-                    isSendingMessageRef.current = false;
-                    return; // Exit early, don't proceed with AI call
-                }
-
-                eventId = trackResponse.eventId;
-                console.log('Credit tracking started (1 credit):', eventId);
-            }
+            // Credit validation and tracking is now done server-side only in /api/chat
+            // This fixes the bug where users were charged 2x per message
             const endpoint = '/api/chat';
             const body: {
                 sessionId: string;
@@ -317,7 +301,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 body.action = 'confirm_project';
             } else {
                 // For editing phase, directly apply changes without streaming conversation
-                console.log('🔄 Directly applying changes to existing project...');
+                logger.log('🔄 Directly applying changes to existing project...');
 
                 try {
                     // Save user message to database first
@@ -332,9 +316,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                     phase: 'editing'
                                 })
                             });
-                            console.log('💾 User message saved to database');
+                            logger.log('💾 User message saved to database');
                         } catch (error) {
-                            console.warn('Failed to save user message to database:', error);
+                            logger.warn('Failed to save user message to database:', error);
                         }
                     }
 
@@ -365,7 +349,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     // Check if async job was created (202 Accepted)
                     if (updateResponse.status === 202) {
                         const jobData = await updateResponse.json();
-                        console.log('🔄 Async edit job created:', jobData.jobId);
+                        logger.log('🔄 Async edit job created:', jobData.jobId);
 
                         // Update processing message to show polling
                         setChat(prev => {
@@ -378,7 +362,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
                         // Poll for job completion
                         const result = await pollJobStatus(jobData.jobId);
-                        console.log('✅ Edit job completed:', result);
+                        logger.log('✅ Edit job completed:', result);
 
                         // Update project with new URLs and timestamp to trigger iframe refresh
                         if (currentProject) {
@@ -389,7 +373,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                 url: result.previewUrl || result.vercelUrl || currentProject.url,
                                 lastUpdated: Date.now(), // Add timestamp to force iframe refresh
                             };
-                            console.log('🔄 Updating project with timestamp:', updatedProject.lastUpdated);
+                            logger.log('🔄 Updating project with timestamp:', updatedProject.lastUpdated);
                             onProjectGenerated(updatedProject);
                         }
 
@@ -406,19 +390,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                             return newChat;
                         });
 
-                        // Capture event - finalize charge after successful AI call (only if credits not disabled)
-                        if (!credsOff && activeAgent && eventId) {
-                            try {
-                                await activeAgent.capture({ eventId });
-                                console.log('Credit captured successfully for editing:', eventId);
-
-                                // Invalidate balance query to refresh balance display
-                                queryClient.invalidateQueries({ queryKey: ["balance"] });
-                            } catch (captureError) {
-                                console.error('Failed to capture credits for editing:', captureError);
-                                // Continue even if capture fails
-                            }
-                        }
+                        // Credit capture is handled server-side to prevent double charging
+                        // Invalidate balance query to refresh balance display
+                        queryClient.invalidateQueries({ queryKey: ["balance"] });
 
                         // Save AI success message to database
                         if (currentProject?.projectId) {
@@ -433,15 +407,15 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                         changedFiles: changedFiles
                                     })
                                 });
-                                console.log('💾 AI success message saved to database');
+                                logger.log('💾 AI success message saved to database');
                             } catch (error) {
-                                console.warn('Failed to save AI message to database:', error);
+                                logger.warn('Failed to save AI message to database:', error);
                             }
                         }
                     } else if (updateResponse.ok) {
                         // Fallback: synchronous response (shouldn't happen with async mode)
                         const updateData = await updateResponse.json();
-                        console.log('✅ Changes applied successfully (sync mode):', updateData.changed);
+                        logger.log('✅ Changes applied successfully (sync mode):', updateData.changed);
 
                         // Update currentProject with new preview URL and timestamp to refresh iframe
                         if (currentProject) {
@@ -452,7 +426,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                 url: updateData.previewUrl || updateData.vercelUrl || currentProject.url,
                                 lastUpdated: Date.now(), // Add timestamp to force iframe refresh
                             };
-                            console.log('🔄 Updating project with timestamp:', updatedProject.lastUpdated);
+                            logger.log('🔄 Updating project with timestamp:', updatedProject.lastUpdated);
                             onProjectGenerated(updatedProject);
                         }
 
@@ -469,19 +443,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                             return newChat;
                         });
 
-                        // Capture event - finalize charge after successful AI call (only if credits not disabled)
-                        if (!credsOff && activeAgent && eventId) {
-                            try {
-                                await activeAgent.capture({ eventId });
-                                console.log('Credit captured successfully for editing (sync):', eventId);
-
-                                // Invalidate balance query to refresh balance display
-                                queryClient.invalidateQueries({ queryKey: ["balance"] });
-                            } catch (captureError) {
-                                console.error('Failed to capture credits for editing (sync):', captureError);
-                                // Continue even if capture fails
-                            }
-                        }
+                        // Credit capture is handled server-side to prevent double charging
+                        // Invalidate balance query to refresh balance display
+                        queryClient.invalidateQueries({ queryKey: ["balance"] });
 
                         // Save AI success message to database
                         if (currentProject?.projectId) {
@@ -496,9 +460,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                         changedFiles: updateData.changed || []
                                     })
                                 });
-                                console.log('💾 AI success message saved to database');
+                                logger.log('💾 AI success message saved to database');
                             } catch (error) {
-                                console.warn('Failed to save AI message to database:', error);
+                                logger.warn('Failed to save AI message to database:', error);
                             }
                         }
                     } else {
@@ -506,7 +470,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         throw new Error(errorData.error || 'Failed to apply changes');
                     }
                 } catch (updateError) {
-                    console.error('Failed to apply changes:', updateError);
+                    logger.error('Failed to apply changes:', updateError);
 
                     const errorContent = '❌ Sorry, I encountered an error while applying the changes. Please try again.';
                     
@@ -531,9 +495,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                     phase: 'editing'
                                 })
                             });
-                            console.log('💾 AI error message saved to database');
+                            logger.log('💾 AI error message saved to database');
                         } catch (error) {
-                            console.warn('Failed to save AI error message to database:', error);
+                            logger.warn('Failed to save AI error message to database:', error);
                         }
                     }
                 } finally {
@@ -565,22 +529,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             // Track the project ID where chat messages are stored
             if (data.projectId && !chatProjectId) {
                 setChatProjectId(data.projectId);
-                console.log('📝 Chat messages stored in project:', data.projectId);
+                logger.log('📝 Chat messages stored in project:', data.projectId);
             }
 
-            // Capture event - finalize charge after successful AI call (only if credits not disabled)
-            if (!credsOff && activeAgent && eventId) {
-                try {
-                    await activeAgent.capture({ eventId });
-                    console.log('Credit captured successfully:', eventId);
-
-                    // Invalidate balance query to refresh balance display
-                    queryClient.invalidateQueries({ queryKey: ["balance"] });
-                } catch (captureError) {
-                    console.error('Failed to capture credits:', captureError);
-                    // Continue even if capture fails
-                }
-            }
+            // Credit capture is handled server-side to prevent double charging
+            // Invalidate balance query to refresh balance display
+            queryClient.invalidateQueries({ queryKey: ["balance"] });
 
             // Add AI message to chat
             const aiMsg: ChatMessage = {
@@ -606,7 +560,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 const isConfirmedByAPI = data.projectConfirmed === true;
 
                 if (isConfirmedByText || isConfirmedByAPI) {
-                    console.log('✅ Project confirmation detected! Transitioning to building phase...', {
+                    logger.log('✅ Project confirmation detected! Transitioning to building phase...', {
                         isConfirmedByText,
                         isConfirmedByAPI,
                         isGenerating,
@@ -617,36 +571,34 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     // Use the AI's analysis as the final prompt
                     const finalPrompt = aiResponse;
 
-                    console.log('🚀 Triggering project generation with AI analysis:', finalPrompt.substring(0, 200) + '...');
+                    logger.log('🚀 Triggering project generation with AI analysis:', finalPrompt.substring(0, 200) + '...');
 
                     // Clear any existing timeout before scheduling a new one to prevent duplicates
                     if (generationTimeoutRef.current) {
                         clearTimeout(generationTimeoutRef.current);
-                        console.log('🧹 Cleared existing generation timeout to prevent duplicates');
+                        logger.log('🧹 Cleared existing generation timeout to prevent duplicates');
                     }
 
                     // Store timeout reference for cleanup
                     generationTimeoutRef.current = setTimeout(() => {
-                        console.log('⏰ Timeout fired, calling handleGenerateProject');
+                        logger.log('⏰ Timeout fired, calling handleGenerateProject');
                         handleGenerateProject(aiResponse);
                         generationTimeoutRef.current = null; // Clear ref after execution
                     }, 1000);
-                    console.log('⏰ Generation timeout scheduled for 1 second');
+                    logger.log('⏰ Generation timeout scheduled for 1 second');
                 }
             } else {
                 // Log why generation is not allowed
                 const phase = currentPhase as 'requirements' | 'building' | 'editing';
                 if (phase === 'editing') {
-                    console.log('📝 In editing phase - generation not allowed, only file modifications');
+                    logger.log('📝 In editing phase - generation not allowed, only file modifications');
                 }
             }
         } catch (err) {
-            console.error('Error:', err);
+            logger.error('Error:', err);
             
-            // If we have an eventId but the AI call failed, we should not capture credits
-            if (eventId) {
-                console.log('AI call failed, credits will not be charged for eventId:', eventId);
-            }
+            // Credits are only captured server-side on successful completion
+            // If the call fails, server won't capture the tracked credits
             
             // setError(err instanceof Error ? err.message : 'An error occurred');
             setChat(prev => [
@@ -671,14 +623,14 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
         const maxAttempts = 80; // Poll for up to ~20 minutes (80 * 15 seconds)
         let attempt = 0;
 
-        console.log(`🔄 Starting to poll job ${jobId}...`);
+        logger.log(`🔄 Starting to poll job ${jobId}...`);
 
         return new Promise((resolve, reject) => {
             const pollInterval = setInterval(async () => {
                 attempt++;
 
                 try {
-                    console.log(`🔄 Polling job ${jobId} (attempt ${attempt}/${maxAttempts})...`);
+                    logger.log(`🔄 Polling job ${jobId} (attempt ${attempt}/${maxAttempts})...`);
 
                     const response = await fetch(`/api/jobs/${jobId}`, {
                         headers: {
@@ -693,11 +645,11 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     }
 
                     const job = await response.json();
-                    console.log(`📊 Job status:`, job.status);
+                    logger.log(`📊 Job status:`, job.status);
 
                     if (job.status === 'completed') {
                         clearInterval(pollInterval);
-                        console.log('✅ Job completed successfully!', job.result);
+                        logger.log('✅ Job completed successfully!', job.result);
 
                         // Transform job result to GeneratedProject format
                         const project: GeneratedProject = {
@@ -712,7 +664,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         resolve(project);
                     } else if (job.status === 'failed') {
                         clearInterval(pollInterval);
-                        console.log('❌ Job failed, details:', {
+                        logger.log('❌ Job failed, details:', {
                             error: job.error,
                             result: job.result,
                             hasDeploymentError: job.result?.deploymentError,
@@ -728,7 +680,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     }
                     // Otherwise, job is still pending or processing, continue polling
                 } catch (error) {
-                    console.error('❌ Error polling job:', error);
+                    logger.error('❌ Error polling job:', error);
                     clearInterval(pollInterval);
                     reject(error);
                 }
@@ -737,7 +689,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     };
 
     const handleGenerateProject = async (generationPrompt: string) => {
-        console.log('🔍 handleGenerateProject called:', {
+        logger.log('🔍 handleGenerateProject called:', {
             hasPrompt: !!generationPrompt.trim(),
             hasSessionToken: !!sessionToken,
             isGenerating,
@@ -747,7 +699,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
         // Check if generation should proceed
         if (!generationPrompt.trim() || !sessionToken || isGenerating) {
-            console.log('⚠️ Skipping project generation:', {
+            logger.log('⚠️ Skipping project generation:', {
                 reason: !generationPrompt.trim() ? 'no prompt' :
                         !sessionToken ? 'no session token' :
                         isGenerating ? 'already generating' : 'unknown'
@@ -755,12 +707,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             return;
         }
 
-        console.log('🚀 Starting project generation...');
+        logger.log('🚀 Starting project generation...');
         setIsGenerating(true);
 
         // setError(null);
         try {
-            console.log('🚀 Generating project with prompt:', generationPrompt.substring(0, 200) + '...');
+            logger.log('🚀 Generating project with prompt:', generationPrompt.substring(0, 200) + '...');
 
             // Check if async processing is enabled
             const useAsyncProcessing = window.localStorage.getItem('minidev_use_async_processing') === 'true' ||
@@ -769,7 +721,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             // TEST MODE: Add this header to enable quick 30-second return for debugging
             const testQuickReturn = window.localStorage.getItem('minidev_test_quick_return') === 'true';
             if (testQuickReturn) {
-                console.log('🧪 TEST MODE ENABLED: API will return after 30 seconds');
+                logger.log('🧪 TEST MODE ENABLED: API will return after 30 seconds');
             }
 
             const response = await fetch('/api/generate', {
@@ -786,7 +738,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 }),
             });
 
-            console.log('📤 Sent /api/generate request with:', {
+            logger.log('📤 Sent /api/generate request with:', {
                 hasChatProjectId: !!chatProjectId,
                 chatProjectId,
                 useAsyncProcessing
@@ -795,7 +747,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             // Handle async processing response (202 Accepted)
             if (response.status === 202 && useAsyncProcessing) {
                 const jobData = await response.json();
-                console.log('🔄 Async job created:', jobData.jobId);
+                logger.log('🔄 Async job created:', jobData.jobId);
 
                 // Add a message about async processing
                 setChat(prev => [
@@ -813,21 +765,21 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 try {
                     project = await pollJobStatus(jobData.jobId);
                 } catch (pollError) {
-                    console.error('❌ Async job failed:', pollError);
+                    logger.error('❌ Async job failed:', pollError);
                     throw pollError; // Re-throw to be caught by outer catch block
                 }
 
                 // Project is now ready, continue with normal flow
-                console.log('📦 Project generated successfully via async processing:', {
+                logger.log('📦 Project generated successfully via async processing:', {
                     projectId: project.projectId,
                 });
 
                 // Rest of the success handling is below in the common code path
-                console.log('✅ Generation complete, updating UI state...');
+                logger.log('✅ Generation complete, updating UI state...');
                 onProjectGenerated(project);
-                console.log('✅ Project state updated via onProjectGenerated');
+                logger.log('✅ Project state updated via onProjectGenerated');
                 setCurrentPhase('editing');
-                console.log('✅ Phase set to editing');
+                logger.log('✅ Phase set to editing');
 
                 // Add generation success message to chat
                 const aiMessage = project.generatedFiles && project.generatedFiles.length > 0
@@ -858,7 +810,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                             })
                         });
                     } catch (error) {
-                        console.warn('Failed to save success message to database:', error);
+                        logger.warn('Failed to save success message to database:', error);
                     }
                 }
 
@@ -869,12 +821,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             if (!response.ok) {
                 const errorData = await response.json();
                 const errorMessage = errorData.details || errorData.error || 'Failed to generate project';
-                console.error('Generation error details:', errorData);
+                logger.error('Generation error details:', errorData);
                 throw new Error(errorMessage);
             }
             const project = await response.json();
 
-            console.log('📦 Project generated successfully:', {
+            logger.log('📦 Project generated successfully:', {
                 projectId: project.projectId,
                 chatProjectIdMatches: project.projectId === chatProjectId
             });
@@ -882,11 +834,11 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             // Chat messages are already in the right place! No migration needed
             // because /api/chat created the project first and saved messages there
 
-            console.log('✅ Generation complete, updating UI state...');
+            logger.log('✅ Generation complete, updating UI state...');
             onProjectGenerated(project);
-            console.log('✅ Project state updated via onProjectGenerated');
+            logger.log('✅ Project state updated via onProjectGenerated');
             setCurrentPhase('editing');
-            console.log('✅ Phase set to editing');
+            logger.log('✅ Phase set to editing');
 
             // Add generation success message to chat
             const aiMessage = project.generatedFiles && project.generatedFiles.length > 0
@@ -917,13 +869,13 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         })
                     });
                 } catch (error) {
-                    console.warn('Failed to save success message to database:', error);
+                    logger.warn('Failed to save success message to database:', error);
                 }
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An error occurred';
 
-            console.error('Generation failed:', errorMessage);
+            logger.error('Generation failed:', errorMessage);
             
             // Format deployment errors more clearly
             let displayMessage = errorMessage;
@@ -988,7 +940,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     //         setChat([]);
     //         setCurrentPhase('requirements');
     //     } catch (error) {
-    //         console.error('Failed to cleanup project:', error);
+    //         logger.error('Failed to cleanup project:', error);
     //     }
     // };
 

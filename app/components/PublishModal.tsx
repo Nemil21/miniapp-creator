@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useEffect } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
@@ -25,12 +27,12 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
     useEffect(() => {
         const initSdk = async () => {
             try {
-                console.log('🔧 Initializing Farcaster SDK...');
+                logger.log('🔧 Initializing Farcaster SDK...');
                 await sdk.context;
                 setSdkReady(true);
-                console.log('✅ Farcaster SDK initialized');
+                logger.log('✅ Farcaster SDK initialized');
             } catch (error) {
-                console.error('❌ Failed to initialize Farcaster SDK:', error);
+                logger.error('❌ Failed to initialize Farcaster SDK:', error);
                 // SDK might not be available outside of Farcaster frame
                 setSdkReady(false);
             }
@@ -81,18 +83,18 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
 
     // Handle direct publish (without Farcaster SDK)
     const handleSignAndPublish = async () => {
-        console.log('handleSignAndPublish called with:', { projectId, projectUrl, formData });
+        logger.log('handleSignAndPublish called with:', { projectId, projectUrl, formData });
 
         if (!validateForm()) return;
 
         if (!projectId) {
-            console.error('❌ Project ID is missing');
+            logger.error('❌ Project ID is missing');
             setError('Project ID is missing. Please ensure your project is loaded correctly.');
             return;
         }
 
         if (!projectUrl) {
-            console.error('❌ Project URL is missing');
+            logger.error('❌ Project URL is missing');
             setError('Project URL is missing. Please ensure your project is deployed.');
             return;
         }
@@ -102,7 +104,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         setCurrentStep(2); // Move to publishing step
 
         try {
-            console.log('📦 Step 1: Building manifest object...');
+            logger.log('📦 Step 1: Building manifest object...');
             
             // Build base manifest structure
             const baseManifest = {
@@ -119,14 +121,14 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 }
             };
 
-            console.log('✅ Base manifest built:', JSON.stringify(baseManifest, null, 2));
+            logger.log('✅ Base manifest built:', JSON.stringify(baseManifest, null, 2));
 
             // Sign manifest with Farcaster SDK
-            console.log('✍️ Step 2: Signing manifest with Farcaster...');
+            logger.log('✍️ Step 2: Signing manifest with Farcaster...');
             let manifest;
             
             if (!sdkReady) {
-                console.error('❌ Farcaster SDK not initialized');
+                logger.error('❌ Farcaster SDK not initialized');
                 throw new Error('Please open this app in Warpcast to publish. Visit https://warpcast.com/');
             }
 
@@ -134,7 +136,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 // Extract domain from homeUrl
                 const homeUrlObj = new URL(formData.homeUrl);
                 const domain = homeUrlObj.hostname;
-                console.log('🌐 Extracted domain:', domain);
+                logger.log('🌐 Extracted domain:', domain);
                 
                 // Use SDK to sign the domain manifest with user's FID
                 // See: https://miniapps.farcaster.xyz/docs/sdk/actions/sign-manifest
@@ -142,7 +144,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                     domain: domain
                 });
                 
-                console.log('✅ Manifest signed successfully:', accountAssociation);
+                logger.log('✅ Manifest signed successfully:', accountAssociation);
                 
                 if (!accountAssociation || !accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
                     throw new Error('Failed to sign manifest. Incomplete signature returned.');
@@ -158,9 +160,9 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                     ...baseManifest
                 };
                 
-                console.log('📝 Complete signed manifest:', JSON.stringify(manifest, null, 2));
+                logger.log('📝 Complete signed manifest:', JSON.stringify(manifest, null, 2));
             } catch (signError: unknown) {
-                console.error('❌ Signing error:', signError);
+                logger.error('❌ Signing error:', signError);
                 
                 // Handle specific error types from the SDK
                 const errorConstructorName = (signError as { constructor?: { name?: string } })?.constructor?.name;
@@ -178,15 +180,15 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
             }
 
             // Send to API for server-side processing
-            console.log('🌐 Step 3: Checking authentication...');
+            logger.log('🌐 Step 3: Checking authentication...');
             if (!isAuthenticated || !sessionToken) {
-                console.error('❌ Not authenticated');
+                logger.error('❌ Not authenticated');
                 throw new Error('Not authenticated. Please sign in first.');
             }
-            console.log('✅ Authentication verified');
-            console.log('Session token available:', !!sessionToken);
+            logger.log('✅ Authentication verified');
+            logger.log('Session token available:', !!sessionToken);
 
-            console.log('📤 Step 4: Sending signed manifest to API...', {
+            logger.log('📤 Step 4: Sending signed manifest to API...', {
                 endpoint: '/api/publish',
                 projectId,
                 hasManifest: !!manifest,
@@ -205,8 +207,8 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 })
             });
 
-            console.log('API response status:', response.status);
-            console.log('API response headers:', response.headers);
+            logger.log('API response status:', response.status);
+            logger.log('API response headers:', response.headers);
 
             if (!response.ok) {
                 // Try to get error details from response
@@ -214,19 +216,19 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 try {
                     const errorData = await response.json();
                     errorMessage = errorData.error || errorMessage;
-                    console.error('API error response:', errorData);
+                    logger.error('API error response:', errorData);
                 } catch (parseError) {
                     // Response might not be JSON
-                    console.error('Failed to parse error response as JSON:', parseError);
+                    logger.error('Failed to parse error response as JSON:', parseError);
                     const textError = await response.text();
-                    console.error('API error (non-JSON):', textError);
+                    logger.error('API error (non-JSON):', textError);
                     errorMessage = textError || errorMessage;
                 }
                 throw new Error(errorMessage);
             }
 
             const result = await response.json();
-            console.log('API response body:', result);
+            logger.log('API response body:', result);
 
             if (!result || typeof result !== 'object') {
                 throw new Error('Invalid response format from server');
@@ -236,11 +238,11 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 throw new Error(result.error || 'Failed to publish');
             }
 
-            console.log('Publish successful:', result);
+            logger.log('Publish successful:', result);
             setManifestUrl(result.manifestUrl);
             setCurrentStep(3); // Move to success step
         } catch (err) {
-            console.error('Publish error:', err);
+            logger.error('Publish error:', err);
 
             // Handle specific errors
             let errorMessage = 'Failed to publish. ';

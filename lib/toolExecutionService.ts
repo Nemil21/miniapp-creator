@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { SecureCommandExecutor, formatCommandResult } from './commandExecutor';
 import { ContextGatheringResult, STAGE_MODEL_CONFIG } from './llmOptimizer';
 import * as fs from 'fs';
@@ -25,7 +26,7 @@ const logStageResponse = (projectId: string, stageName: string, response: string
     
     // In production (Vercel), use structured console logging instead of file system
     if (process.env.NODE_ENV === 'production') {
-      console.log(`[${stageName}] ${JSON.stringify(logContent)}`);
+      logger.log(`[${stageName}] ${JSON.stringify(logContent)}`);
     } else {
       // In development, still write to files
       const debugDir = createDebugLogDir(projectId);
@@ -34,10 +35,10 @@ const logStageResponse = (projectId: string, stageName: string, response: string
       const filepath = path.join(debugDir, filename);
       
       fs.writeFileSync(filepath, JSON.stringify(logContent, null, 2));
-      console.log(`📝 Debug log saved: ${filepath}`);
+      logger.log(`📝 Debug log saved: ${filepath}`);
     }
   } catch (error) {
-    console.error('Failed to write debug log:', error);
+    logger.error('Failed to write debug log:', error);
   }
 };
 
@@ -75,11 +76,11 @@ export async function executeToolCalls(
   const toolResults: ToolExecutionResult[] = [];
   let contextData = '';
 
-  console.log(`🔧 Executing ${contextResult.toolCalls.length} tool calls for context gathering`);
+  logger.log(`🔧 Executing ${contextResult.toolCalls.length} tool calls for context gathering`);
 
   for (const toolCall of contextResult.toolCalls) {
     try {
-      console.log(`🔧 Executing: ${toolCall.tool} ${toolCall.args.join(' ')}`);
+      logger.log(`🔧 Executing: ${toolCall.tool} ${toolCall.args.join(' ')}`);
       
       // Fix working directory and args for common tools
       let fixedToolCall = { ...toolCall };
@@ -139,7 +140,7 @@ export async function executeToolCalls(
             ...toolCall,
             args: fixedArgs
           };
-          console.log(`🔧 Fixed ${toolCall.tool} command: ${fixedToolCall.args.join(' ')} (was: ${toolCall.args.join(' ')})`);
+          logger.log(`🔧 Fixed ${toolCall.tool} command: ${fixedToolCall.args.join(' ')} (was: ${toolCall.args.join(' ')})`);
         }
       }
       
@@ -162,12 +163,12 @@ export async function executeToolCalls(
         const formattedOutput = formatCommandResult(result, toolCall.tool);
         contextData += `\n\n## ${toolCall.tool} ${toolCall.args.join(' ')}\n${formattedOutput}`;
       } else {
-        console.warn(`⚠️ Tool call failed: ${toolCall.tool}`, result.error);
+        logger.warn(`⚠️ Tool call failed: ${toolCall.tool}`, result.error);
         contextData += `\n\n## ${toolCall.tool} ${toolCall.args.join(' ')} (FAILED)\n${result.error}`;
       }
 
     } catch (error) {
-      console.error(`❌ Tool execution error:`, error);
+      logger.error(`❌ Tool execution error:`, error);
       const toolResult: ToolExecutionResult = {
         success: false,
         output: '',
@@ -205,11 +206,11 @@ export async function executeToolCallsViaAPI(
   const toolResults: ToolExecutionResult[] = [];
   let contextData = '';
 
-  console.log(`🔧 Executing ${contextResult.toolCalls.length} tool calls via API`);
+  logger.log(`🔧 Executing ${contextResult.toolCalls.length} tool calls via API`);
 
   for (const toolCall of contextResult.toolCalls) {
     try {
-      console.log(`🔧 Executing via API: ${toolCall.tool} ${toolCall.args.join(' ')}`);
+      logger.log(`🔧 Executing via API: ${toolCall.tool} ${toolCall.args.join(' ')}`);
       
       const response = await fetch(`${previewApiBase}/previews/${projectId}/execute`, {
         method: 'POST',
@@ -244,12 +245,12 @@ export async function executeToolCallsViaAPI(
         }, toolCall.tool);
         contextData += `\n\n## ${toolCall.tool} ${toolCall.args.join(' ')}\n${formattedOutput}`;
       } else {
-        console.warn(`⚠️ Tool call failed: ${toolCall.tool}`, result.error);
+        logger.warn(`⚠️ Tool call failed: ${toolCall.tool}`, result.error);
         contextData += `\n\n## ${toolCall.tool} ${toolCall.args.join(' ')} (FAILED)\n${result.error}`;
       }
 
     } catch (error) {
-      console.error(`❌ Tool execution error:`, error);
+      logger.error(`❌ Tool execution error:`, error);
       const toolResult: ToolExecutionResult = {
         success: false,
         output: '',
@@ -328,8 +329,8 @@ Return ONLY the JSON object.`,
     // First try to parse the response directly
     contextResult = JSON.parse(contextResponse);
   } catch (error) {
-    console.error('Failed to parse context gathering result:', error);
-    console.error('Raw response:', contextResponse.substring(0, 500));
+    logger.error('Failed to parse context gathering result:', error);
+    logger.error('Raw response:', contextResponse.substring(0, 500));
     
     // Fallback: try to extract and clean JSON from the response
     try {
@@ -352,7 +353,7 @@ Return ONLY the JSON object.`,
         throw new Error('No valid JSON found in response');
       }
     } catch (fallbackError) {
-      console.error('Fallback parsing also failed:', fallbackError);
+      logger.error('Fallback parsing also failed:', fallbackError);
       return {
         contextResult: { needsContext: false, toolCalls: [] },
         contextData: '',
@@ -374,11 +375,11 @@ Return ONLY the JSON object.`,
   
   if (projectDir) {
     // Use local tool execution when project directory is available
-    console.log(`🔧 Using local tool execution with project directory: ${projectDir}`);
+    logger.log(`🔧 Using local tool execution with project directory: ${projectDir}`);
     executionResult = await executeToolCalls(contextResult, projectId, projectDir);
   } else {
     // Fallback to API execution when project directory is not available
-    console.log(`🔧 Using API tool execution (no project directory provided)`);
+    logger.log(`🔧 Using API tool execution (no project directory provided)`);
     executionResult = await executeToolCallsViaAPI(contextResult, projectId, accessToken);
   }
 

@@ -1,4 +1,5 @@
 'use client';
+
 import { useAuthContext } from '../contexts/AuthContext';
 import { EmailLogin } from './EmailLogin';
 

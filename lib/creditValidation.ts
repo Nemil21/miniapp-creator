@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 /**
  * Server-side credit validation utility
  * Validates user credits before allowing API operations
@@ -26,7 +27,7 @@ function getEarnKitInstance(): EarnKit | null {
     const apiKey = process.env.NEXT_PUBLIC_EARNKIT_API_KEY;
 
     if (!agentId || !apiKey) {
-        console.warn('EarnKit credentials not configured for server-side validation');
+        logger.warn('EarnKit credentials not configured for server-side validation');
         return null;
     }
 
@@ -48,7 +49,7 @@ export async function validateCredits(
 ): Promise<CreditValidationResult> {
     // If credits are disabled, allow all operations
     if (isCreditsDisabled()) {
-        console.log('Credits disabled - skipping validation');
+        logger.log('Credits disabled - skipping validation');
         return { isValid: true };
     }
 
@@ -56,7 +57,7 @@ export async function validateCredits(
     const earnKit = getEarnKitInstance();
     if (!earnKit) {
         // If EarnKit is not configured, allow operation (fail open)
-        console.warn('EarnKit not configured - allowing operation');
+        logger.warn('EarnKit not configured - allowing operation');
         return { isValid: true };
     }
 
@@ -72,7 +73,7 @@ export async function validateCredits(
         const balance = await earnKit.getBalance({ walletAddress });
         const currentCredits = parseInt(balance.credits);
 
-        console.log(`Credit validation for ${walletAddress}: ${currentCredits} credits available, ${requiredCredits} required`);
+        logger.log(`Credit validation for ${walletAddress}: ${currentCredits} credits available, ${requiredCredits} required`);
 
         if (currentCredits < requiredCredits) {
             return {
@@ -88,7 +89,7 @@ export async function validateCredits(
         };
 
     } catch (error) {
-        console.error('Error validating credits:', error);
+        logger.error('Error validating credits:', error);
         // Fail open - don't block operations if validation fails
         return {
             isValid: true,
@@ -129,7 +130,7 @@ export async function trackCredits(
 
         return trackResponse.eventId;
     } catch (error) {
-        console.error('Error tracking credits:', error);
+        logger.error('Error tracking credits:', error);
         throw error;
     }
 }
@@ -151,9 +152,9 @@ export async function captureCredits(eventId: string): Promise<void> {
 
     try {
         await earnKit.capture({ eventId });
-        console.log('Credits captured successfully:', eventId);
+        logger.log('Credits captured successfully:', eventId);
     } catch (error) {
-        console.error('Error capturing credits:', error);
+        logger.error('Error capturing credits:', error);
         // Don't throw - we don't want to fail the operation if capture fails
     }
 }

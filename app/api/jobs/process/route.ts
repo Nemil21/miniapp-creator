@@ -1,3 +1,4 @@
+import { logger } from "../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getGenerationJobById, updateGenerationJobStatus, getPendingGenerationJobs } from "../../../../lib/database";
 import { executeGenerationJob } from "../../../../lib/generationWorker";
@@ -18,9 +19,9 @@ export async function POST(request: NextRequest) {
 
     // Basic auth protection for worker endpoint
     if (!workerToken || authHeader !== `Bearer ${workerToken}`) {
-      console.error("❌ Worker authentication failed:");
-      console.error(`   Expected token: ${workerToken ? `Bearer ${workerToken}` : 'WORKER_AUTH_TOKEN not set'}`);
-      console.error(`   Received: ${authHeader || 'No Authorization header'}`);
+      logger.error("❌ Worker authentication failed:");
+      logger.error(`   Expected token: ${workerToken ? `Bearer ${workerToken}` : 'WORKER_AUTH_TOKEN not set'}`);
+      logger.error(`   Received: ${authHeader || 'No Authorization header'}`);
       return NextResponse.json(
         { error: "Unauthorized - Invalid worker token" },
         { status: 401 }
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     if (jobId) {
       // Process specific job
-      console.log(`🔧 Processing specific job: ${jobId}`);
+      logger.log(`🔧 Processing specific job: ${jobId}`);
       const job = await getGenerationJobById(jobId);
 
       if (!job) {
@@ -61,15 +62,15 @@ export async function POST(request: NextRequest) {
       });
 
       // Execute the job in background (fire and forget)
-      console.log(`🔥 Starting background processing for job ${jobId}...`);
+      logger.log(`🔥 Starting background processing for job ${jobId}...`);
       executeGenerationJob(jobId).catch(error => {
-        console.error(`❌ Background job ${jobId} failed:`, error);
+        logger.error(`❌ Background job ${jobId} failed:`, error);
       });
 
       return response;
     } else {
       // Process next pending job from queue
-      console.log("🔧 Checking for pending jobs...");
+      logger.log("🔧 Checking for pending jobs...");
       const pendingJobs = await getPendingGenerationJobs(1);
 
       if (pendingJobs.length === 0) {
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
       }
 
       const job = pendingJobs[0];
-      console.log(`🔧 Processing job: ${job.id}`);
+      logger.log(`🔧 Processing job: ${job.id}`);
 
       // Mark as processing
       await updateGenerationJobStatus(job.id, "processing");
@@ -94,15 +95,15 @@ export async function POST(request: NextRequest) {
       });
 
       // Execute the job in background (fire and forget)
-      console.log(`🔥 Starting background processing for job ${job.id}...`);
+      logger.log(`🔥 Starting background processing for job ${job.id}...`);
       executeGenerationJob(job.id).catch(error => {
-        console.error(`❌ Background job ${job.id} failed:`, error);
+        logger.error(`❌ Background job ${job.id} failed:`, error);
       });
 
       return response;
     }
   } catch (error) {
-    console.error("❌ Error processing job:", error);
+    logger.error("❌ Error processing job:", error);
     return NextResponse.json(
       {
         error: "Failed to process job",
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error("❌ Error fetching job status:", error);
+    logger.error("❌ Error fetching job status:", error);
     return NextResponse.json(
       { error: "Failed to fetch job status" },
       { status: 500 }

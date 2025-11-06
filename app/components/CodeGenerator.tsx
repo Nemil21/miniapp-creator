@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { CodeEditorAndPreview } from './CodeEditorAndPreview';
 import { Icons } from './sections/icons';
@@ -29,7 +31,7 @@ interface CodeGeneratorProps {
 export function CodeGenerator({ currentProject, isGenerating = false, onOpenSidebar, activeAgent, feeModelType }: CodeGeneratorProps) {
   const { sessionToken } = useAuthContext();
 
-  console.log('🎨 CodeGenerator render:', {
+  logger.log('🎨 CodeGenerator render:', {
     hasActiveAgent: !!activeAgent,
     feeModelType,
     shouldShowBalance: !!(activeAgent && feeModelType)
@@ -54,7 +56,7 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
         isGenerating={isGenerating}
         onOpenSidebar={onOpenSidebar}
         onFileChange={(filePath, content) => {
-          console.log('File changed:', filePath, content.substring(0, 100));
+          logger.log('File changed:', filePath, content.substring(0, 100));
         }}
         onSaveFile={async (filePath, content) => {
           if (!currentProject || !sessionToken) return false;
@@ -66,7 +68,7 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
             });
             return response.ok;
           } catch (error) {
-            console.error('Failed to save file:', error);
+            logger.error('Failed to save file:', error);
             return false;
           }
         }}

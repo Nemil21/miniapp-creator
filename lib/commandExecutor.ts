@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs-extra';
@@ -215,7 +216,7 @@ export function parseToolCall(response: string): CommandRequest | null {
       timeout: toolCall.timeout
     };
   } catch (error) {
-    console.warn('Failed to parse tool call:', error);
+    logger.warn('Failed to parse tool call:', error);
     return null;
   }
 }

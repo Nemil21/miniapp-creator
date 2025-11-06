@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { createPatch, parsePatch } from 'diff';
 
 export interface DiffHunk {
@@ -33,7 +34,7 @@ export function generateDiff(
       unifiedDiff
     };
   } catch (error) {
-    console.error('Error generating diff:', error);
+    logger.error('Error generating diff:', error);
     throw new Error(`Failed to generate diff for ${filename}: ${error}`);
   }
 }
@@ -50,7 +51,7 @@ export function applyDiffToContent(
     const hunks = parseUnifiedDiff(unifiedDiff);
     return applyDiffHunks(originalContent, hunks);
   } catch (error) {
-    console.error('Error applying unified diff:', error);
+    logger.error('Error applying unified diff:', error);
     throw new Error(`Failed to apply unified diff: ${error}`);
   }
 }
@@ -89,7 +90,7 @@ export function parseUnifiedDiff(unifiedDiff: string): DiffHunk[] {
           lines: []
         };
       } else {
-        console.warn(`⚠️ Malformed hunk header: ${line}`);
+        logger.warn(`⚠️ Malformed hunk header: ${line}`);
       }
     } else if (currentHunk) {
       currentHunk.lines.push(line);
@@ -130,12 +131,12 @@ function validateAndCorrectHunk(hunk: DiffHunk): DiffHunk {
 
   // Auto-correct if counts don't match
   if (hunk.oldLines === 0 || hunk.oldLines !== expectedOldLines) {
-    console.log(`🔧 Auto-correcting oldLines: ${hunk.oldLines} → ${expectedOldLines} for hunk at line ${hunk.oldStart}`);
+    logger.log(`🔧 Auto-correcting oldLines: ${hunk.oldLines} → ${expectedOldLines} for hunk at line ${hunk.oldStart}`);
     hunk.oldLines = expectedOldLines;
   }
 
   if (hunk.newLines === 0 || hunk.newLines !== expectedNewLines) {
-    console.log(`🔧 Auto-correcting newLines: ${hunk.newLines} → ${expectedNewLines} for hunk at line ${hunk.newStart}`);
+    logger.log(`🔧 Auto-correcting newLines: ${hunk.newLines} → ${expectedNewLines} for hunk at line ${hunk.newStart}`);
     hunk.newLines = expectedNewLines;
   }
 
@@ -351,7 +352,7 @@ export function applyDiffHunks(
             bestMatch = i;
             bestMatchScore = matchScore;
             // Found perfect match, use it
-            console.log(`🎯 Found exact match at line ${i + 1} (diff said ${hunk.oldStart}, offset: ${Math.abs(i + 1 - hunk.oldStart)})`);
+            logger.log(`🎯 Found exact match at line ${i + 1} (diff said ${hunk.oldStart}, offset: ${Math.abs(i + 1 - hunk.oldStart)})`);
             break;
           } else if (matchScore > bestMatchScore) {
             // Keep track of best partial match
@@ -364,10 +365,10 @@ export function applyDiffHunks(
         if (bestMatchScore >= Math.ceil(searchContextLines.length / 2)) {
           startLineIndex = bestMatch;
           if (bestMatch + 1 !== hunk.oldStart) {
-            console.log(`📍 Corrected line number: ${hunk.oldStart} → ${bestMatch + 1} (matched ${bestMatchScore}/${searchContextLines.length} context lines)`);
+            logger.log(`📍 Corrected line number: ${hunk.oldStart} → ${bestMatch + 1} (matched ${bestMatchScore}/${searchContextLines.length} context lines)`);
           }
         } else {
-          console.warn(`⚠️ Could not find good match for hunk at line ${hunk.oldStart} (best: ${bestMatchScore}/${searchContextLines.length})`);
+          logger.warn(`⚠️ Could not find good match for hunk at line ${hunk.oldStart} (best: ${bestMatchScore}/${searchContextLines.length})`);
         }
       }
 
@@ -376,7 +377,7 @@ export function applyDiffHunks(
       const operations: Array<{ type: 'remove' | 'add' | 'context'; line: string; index: number }> = [];
       let currentLineIndex = startLineIndex; // This is already corrected by fuzzy search above
 
-      console.log(`Building operations starting at corrected line ${startLineIndex + 1} (diff header said ${hunk.oldStart})`);
+      logger.log(`Building operations starting at corrected line ${startLineIndex + 1} (diff header said ${hunk.oldStart})`);
 
       for (const parsed of parsedLines) {
         if (parsed.type === 'remove') {
@@ -430,16 +431,16 @@ export function applyDiffHunks(
         const hasEnoughMatches = matchRatio >= 0.7;
 
         if (!hasEnoughMatches) {
-          console.warn(`Skipping hunk at line ${hunk.oldStart}: insufficient context match (${contextMatchCount}/${contextTotalCount} = ${(matchRatio * 100).toFixed(0)}%)`);
+          logger.warn(`Skipping hunk at line ${hunk.oldStart}: insufficient context match (${contextMatchCount}/${contextTotalCount} = ${(matchRatio * 100).toFixed(0)}%)`);
           if (mismatchedLines.length > 0) {
-            console.warn('Mismatched lines:');
+            logger.warn('Mismatched lines:');
             mismatchedLines.slice(0, 3).forEach(m => {
-              console.warn(`  Line ${m.index}: expected "${m.expected}", got "${m.got}"`);
+              logger.warn(`  Line ${m.index}: expected "${m.expected}", got "${m.got}"`);
             });
           }
           continue;
         } else if (mismatchedLines.length > 0) {
-          console.log(`Applying hunk at line ${hunk.oldStart} with ${contextMatchCount}/${contextTotalCount} context matches (${(matchRatio * 100).toFixed(0)}%)`);
+          logger.log(`Applying hunk at line ${hunk.oldStart} with ${contextMatchCount}/${contextTotalCount} context matches (${(matchRatio * 100).toFixed(0)}%)`);
         }
       }
 
@@ -487,7 +488,7 @@ export function applyDiffHunks(
 
     return result.join('\n');
   } catch (error) {
-    console.error('Error applying diff:', error);
+    logger.error('Error applying diff:', error);
     throw new Error(`Failed to apply diff: ${error}`);
   }
 }
@@ -526,9 +527,9 @@ export function validateDiff(diff: FileDiff): boolean {
             line.match(/^[+ ]\s*const\s+\w+\s*=.*\{\s*$/)) {
           // Next line should be array/object content, not code statements
           if (nextLine && nextLine.match(/^\+\s*(console\.|if\s*\(|for\s*\(|while\s*\(|return\s)/)) {
-            console.error('❌ Diff validation failed: Code statement inserted inside array/object literal');
-            console.error(`   Line: ${line}`);
-            console.error(`   Next: ${nextLine}`);
+            logger.error('❌ Diff validation failed: Code statement inserted inside array/object literal');
+            logger.error(`   Line: ${line}`);
+            logger.error(`   Next: ${nextLine}`);
             return false;
           }
         }
@@ -537,9 +538,9 @@ export function validateDiff(diff: FileDiff): boolean {
         if (line.match(/^\+\s*(console\.|if\s*\(|for\s*\(|while\s*\(|return\s)/) && nextLine) {
           // If next line is an array/object element, the statement is likely misplaced
           if (nextLine.match(/^[+ ]\s*\[.*\]|^[+ ]\s*\{.*\}|^[+ ]\s*\d+|^[+ ]\s*['"`]/)) {
-            console.warn('⚠️  Possible misplaced code statement near array/object elements');
-            console.warn(`   Line: ${line}`);
-            console.warn(`   Next: ${nextLine}`);
+            logger.warn('⚠️  Possible misplaced code statement near array/object elements');
+            logger.warn(`   Line: ${line}`);
+            logger.warn(`   Next: ${nextLine}`);
           }
         }
       }
@@ -547,7 +548,7 @@ export function validateDiff(diff: FileDiff): boolean {
 
     return true;
   } catch (error) {
-    console.error('Error validating diff:', error);
+    logger.error('Error validating diff:', error);
     return false;
   }
 }

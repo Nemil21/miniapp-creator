@@ -6,6 +6,7 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { applyDiffToContent } from './diffUtils';
+import { logger } from './logger';
 
 const execAsync = promisify(exec);
 
@@ -94,18 +95,18 @@ export class CompilationValidator {
     generatedFiles: { filename: string; content?: string; unifiedDiff?: string; operation?: string }[],
     currentFiles: { filename: string; content: string }[]
   ): Promise<CompilationResult> {
-    console.log("🔧 Starting comprehensive compilation validation...");
-    console.log(`📁 Project root: ${this.projectRoot}`);
-    console.log(`⚙️  Config: ${JSON.stringify(this.config, null, 2)}`);
+    logger.log("🔧 Starting comprehensive compilation validation...");
+    logger.log(`📁 Project root: ${this.projectRoot}`);
+    logger.log(`⚙️  Config: ${JSON.stringify(this.config, null, 2)}`);
 
     try {
       // 1. Prepare final files by applying diffs
       const finalFiles = await this.prepareFinalFiles(generatedFiles, currentFiles);
-      console.log(`📝 Prepared ${finalFiles.length} files for validation`);
+      logger.log(`📝 Prepared ${finalFiles.length} files for validation`);
 
       // 2. Create temporary project structure
       await this.createTempProject(finalFiles);
-      console.log(`🏗️  Created temporary project structure`);
+      logger.log(`🏗️  Created temporary project structure`);
 
       // 3. Run all validations in parallel with concurrency control
       const validationPromises = [];
@@ -154,12 +155,12 @@ export class CompilationValidator {
       if (process.env.NODE_ENV === 'production') {
         await this.cleanup();
       } else {
-        console.log(`🔍 Development mode - keeping temp directory for inspection: ${this.tempDir}`);
+        logger.log(`🔍 Development mode - keeping temp directory for inspection: ${this.tempDir}`);
       }
 
       const compilationTime = Date.now() - this.startTime;
-      console.log(`✅ Compilation validation completed in ${compilationTime}ms`);
-      console.log(`📊 Results: ${allErrors.length} errors, ${allWarnings.length} warnings, ${allInfo.length} info`);
+      logger.log(`✅ Compilation validation completed in ${compilationTime}ms`);
+      logger.log(`📊 Results: ${allErrors.length} errors, ${allWarnings.length} warnings, ${allInfo.length} info`);
 
       return {
         success: allErrors.length === 0,
@@ -172,11 +173,11 @@ export class CompilationValidator {
       };
 
     } catch (error) {
-      console.error("❌ Compilation validation failed:", error);
+      logger.error("❌ Compilation validation failed:", error);
       if (process.env.NODE_ENV === 'production') {
         await this.cleanup();
       } else {
-        console.log(`🔍 Development mode - keeping temp directory for debugging: ${this.tempDir}`);
+        logger.log(`🔍 Development mode - keeping temp directory for debugging: ${this.tempDir}`);
       }
       
       return {
@@ -232,7 +233,7 @@ export class CompilationValidator {
             });
             processedFiles.add(generatedFile.filename);
           } catch (error) {
-            console.warn(`⚠️ Failed to apply diff to ${generatedFile.filename}:`, error);
+            logger.warn(`⚠️ Failed to apply diff to ${generatedFile.filename}:`, error);
             // Fallback to current file content
             finalFiles.push({
               filename: generatedFile.filename,
@@ -271,9 +272,9 @@ export class CompilationValidator {
       }
       
       fs.mkdirSync(this.tempDir, { recursive: true });
-      console.log(`📁 Created temporary directory: ${this.tempDir}`);
+      logger.log(`📁 Created temporary directory: ${this.tempDir}`);
     } catch (error) {
-      console.error(`❌ Failed to create temporary directory: ${this.tempDir}`, error);
+      logger.error(`❌ Failed to create temporary directory: ${this.tempDir}`, error);
       throw new Error(`Failed to create temporary directory for compilation validation: ${error instanceof Error ? error.message : String(error)}`);
     }
 
@@ -305,11 +306,11 @@ export class CompilationValidator {
           }
           
           fs.copyFileSync(sourcePath, destPath);
-          console.log(`📋 Copied config file: ${configFile}`);
+          logger.log(`📋 Copied config file: ${configFile}`);
         }
       }
     } catch (error) {
-      console.warn(`⚠️ Failed to copy some config files:`, error);
+      logger.warn(`⚠️ Failed to copy some config files:`, error);
       // Continue with validation even if some config files can't be copied
     }
 
@@ -319,10 +320,10 @@ export class CompilationValidator {
       if (fs.existsSync(nodeModulesPath)) {
         const tempNodeModules = path.join(this.tempDir, 'node_modules');
         fs.symlinkSync(nodeModulesPath, tempNodeModules, 'dir');
-        console.log(`🔗 Created symlink to node_modules`);
+        logger.log(`🔗 Created symlink to node_modules`);
       }
     } catch (error) {
-      console.warn(`⚠️ Failed to create node_modules symlink:`, error);
+      logger.warn(`⚠️ Failed to create node_modules symlink:`, error);
       // Continue without node_modules symlink
     }
 
@@ -343,9 +344,9 @@ export class CompilationValidator {
         
         fs.writeFileSync(filePath, file.content, 'utf8');
       }
-      console.log(`📝 Wrote ${files.length} files to temporary directory`);
+      logger.log(`📝 Wrote ${files.length} files to temporary directory`);
     } catch (error) {
-      console.error(`❌ Failed to write files to temporary directory:`, error);
+      logger.error(`❌ Failed to write files to temporary directory:`, error);
       throw new Error(`Failed to write files for compilation validation: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -387,7 +388,7 @@ export class CompilationValidator {
    */
   private async validateTypeScript(): Promise<{ errors: CompilationError[]; warnings: CompilationError[]; info?: CompilationError[] }> {
     try {
-      console.log("🔍 Validating TypeScript compilation...");
+      logger.log("🔍 Validating TypeScript compilation...");
       
       const { stderr } = await execAsync('npx tsc --noEmit --pretty false --skipLibCheck', {
         cwd: this.tempDir,
@@ -401,7 +402,7 @@ export class CompilationValidator {
         const errorObj = error as { stderr?: string; stdout?: string };
         return this.parseTypeScriptErrors(errorObj.stderr || errorObj.stdout || '');
       }
-      console.warn("⚠️ TypeScript validation failed:", (error as Error).message);
+      logger.warn("⚠️ TypeScript validation failed:", (error as Error).message);
       return { errors: [], warnings: [] };
     }
   }
@@ -411,11 +412,11 @@ export class CompilationValidator {
    */
   private async validateSolidity(): Promise<{ errors: CompilationError[]; warnings: CompilationError[]; info?: CompilationError[] }> {
     try {
-      console.log("🔍 Validating Solidity compilation...");
+      logger.log("🔍 Validating Solidity compilation...");
       
       const contractsDir = path.join(this.tempDir, 'contracts');
       if (!fs.existsSync(contractsDir)) {
-        console.log("📁 No contracts directory found, skipping Solidity validation");
+        logger.log("📁 No contracts directory found, skipping Solidity validation");
         return { errors: [], warnings: [] };
       }
 
@@ -430,7 +431,7 @@ export class CompilationValidator {
         const errorObj = error as { stderr?: string; stdout?: string };
         return this.parseSolidityErrors(errorObj.stderr || '', errorObj.stdout || '');
       }
-      console.warn("⚠️ Solidity validation failed:", (error as Error).message);
+      logger.warn("⚠️ Solidity validation failed:", (error as Error).message);
       return { errors: [], warnings: [] };
     }
   }
@@ -440,7 +441,7 @@ export class CompilationValidator {
    */
   private async validateESLint(): Promise<{ errors: CompilationError[]; warnings: CompilationError[]; info?: CompilationError[] }> {
     try {
-      console.log("🔍 Validating ESLint...");
+      logger.log("🔍 Validating ESLint...");
       
       const { stdout } = await execAsync('npx eslint src --format json --max-warnings 0', {
         cwd: this.tempDir,
@@ -453,7 +454,7 @@ export class CompilationValidator {
         const errorObj = error as { stdout?: string };
         return this.parseESLintErrors(errorObj.stdout || '');
       }
-      console.warn("⚠️ ESLint validation failed:", (error as Error).message);
+      logger.warn("⚠️ ESLint validation failed:", (error as Error).message);
       return { errors: [], warnings: [] };
     }
   }
@@ -463,7 +464,7 @@ export class CompilationValidator {
    */
   private async validateBuild(): Promise<{ errors: CompilationError[]; warnings: CompilationError[]; info?: CompilationError[] }> {
     try {
-      console.log("🔍 Validating Next.js build...");
+      logger.log("🔍 Validating Next.js build...");
       
       const { stdout, stderr } = await execAsync('npx next build --no-lint', {
         cwd: this.tempDir,
@@ -476,7 +477,7 @@ export class CompilationValidator {
         const errorObj = error as { stderr?: string; stdout?: string };
         return this.parseBuildErrors(errorObj.stderr || '', errorObj.stdout || '');
       }
-      console.warn("⚠️ Build validation failed:", (error as Error).message);
+      logger.warn("⚠️ Build validation failed:", (error as Error).message);
       return { errors: [], warnings: [] };
     }
   }
@@ -489,7 +490,7 @@ export class CompilationValidator {
     const warnings: CompilationError[] = [];
     const info: CompilationError[] = [];
 
-    console.log("🔍 Running runtime checks...");
+    logger.log("🔍 Running runtime checks...");
 
     // Check for common runtime issues
     for (const file of files) {
@@ -720,7 +721,7 @@ export class CompilationValidator {
         }
       }
     } catch {
-      console.warn("⚠️ Failed to parse ESLint JSON output");
+      logger.warn("⚠️ Failed to parse ESLint JSON output");
     }
 
     return { errors, warnings, info };
@@ -806,7 +807,7 @@ export class CompilationValidator {
         fs.rmSync(this.tempDir, { recursive: true, force: true });
       }
     } catch (error) {
-      console.warn("⚠️ Failed to cleanup temporary directory:", error);
+      logger.warn("⚠️ Failed to cleanup temporary directory:", error);
     }
   }
 }

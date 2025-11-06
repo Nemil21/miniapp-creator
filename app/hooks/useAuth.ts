@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useEffect, useState, useRef } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -32,7 +34,7 @@ export function useAuth() {
 
   // Function to handle session expiration
   const handleSessionExpired = async () => {
-    console.log('🔄 Session expired, logging out and redirecting to login');
+    logger.log('🔄 Session expired, logging out and redirecting to login');
     setAuthState({
       isAuthenticated: false,
       sessionToken: null,
@@ -70,7 +72,7 @@ export function useAuth() {
 
       // If we already have a valid session and it's the same user, don't re-authenticate
       if (authState.isAuthenticated && authState.sessionToken && authState.user?.privyUserId === privyUser.id) {
-        console.log('✅ Already authenticated with valid session, skipping re-authentication');
+        logger.log('✅ Already authenticated with valid session, skipping re-authentication');
         hasInitialized.current = true;
         return;
       }
@@ -113,7 +115,7 @@ export function useAuth() {
           hasInitialized.current = true;
         } else {
           const errorText = await response.text();
-          console.error('❌ Failed to create user session:', errorText);
+          logger.error('❌ Failed to create user session:', errorText);
           setAuthState({
             isAuthenticated: false,
             sessionToken: null,
@@ -122,7 +124,7 @@ export function useAuth() {
           });
         }
       } catch (error) {
-        console.error('Authentication error:', error);
+        logger.error('Authentication error:', error);
         setAuthState({
           isAuthenticated: false,
           sessionToken: null,

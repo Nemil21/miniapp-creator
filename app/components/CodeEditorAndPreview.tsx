@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useEffect } from 'react';
 import { CodeEditor } from './CodeEditor';
@@ -123,7 +125,7 @@ export function CodeEditorAndPreview({
                 }
             }
         } catch (error) {
-            console.error('Failed to copy URL:', error);
+            logger.error('Failed to copy URL:', error);
             // You could show a toast notification here if you have one
             alert('Failed to copy URL. Please copy manually: ' + currentProject.url);
         }

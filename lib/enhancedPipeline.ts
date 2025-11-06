@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import {
   executeInitialGenerationPipeline,
   executeFollowUpPipeline,
@@ -37,21 +38,21 @@ export async function executeEnhancedPipeline(
   projectDir?: string
 ): Promise<EnhancedPipelineResult> {
   try {
-    console.log("🚀 Starting enhanced pipeline...");
+    logger.log("🚀 Starting enhanced pipeline...");
 
     let contextResult: ContextGatheringResult;
     let contextData = '';
     let enhancedFiles = currentFiles;
 
     if (isInitialGeneration) {
-      console.log("📝 Initial generation - skipping context gathering");
+      logger.log("📝 Initial generation - skipping context gathering");
       contextResult = {
         needsContext: false,
         toolCalls: [],
         contextSummary: 'Initial generation - no existing code to analyze'
       };
     } else {
-      console.log("🔍 Follow-up changes - gathering context...");
+      logger.log("🔍 Follow-up changes - gathering context...");
       // Step 1: Gather context with tools if needed
       const contextGatheringResult = await gatherContextWithTools(
         userPrompt,
@@ -67,10 +68,10 @@ export async function executeEnhancedPipeline(
       enhancedFiles = contextGatheringResult.enhancedFiles;
     }
 
-    console.log("📊 Context gathering result:");
-    console.log("- Needs context:", contextResult.needsContext);
-    console.log("- Tool calls:", contextResult.toolCalls?.length || 0);
-    console.log("- Context data length:", contextData.length);
+    logger.log("📊 Context gathering result:");
+    logger.log("- Needs context:", contextResult.needsContext);
+    logger.log("- Tool calls:", contextResult.toolCalls?.length || 0);
+    logger.log("- Context data length:", contextData.length);
 
     // Step 2: Execute the appropriate specialized pipeline
     let pipelineResult;
@@ -99,7 +100,7 @@ export async function executeEnhancedPipeline(
     
     if (isInitialGeneration) {
       // For initial generation, no diffs needed - just return the generated files
-      console.log("📝 Initial generation - skipping diff generation");
+      logger.log("📝 Initial generation - skipping diff generation");
       filesWithDiffs = generatedFiles.map(file => ({
         filename: file.filename,
         content: file.content,
@@ -107,7 +108,7 @@ export async function executeEnhancedPipeline(
       }));
     } else {
       // For follow-up changes, generate diffs for each file
-      console.log("🔧 Follow-up changes - generating diffs");
+      logger.log("🔧 Follow-up changes - generating diffs");
       filesWithDiffs = generatedFiles.map(file => {
         const originalFile = currentFiles.find(f => f.filename === file.filename);
         
@@ -131,7 +132,7 @@ export async function executeEnhancedPipeline(
               diff
             };
           } else {
-            console.warn(`⚠️ Invalid diff generated for ${file.filename}, using full content`);
+            logger.warn(`⚠️ Invalid diff generated for ${file.filename}, using full content`);
             return {
               filename: file.filename,
               content: file.content,
@@ -139,7 +140,7 @@ export async function executeEnhancedPipeline(
             };
           }
         } catch (error) {
-          console.error(`❌ Failed to generate diff for ${file.filename}:`, error);
+          logger.error(`❌ Failed to generate diff for ${file.filename}:`, error);
           return {
             filename: file.filename,
             content: file.content,
@@ -151,18 +152,18 @@ export async function executeEnhancedPipeline(
 
     // Note: Syntax validation removed due to false positives with TypeScript generics
     // Files will be validated by TypeScript compiler during build/preview
-    console.log("✅ Enhanced pipeline completed successfully");
-    console.log(`📁 Generated ${filesWithDiffs.length} files`);
-    console.log(`🔧 Context data: ${contextData ? 'Yes' : 'No'}`);
+    logger.log("✅ Enhanced pipeline completed successfully");
+    logger.log(`📁 Generated ${filesWithDiffs.length} files`);
+    logger.log(`🔧 Context data: ${contextData ? 'Yes' : 'No'}`);
     
     // validationResult only exists for follow-up changes
     const validationResult = ('validationResult' in pipelineResult ? pipelineResult.validationResult : undefined) as 
       { success: boolean; errors: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; warnings: Array<{ file: string; line?: number; column?: number; message: string; severity: string }>; info?: Array<{ file: string; message: string }> } | undefined;
     
     if (validationResult) {
-      console.log(`✅ Validation Success: ${validationResult.success}`);
-      console.log(`❌ Validation Errors: ${validationResult.errors.length}`);
-      console.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
+      logger.log(`✅ Validation Success: ${validationResult.success}`);
+      logger.log(`❌ Validation Errors: ${validationResult.errors.length}`);
+      logger.log(`⚠️  Validation Warnings: ${validationResult.warnings.length}`);
     }
 
     return {
@@ -174,7 +175,7 @@ export async function executeEnhancedPipeline(
     };
 
   } catch (error) {
-    console.error("❌ Enhanced pipeline failed:", error);
+    logger.error("❌ Enhanced pipeline failed:", error);
     return {
       success: false,
       files: [],
@@ -206,7 +207,7 @@ export function applyDiffsToFiles(
             content: newContent
           });
         } catch (error) {
-          console.error(`Failed to apply diff to ${fileWithDiff.filename}:`, error);
+          logger.error(`Failed to apply diff to ${fileWithDiff.filename}:`, error);
           result.push({
             filename: fileWithDiff.filename,
             content: fileWithDiff.content

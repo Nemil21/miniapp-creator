@@ -1,4 +1,6 @@
 'use client';
+import { logger } from "../../lib/logger";
+
 
 import { useState, useEffect } from 'react';
 
@@ -27,7 +29,7 @@ export function Preview({ currentProject }: PreviewProps) {
     // Force iframe refresh when project is updated (after edits)
     useEffect(() => {
         if (currentProject?.lastUpdated) {
-            console.log('🔄 Project updated, refreshing iframe at:', new Date(currentProject.lastUpdated).toISOString());
+            logger.log('🔄 Project updated, refreshing iframe at:', new Date(currentProject.lastUpdated).toISOString());
             setIframeKey(prev => prev + 1);
             setIsLoading(true);
             setIframeError(false);
@@ -82,7 +84,7 @@ export function Preview({ currentProject }: PreviewProps) {
         );
     }
 
-    console.log('🔍 Preview component - URLs:', {
+    logger.log('🔍 Preview component - URLs:', {
         vercelUrl: currentProject.vercelUrl,
         previewUrl: currentProject.previewUrl,
         url: currentProject.url,
@@ -90,7 +92,7 @@ export function Preview({ currentProject }: PreviewProps) {
     });
 
     const handleIframeError = () => {
-        console.error('Iframe failed to load:', previewUrl);
+        logger.error('Iframe failed to load:', previewUrl);
         setIframeError(true);
         setIsLoading(false);
     };
