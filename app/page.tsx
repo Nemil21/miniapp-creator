@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 import { CodeGenerator } from './components/CodeGenerator';
 import { ChatInterface, ChatInterfaceRef } from './components/ChatInterface';
 import { HoverSidebar, HoverSidebarRef } from './components/HoverSidebar';
+import { UserProfileHeader } from './components/UserProfileHeader';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuthContext } from './contexts/AuthContext';
 import { useApiUtils } from '../lib/apiUtils';
@@ -136,36 +137,49 @@ function HomeContent() {
     }
   };
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   return (
-    <div className="flex min-h-screen h-[calc(100vh-40px)] font-funnel-sans relative bg-pink p-[20px]">
-      {/* Left Section - Chat/Agent */}
-      <section className="w-1/3 border-r border-black/10 h-[calc(100vh-40px)] flex flex-col rounded-tl-[56px] rounded-bl-[56px] bg-white">
-        <ChatInterface
-          ref={chatInterfaceRef}
-          currentProject={currentProject}
-          onProjectGenerated={setCurrentProject}
-          onGeneratingChange={setIsGenerating}
-          activeAgent={activeAgent || undefined}
-        />
-      </section>
-
-      {/* Right Section - Code/Preview */}
-      <section className="w-2/3 h-[calc(100vh-40px)] bg-white transition-all duration-500 rounded-tr-[56px] rounded-br-[56px] dot-bg">
-        <CodeGenerator
-          currentProject={currentProject}
-          isGenerating={isGenerating}
-          onOpenSidebar={() => hoverSidebarRef.current?.openSidebar()}
-          activeAgent={activeAgent || undefined}
-          feeModelType={feeModelType}
-        />
-      </section>
-
-      {/* Hover Sidebar for Projects */}
+    <div className="flex min-h-screen h-screen font-funnel-sans relative bg-white">
+      {/* Thin Permanent Sidebar */}
       <HoverSidebar
         ref={hoverSidebarRef}
         onProjectSelect={handleProjectSelect}
         onNewProject={handleNewProject}
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
       />
+
+      {/* Main Content - Chat and Preview */}
+      <div className={`flex flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-0' : 'ml-0'}`}>
+        {/* Left Section - Chat/Agent */}
+        <section className="w-1/3 border-r border-gray-200 h-screen flex flex-col bg-white overflow-hidden">
+          {/* User Profile Header - positioned above chat only */}
+          <UserProfileHeader 
+            onOpenSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          />
+          
+          {/* Chat Interface */}
+          <ChatInterface
+            ref={chatInterfaceRef}
+            currentProject={currentProject}
+            onProjectGenerated={setCurrentProject}
+            onGeneratingChange={setIsGenerating}
+            activeAgent={activeAgent || undefined}
+          />
+        </section>
+
+        {/* Right Section - Code/Preview */}
+        <section className="w-2/3 h-screen bg-gray-50 transition-all duration-500">
+          <CodeGenerator
+            currentProject={currentProject}
+            isGenerating={isGenerating}
+            onOpenSidebar={() => hoverSidebarRef.current?.openSidebar()}
+            activeAgent={activeAgent || undefined}
+            feeModelType={feeModelType}
+          />
+        </section>
+      </div>
     </div>
   );
 }

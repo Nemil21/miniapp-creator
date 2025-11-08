@@ -22,7 +22,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                 clientId={process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID || ''}
                 config={{
                     // Login methods - prioritize external wallets
-                    loginMethods: ['wallet', 'email', 'sms'],
+                    loginMethods: ['wallet', 'email', 'sms', 'farcaster'],
                     // Create embedded wallets only if explicitly requested
                     embeddedWallets: {
                         ethereum: {

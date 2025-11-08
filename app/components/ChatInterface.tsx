@@ -5,7 +5,6 @@ import { logger } from "../../lib/logger";
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Icons } from './sections/icons';
 import { useAuthContext } from '../contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -969,13 +968,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
     return (
         <div className="flex-1 w-full flex flex-col bg-[#0000000A] max-h-full">
-            {/* Chat Header */}
-            <div className="sticky top-0 left-0 flex items-center gap-2 justify-center py-2 mb-2">
-                <Icons.earnySmallGrayIcon className="w-6 h-6 text-white/40" />
-                <span className="text-[24px] font-funnel-display text-black font-medium">Agent</span>
-            </div>
             {/* Chat Messages */}
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-[20px]">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-[20px] pt-4">
                 <div className="space-y-4">
                     {chat.map((msg, idx) => (
                         <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
