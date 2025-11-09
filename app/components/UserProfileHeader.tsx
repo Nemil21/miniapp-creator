@@ -16,8 +16,8 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Check if Farcaster is connected
-  const hasFarcaster = user?.farcaster !== null && user?.farcaster !== undefined;
+  // Check if Farcaster is connected - temporarily disabled due to type issues
+  const hasFarcaster = false; // TODO: Fix farcaster type definition
   
   // Check if Farcaster is enabled in Privy config (temporary check)
   const farcasterEnabled = process.env.NEXT_PUBLIC_FARCASTER_ENABLED === 'true';
@@ -46,7 +46,8 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
 
   // Get user display name
   const getUserDisplay = () => {
-    if (user?.farcaster?.displayName) return user.farcaster.displayName;
+    // TODO: Re-enable farcaster display name when type is fixed
+    // if (user?.farcaster?.displayName) return user.farcaster.displayName;
     if (user?.displayName) return user.displayName;
     if (user?.email) return user.email;
     return user?.privyUserId || 'minidev_user';
@@ -141,24 +142,9 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
               </>
             )}
 
-            {/* Farcaster Info if connected */}
-            {hasFarcaster && user?.farcaster && (
-              <div className="px-4 py-3 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M23.5 4.5v15c0 1.1-.9 2-2 2h-19c-1.1 0-2-.9-2-2v-15c0-1.1.9-2 2-2h19c1.1 0 2 .9 2 2zm-3.5 1.5h-16v11h16v-11z"/>
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-900">{user.farcaster.displayName || 'Farcaster User'}</p>
-                    <p className="text-xs text-gray-500">@{user.farcaster.username || `fid:${user.farcaster.fid}`}</p>
-                  </div>
-                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                    Connected
-                  </span>
-                </div>
-              </div>
+            {/* Farcaster Info - Temporarily disabled due to type issues */}
+            {false && (
+              <div>Farcaster section disabled</div>
             )}
 
             {/* Profile Option */}

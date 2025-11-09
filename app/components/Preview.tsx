@@ -1,8 +1,8 @@
 'use client';
 import { logger } from "../../lib/logger";
 
-
 import { useState, useEffect } from 'react';
+import { Icons } from './sections/icons';
 
 interface GeneratedProject {
     projectId: string;
@@ -41,7 +41,9 @@ export function Preview({ currentProject }: PreviewProps) {
             <div className="h-full flex flex-col bg-white overflow-y-auto">
                 <div className="flex-1 flex items-center justify-center p-4">
                     <div className="text-center max-w-md">
-                        <div className="text-6xl mb-4">🚀</div>
+                        <div className="mb-6 flex justify-center">
+                            <Icons.earnySmallGrayIcon className="w-16 h-16 text-gray-400" />
+                        </div>
                         <h3 className="text-xl font-semibold text-black mb-2">No Project Selected</h3>
                         <p className="text-sm text-black-60 mb-6">
                             Hover over the right edge of the screen to access your projects, or start a new project in the chat.
@@ -67,7 +69,9 @@ export function Preview({ currentProject }: PreviewProps) {
             <div className="h-full flex flex-col bg-white overflow-y-auto">
                 <div className="flex-1 flex items-center justify-center p-4">
                     <div className="text-center max-w-md">
-                        <div className="text-6xl mb-4">🚀</div>
+                        <div className="mb-6 flex justify-center">
+                            <Icons.earnySmallGrayIcon className="w-16 h-16 text-gray-400" />
+                        </div>
                         <h3 className="text-xl font-semibold text-black mb-2">No Deployment Yet</h3>
                         <p className="text-sm text-black-60 mb-6">
                             This project hasn&apos;t been deployed yet. Use the chat to make changes and deploy your app.

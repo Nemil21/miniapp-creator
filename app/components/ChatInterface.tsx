@@ -1090,6 +1090,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         </div>
                     </div>
                 )}
+                
                 <form
                     onSubmit={e => {
                         e.preventDefault();
