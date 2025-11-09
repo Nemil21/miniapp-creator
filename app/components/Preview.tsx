@@ -46,7 +46,7 @@ export function Preview({ currentProject }: PreviewProps) {
                         </div>
                         <h3 className="text-xl font-semibold text-black mb-2">No Project Selected</h3>
                         <p className="text-sm text-black-60 mb-6">
-                            Hover over the right edge of the screen to access your projects, or start a new project in the chat.
+                            Please Select a project or start a new project in the chat.
                         </p>
                         <div className="bg-black-5 rounded-lg p-4 text-left">
                             <p className="text-xs text-black-60 font-medium mb-2">💡 Tip:</p>
