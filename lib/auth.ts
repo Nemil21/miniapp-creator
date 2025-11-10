@@ -74,14 +74,37 @@ export async function authenticateRequest(request: NextRequest): Promise<{
   }
 }
 
-export async function authenticatePrivyUser(privyUserId: string, email?: string, displayName?: string, pfpUrl?: string) {
+export async function authenticatePrivyUser(
+  privyUserId: string, 
+  email?: string, 
+  displayName?: string, 
+  pfpUrl?: string
+): Promise<
+  | { success: true; user: User; sessionToken: string }
+  | { success: false; error: string }
+> {
   try {
+    console.log('🔐 [auth.ts] authenticatePrivyUser called with:', {
+      privyUserId,
+      email,
+      displayName,
+      pfpUrl
+    });
+    
     // Check if user exists, create if not
     let user = await getUserByPrivyId(privyUserId);
+    
+    console.log('🔍 [auth.ts] Existing user found:', user ? {
+      id: user.id,
+      displayName: user.displayName,
+      pfpUrl: user.pfpUrl,
+      email: user.email
+    } : null);
     
     if (!user) {
       try {
         // Create new user automatically
+        console.log('➕ [auth.ts] Creating new user...');
         user = await createUser(privyUserId, email, displayName, pfpUrl);
         logger.log(`✅ Created new user: ${user.id}`);
       } catch (createError: unknown) {
@@ -100,22 +123,47 @@ export async function authenticatePrivyUser(privyUserId: string, email?: string,
       // User exists - update their profile information if new data is provided
       const updates: { email?: string; displayName?: string; pfpUrl?: string } = {};
       
+      console.log('🔄 [auth.ts] Comparing values for updates:', {
+        email: { new: email, old: user.email, different: email !== user.email },
+        displayName: { new: displayName, old: user.displayName, different: displayName !== user.displayName },
+        pfpUrl: { new: pfpUrl, old: user.pfpUrl, different: pfpUrl !== user.pfpUrl }
+      });
+      
       if (email && email !== user.email) {
         updates.email = email;
       }
       if (displayName && displayName !== user.displayName) {
         updates.displayName = displayName;
       }
-      if (pfpUrl !== undefined && pfpUrl !== user.pfpUrl) {
+      // Allow pfpUrl to be set to undefined to clear it when disconnecting Farcaster
+      if (pfpUrl !== user.pfpUrl) {
         updates.pfpUrl = pfpUrl;
       }
       
+      console.log('📝 [auth.ts] Updates to apply:', updates);
+      
       // Only update if there are changes
       if (Object.keys(updates).length > 0) {
+        console.log('💾 [auth.ts] Applying updates to database...');
         user = await updateUser(user.id, updates);
+        console.log('✅ [auth.ts] Updated user profile from DB:', {
+          id: user.id,
+          displayName: user.displayName,
+          pfpUrl: user.pfpUrl,
+          email: user.email
+        });
         logger.log(`✅ Updated user profile: ${user.id}`, updates);
+      } else {
+        console.log('⏭️  [auth.ts] No updates needed, user data is up to date');
       }
     }
+
+    console.log('📦 [auth.ts] Final user object before returning:', {
+      id: user.id,
+      displayName: user.displayName,
+      pfpUrl: user.pfpUrl,
+      email: user.email
+    });
 
     // Create session token
     const sessionToken = uuidv4();
@@ -123,8 +171,8 @@ export async function authenticatePrivyUser(privyUserId: string, email?: string,
 
     await createUserSession(user.id, sessionToken, expiresAt);
 
-    return {
-      success: true,
+    const returnData = {
+      success: true as const,
       user: {
         id: user.id,
         privyUserId: user.privyUserId,
@@ -134,10 +182,14 @@ export async function authenticatePrivyUser(privyUserId: string, email?: string,
       },
       sessionToken,
     };
+    
+    console.log('📤 [auth.ts] Returning to API:', returnData);
+    
+    return returnData;
   } catch (error) {
     logger.error("Privy authentication error:", error);
     return {
-      success: false,
+      success: false as const,
       error: "Authentication failed"
     };
   }

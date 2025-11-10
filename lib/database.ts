@@ -316,14 +316,42 @@ export async function updateUser(
     pfpUrl?: string;
   }
 ) {
+  console.log('🗄️  [database.ts] updateUser called with:', {
+    userId,
+    updates
+  });
+  
+  // Convert undefined to null for database - Drizzle might ignore undefined values
+  const updatePayload: Record<string, string | null | Date> = {
+    updatedAt: new Date(),
+  };
+  
+  // Explicitly handle each field to convert undefined to null
+  if ('email' in updates) {
+    updatePayload.email = updates.email ?? null;
+  }
+  if ('displayName' in updates) {
+    updatePayload.displayName = updates.displayName ?? null;
+  }
+  if ('pfpUrl' in updates) {
+    updatePayload.pfpUrl = updates.pfpUrl ?? null;
+    console.log('🗄️  [database.ts] Setting pfpUrl to:', updates.pfpUrl ?? null);
+  }
+  
+  console.log('🗄️  [database.ts] Update payload being sent to DB:', updatePayload);
+  
   const [user] = await db
     .update(users)
-    .set({
-      ...updates,
-      updatedAt: new Date(),
-    })
+    .set(updatePayload)
     .where(eq(users.id, userId))
     .returning();
+
+  console.log('🗄️  [database.ts] User returned from DB after update:', {
+    id: user.id,
+    displayName: user.displayName,
+    pfpUrl: user.pfpUrl,
+    email: user.email
+  });
 
   return user;
 }

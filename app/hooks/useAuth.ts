@@ -70,11 +70,39 @@ export function useAuth() {
         return;
       }
 
-      // If we already have a valid session and it's the same user, don't re-authenticate
+      // Check if linkedAccounts have changed (e.g., Farcaster was linked/unlinked)
+      const farcasterAccount = privyUser.linkedAccounts?.find(
+        (account) => account.type === 'farcaster'
+      ) as { type: string; displayName?: string; username?: string; pfp?: string } | undefined;
+      const hasFarcaster = !!farcasterAccount;
+      const newDisplayName = farcasterAccount?.displayName || farcasterAccount?.username;
+      const newPfpUrl = farcasterAccount?.pfp;
+      
+      console.log('🔄 [useAuth] Checking if re-auth needed:', {
+        hasFarcaster,
+        newDisplayName,
+        newPfpUrl,
+        currentDisplayName: authState.user?.displayName,
+        currentPfpUrl: authState.user?.pfpUrl,
+        linkedAccountsCount: privyUser.linkedAccounts?.length
+      });
+
+      // If we already have a valid session and it's the same user, check if Farcaster data changed
       if (authState.isAuthenticated && authState.sessionToken && authState.user?.privyUserId === privyUser.id) {
-        logger.log('✅ Already authenticated with valid session, skipping re-authentication');
-        hasInitialized.current = true;
-        return;
+        // If Farcaster was just linked/unlinked or data changed, re-authenticate
+        const farcasterDataChanged = 
+          (hasFarcaster && (authState.user?.displayName !== newDisplayName || authState.user?.pfpUrl !== newPfpUrl)) ||
+          (!hasFarcaster && (authState.user?.displayName !== privyUser.email?.address));
+        
+        if (farcasterDataChanged) {
+          console.log('🔄 [useAuth] Farcaster data changed, re-authenticating...');
+          hasInitialized.current = false; // Force re-initialization
+          // Continue to re-authenticate
+        } else {
+          logger.log('✅ Already authenticated with valid session, skipping re-authentication');
+          hasInitialized.current = true;
+          return;
+        }
       }
 
       // If already initializing, wait for the existing promise
@@ -89,6 +117,30 @@ export function useAuth() {
         // Get Privy access token
         const accessToken = await getAccessToken();
         
+        // Extract Farcaster data if available
+        console.log('🔍 [useAuth] Checking for Farcaster account...');
+        console.log('🔍 [useAuth] privyUser.linkedAccounts:', privyUser.linkedAccounts?.map((acc) => ({ 
+          type: acc.type
+        })));
+        
+        const farcasterAccount = privyUser.linkedAccounts?.find(
+          (account) => account.type === 'farcaster'
+        ) as { type: string; displayName?: string; username?: string; pfp?: string; fid?: number } | undefined;
+
+        const displayName = farcasterAccount?.displayName 
+          || farcasterAccount?.username 
+          || privyUser.email?.address 
+          || 'User';
+
+        const pfpUrl = farcasterAccount?.pfp || undefined;
+        
+        console.log('📝 [useAuth] Extracted Farcaster data:', {
+          hasFarcasterAccount: !!farcasterAccount,
+          displayName,
+          pfpUrl,
+          fid: farcasterAccount?.fid
+        });
+        
         // Create or get user in our backend system
         const response = await fetch('/api/auth/privy', {
           method: 'POST',
@@ -99,19 +151,29 @@ export function useAuth() {
           body: JSON.stringify({
             privyUserId: privyUser.id,
             email: privyUser.email?.address,
-            displayName: privyUser.email?.address || 'User',
-            pfpUrl: undefined,
+            displayName,
+            pfpUrl,
           }),
         });
 
         if (response.ok) {
           const data = await response.json();
+          console.log('✅ [useAuth] Backend response:', {
+            user: data.user,
+            hasSessionToken: !!data.sessionToken
+          });
+          console.log('✅ [useAuth] Setting authState with user:', {
+            displayName: data.user.displayName,
+            pfpUrl: data.user.pfpUrl,
+            email: data.user.email
+          });
           setAuthState({
             isAuthenticated: true,
             sessionToken: data.sessionToken,
             user: data.user,
             isLoading: false,
           });
+          console.log('✅ [useAuth] authState set successfully');
           hasInitialized.current = true;
         } else {
           const errorText = await response.text();
@@ -141,7 +203,7 @@ export function useAuth() {
     };
 
     initializeAuth();
-  }, [ready, authenticated, privyUser?.id, getAccessToken, privyUser, authState.isAuthenticated, authState.sessionToken, authState.user?.privyUserId, logout, router]);
+  }, [ready, authenticated, privyUser?.id, privyUser?.linkedAccounts?.length, getAccessToken, privyUser, authState.isAuthenticated, authState.sessionToken, authState.user?.privyUserId, authState.user?.displayName, authState.user?.pfpUrl, logout, router]);
 
   return {
     ...authState,

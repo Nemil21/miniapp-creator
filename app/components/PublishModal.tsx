@@ -428,7 +428,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     placeholder="My Awesome App"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
                                     required
                                 />
                             </div>
@@ -442,7 +442,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     placeholder="https://example.com/icon.png"
                                     value={formData.iconUrl}
                                     onChange={(e) => setFormData({ ...formData, iconUrl: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
                                     required
                                 />
                                 <p className="text-xs text-gray-500 mt-1">Publicly accessible icon image (recommended: 512x512px)</p>
@@ -457,7 +457,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     placeholder="https://example.com"
                                     value={formData.homeUrl}
                                     onChange={(e) => setFormData({ ...formData, homeUrl: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
                                     required
                                 />
                                 <p className="text-xs text-gray-500 mt-1">Your app&apos;s main URL</p>
@@ -472,7 +472,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     rows={3}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
                                 />
                             </div>
 
@@ -485,7 +485,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     placeholder="https://example.com/splash.png"
                                     value={formData.splashImageUrl}
                                     onChange={(e) => setFormData({ ...formData, splashImageUrl: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">Loading screen image (optional)</p>
                             </div>
@@ -505,7 +505,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                         type="text"
                                         value={formData.splashBackgroundColor}
                                         onChange={(e) => setFormData({ ...formData, splashBackgroundColor: e.target.value })}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
                                         placeholder="#ffffff"
                                     />
                                 </div>

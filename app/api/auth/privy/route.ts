@@ -6,6 +6,13 @@ export async function POST(request: NextRequest) {
   try {
     const { privyUserId, email, displayName, pfpUrl } = await request.json();
 
+    console.log('📨 [API /auth/privy] Received auth request:', {
+      privyUserId,
+      email,
+      displayName,
+      pfpUrl
+    });
+
     if (!privyUserId) {
       return NextResponse.json(
         { success: false, message: "Privy user ID is required" },
@@ -16,11 +23,22 @@ export async function POST(request: NextRequest) {
     const result = await authenticatePrivyUser(privyUserId, email, displayName, pfpUrl);
     
     if (!result.success) {
+      console.log('❌ [API /auth/privy] Auth failed:', result.error);
       return NextResponse.json(
         { success: false, message: result.error },
         { status: 500 }
       );
     }
+    
+    console.log('📤 [API /auth/privy] Auth result:', {
+      success: result.success,
+      user: {
+        id: result.user.id,
+        displayName: result.user.displayName,
+        pfpUrl: result.user.pfpUrl,
+        email: result.user.email
+      }
+    });
 
     return NextResponse.json(result);
   } catch (error) {
@@ -31,4 +49,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
