@@ -69,7 +69,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             return activeAgent.getBalance({ walletAddress });
         },
         enabled: !!walletAddress && !!activeAgent && privyReady && authenticated,
-        initialData: { eth: "0", credits: "0" },
+        placeholderData: { eth: "0", credits: "0" },
         staleTime: 1000 * 30,
     });
 

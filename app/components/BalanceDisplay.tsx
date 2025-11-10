@@ -40,7 +40,7 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
             return activeAgent.getBalance({ walletAddress });
         },
         enabled: !!activeAgent && !!walletAddress && ready && authenticated,
-        initialData: { eth: "0", credits: "0" },
+        placeholderData: { eth: "0", credits: "0" },
         staleTime: 1000 * 30, // 30 seconds
         refetchInterval: 1000 * 60, // Refetch every minute
     });

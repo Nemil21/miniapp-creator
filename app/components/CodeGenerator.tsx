@@ -49,7 +49,7 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
       return activeAgent.getBalance({ walletAddress });
     },
     enabled: !!walletAddress && !!activeAgent && privyReady && authenticated,
-    initialData: { eth: "0", credits: "0" },
+    placeholderData: { eth: "0", credits: "0" },
     staleTime: 1000 * 30,
   });
 
