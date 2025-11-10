@@ -1,6 +1,6 @@
 import { logger } from "./logger";
 import { NextRequest, NextResponse } from "next/server";
-import { getUserBySessionToken, getUserByPrivyId, createUser, createUserSession } from "./database";
+import { getUserBySessionToken, getUserByPrivyId, createUser, createUserSession, updateUser } from "./database";
 import { v4 as uuidv4 } from "uuid";
 
 export interface User {
@@ -95,6 +95,25 @@ export async function authenticatePrivyUser(privyUserId: string, email?: string,
         } else {
           throw createError;
         }
+      }
+    } else {
+      // User exists - update their profile information if new data is provided
+      const updates: { email?: string; displayName?: string; pfpUrl?: string } = {};
+      
+      if (email && email !== user.email) {
+        updates.email = email;
+      }
+      if (displayName && displayName !== user.displayName) {
+        updates.displayName = displayName;
+      }
+      if (pfpUrl !== undefined && pfpUrl !== user.pfpUrl) {
+        updates.pfpUrl = pfpUrl;
+      }
+      
+      // Only update if there are changes
+      if (Object.keys(updates).length > 0) {
+        user = await updateUser(user.id, updates);
+        logger.log(`✅ Updated user profile: ${user.id}`, updates);
       }
     }
 

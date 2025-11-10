@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { CodeEditorAndPreview } from './CodeEditorAndPreview';
 import { PublishModal } from './PublishModal';
 import TopUpDialog from './top-up-dialog';
-import { Icons } from './sections/icons';
 import { useAuthContext } from '../contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQuery } from '@tanstack/react-query';
@@ -147,10 +146,10 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
             ))}
           </div>
           
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <Icons.earnySmallGrayIcon className="w-5 h-5 text-gray-400" />
             <span className="text-lg font-funnel-display text-black font-medium">Miniapp Preview</span>
-          </div>
+          </div> */}
         </div>
 
         {/* Right side - Link Actions, Publish Button & Balance Display */}

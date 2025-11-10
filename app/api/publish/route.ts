@@ -189,8 +189,9 @@ export async function POST(req: NextRequest) {
       // Continue anyway - file will be created in preview update
     }
 
-    // Update database
+    // Update database - save to both projects table and projectFiles table
     try {
+      // Update projects table with manifest metadata
       await db
         .update(projects)
         .set({
@@ -199,7 +200,14 @@ export async function POST(req: NextRequest) {
         })
         .where(eq(projects.id, projectId));
 
-      logger.log('✅ Database updated with manifest');
+      logger.log('✅ Projects table updated with manifest');
+
+      // Also save manifest file to projectFiles table so it appears in file tree
+      // Use upsertProjectFile to add/update just this one file without affecting others
+      const { upsertProjectFile } = await import('../../../lib/database');
+      await upsertProjectFile(projectId, filename, farcasterJsonContent);
+
+      logger.log('✅ Manifest file saved to projectFiles table');
     } catch (error) {
       logger.error('❌ Failed to update database:', error);
       return NextResponse.json(

@@ -155,6 +155,38 @@ export async function updateProjectFile(projectId: string, filename: string, con
   return file;
 }
 
+// Upsert a single project file (insert if doesn't exist, update if exists)
+export async function upsertProjectFile(projectId: string, filename: string, content: string) {
+  logger.log(`🔄 Upserting file: ${filename} for project ${projectId}`);
+  
+  // Check if file exists
+  const existingFile = await db.select().from(projectFiles)
+    .where(and(eq(projectFiles.projectId, projectId), eq(projectFiles.filename, filename)))
+    .limit(1);
+  
+  if (existingFile.length > 0) {
+    // Update existing file
+    logger.log(`📝 File exists, updating: ${filename}`);
+    const [updated] = await db.update(projectFiles)
+      .set({ content, updatedAt: new Date() })
+      .where(and(eq(projectFiles.projectId, projectId), eq(projectFiles.filename, filename)))
+      .returning();
+    return updated;
+  } else {
+    // Insert new file
+    logger.log(`➕ File doesn't exist, inserting: ${filename}`);
+    const [inserted] = await db.insert(projectFiles)
+      .values({
+        projectId,
+        filename,
+        content,
+        version: 1,
+      })
+      .returning();
+    return inserted;
+  }
+}
+
 // Patch management
 export async function savePatch(
   projectId: string,

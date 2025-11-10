@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 import { useAuthContext } from '../contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 
@@ -10,14 +11,16 @@ interface UserProfileHeaderProps {
 
 export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
   const { user } = useAuthContext();
-  const { linkFarcaster, logout } = usePrivy();
+  const { linkFarcaster, logout, user: privyUser } = usePrivy();
   const { wallets } = useWallets();
   const walletAddress = wallets[0]?.address;
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Check if Farcaster is connected - temporarily disabled due to type issues
-  const hasFarcaster = false; // TODO: Fix farcaster type definition
+  // Check if Farcaster is connected
+  const hasFarcaster = privyUser?.linkedAccounts?.some(
+    (account) => account.type === 'farcaster'
+  ) || false;
   
   // Check if Farcaster is enabled in Privy config (temporary check)
   const farcasterEnabled = process.env.NEXT_PUBLIC_FARCASTER_ENABLED === 'true';
@@ -46,17 +49,22 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
 
   // Get user display name
   const getUserDisplay = () => {
-    // TODO: Re-enable farcaster display name when type is fixed
-    // if (user?.farcaster?.displayName) return user.farcaster.displayName;
     if (user?.displayName) return user.displayName;
     if (user?.email) return user.email;
     return user?.privyUserId || 'minidev_user';
+  };
+  
+  // Get user profile picture URL
+  const getUserPfpUrl = () => {
+    return user?.pfpUrl;
   };
 
   const handleLinkFarcaster = async () => {
     try {
       await linkFarcaster();
       setShowDropdown(false);
+      // The useAuth hook will automatically detect the new linked account
+      // and refresh the user data
     } catch (error) {
       console.error('Failed to link Farcaster:', error);
       // Show user-friendly error message
@@ -70,29 +78,41 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
   };
 
   return (
-    <div className="sticky top-0 left-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center z-20">
-      {/* Sidebar Toggle Button */}
-      <button
-        onClick={onOpenSidebar}
-        className="p-2 hover:bg-gray-100 rounded-lg transition-colors mr-3"
-        title="Toggle Projects"
-      >
-        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
+    <div className="sticky top-0 left-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-20">
+      <div className="flex items-center gap-3">
+        {/* Sidebar Toggle Button */}
+        <button
+          onClick={onOpenSidebar}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Toggle Projects"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
 
-      {/* User Profile - Clickable with Dropdown */}
-      <div className="relative" ref={dropdownRef}>
+        {/* User Profile - Clickable with Dropdown */}
+        <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setShowDropdown(!showDropdown)}
           className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
         >
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <span className="text-white font-medium text-sm">
-              {getUserDisplay().charAt(0).toUpperCase()}
-            </span>
-          </div>
+          {getUserPfpUrl() ? (
+            <Image 
+              src={getUserPfpUrl()!} 
+              alt="Profile"
+              width={40}
+              height={40}
+              className="w-10 h-10 rounded-full object-cover"
+              unoptimized
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <span className="text-white font-medium text-sm">
+                {getUserDisplay().charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div className="flex flex-col text-left">
             <span className="text-sm font-medium text-black">
               {getUserDisplay()}
@@ -122,45 +142,6 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
         {/* Dropdown Menu */}
         {showDropdown && (
           <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50">
-            {/* Farcaster Connection - Only show if enabled and not already connected */}
-            {!hasFarcaster && farcasterEnabled && (
-              <>
-                <button
-                  onClick={handleLinkFarcaster}
-                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-purple-50 transition-colors border-b border-gray-100"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M23.5 4.5v15c0 1.1-.9 2-2 2h-19c-1.1 0-2-.9-2-2v-15c0-1.1.9-2 2-2h19c1.1 0 2 .9 2 2zm-3.5 1.5h-16v11h16v-11z"/>
-                    </svg>
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="text-sm font-semibold text-gray-900">Login with Farcaster</p>
-                    <p className="text-xs text-gray-500">Connect your Farcaster account</p>
-                  </div>
-                </button>
-              </>
-            )}
-
-            {/* Farcaster Info - Temporarily disabled due to type issues */}
-            {false && (
-              <div>Farcaster section disabled</div>
-            )}
-
-            {/* Profile Option */}
-            {/* <button
-              onClick={() => {
-                setShowDropdown(false);
-                // Navigate to profile - you can add router navigation here
-              }}
-              className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <span className="text-sm font-medium text-gray-700">Profile</span>
-            </button> */}
-
             {/* Logout Option */}
             <button
               onClick={handleLogout}
@@ -173,7 +154,19 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
             </button>
           </div>
         )}
+        </div>
       </div>
+
+      {/* Connect Farcaster Button - Only show if enabled and not connected */}
+      {!hasFarcaster && farcasterEnabled && (
+        <button
+          onClick={handleLinkFarcaster}
+            className="px-4 py-2 bg-transparent border-2 border-[#8A63D2] hover:bg-[#8A63D2]/10 text-[#8A63D2] text-sm font-medium rounded-full transition-colors flex items-center gap-2"
+        >
+          <Image src="/farcaster.svg" alt="Farcaster" width={16} height={16} className="w-4 h-4" />
+          Connect Farcaster
+        </button>
+      )}
     </div>
   );
 }

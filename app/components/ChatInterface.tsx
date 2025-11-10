@@ -3,6 +3,7 @@
 import { logger } from "../../lib/logger";
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAuthContext } from '../contexts/AuthContext';
@@ -54,7 +55,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     const [hasShownWarning, setHasShownWarning] = useState(false);
     const chatBottomRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
-    const { sessionToken } = useAuthContext();
+    const { sessionToken, user } = useAuthContext();
     const { ready: privyReady, authenticated } = usePrivy();
     const { wallets } = useWallets();
     const queryClient = useQueryClient();
@@ -972,7 +973,18 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-[20px] pt-4">
                 <div className="space-y-4">
                     {chat.map((msg, idx) => (
-                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div key={idx} className={`flex gap-3 items-start ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            {/* Profile Picture for AI (left side) */}
+                            {msg.role === 'ai' && (
+                                <Image 
+                                    src="/minidevpfp.png" 
+                                    alt="MiniDev"
+                                    width={32}
+                                    height={32}
+                                    className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
+                                />
+                            )}
+                            
                             <div className={`rounded-lg px-4 py-2 max-w-[80%] text-sm ${msg.role === 'user'
                                 ? 'bg-white text-black break-all'
                                 : 'bg-transparent text-black'
@@ -1022,10 +1034,37 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                     </div>
                                 )}
                             </div>
+                            
+                            {/* Profile Picture for User (right side) */}
+                            {msg.role === 'user' && (
+                                user?.pfpUrl ? (
+                                    <Image 
+                                        src={user.pfpUrl} 
+                                        alt="User"
+                                        width={32}
+                                        height={32}
+                                        className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
+                                        unoptimized
+                                    />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 mt-1">
+                                        <span className="text-white font-medium text-xs">
+                                            {user?.displayName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                                        </span>
+                                    </div>
+                                )
+                            )}
                         </div>
                     ))}
                     {aiLoading && (
-                        <div className="flex justify-start">
+                        <div className="flex gap-3 items-start justify-start">
+                            <Image 
+                                src="/minidevpfp.png" 
+                                alt="MiniDev"
+                                width={32}
+                                height={32}
+                                className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
+                            />
                             <div className="rounded-lg px-4 py-3 max-w-[80%] bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 shadow-sm">
                                 <div className="flex items-center gap-3">
                                     {/* Bouncing dots animation */}

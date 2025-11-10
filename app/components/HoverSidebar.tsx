@@ -2,7 +2,6 @@
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
-import { usePrivy } from '@privy-io/react-auth';
 
 interface Project {
   id: string;
@@ -28,7 +27,6 @@ export interface HoverSidebarRef {
 
 export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
   function HoverSidebar({ onProjectSelect, onNewProject, isOpen, onToggle }, ref) {
-  const { logout } = usePrivy();
   const { sessionToken } = useAuthContext();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -128,19 +126,6 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
                 ))
               )}
             </div>
-          </div>
-
-          {/* Bottom Section - Settings / Logout */}
-          <div className="border-t border-gray-200 py-3 flex flex-col items-center gap-2">
-            <button
-              onClick={logout}
-              className="w-full mx-3 px-3 py-2 flex items-center text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span className="ml-2">Logout</span>
-            </button>
           </div>
         </>
       )}

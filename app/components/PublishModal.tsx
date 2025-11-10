@@ -28,9 +28,20 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         const initSdk = async () => {
             try {
                 logger.log('🔧 Initializing Farcaster SDK...');
-                await sdk.context;
-                setSdkReady(true);
-                logger.log('✅ Farcaster SDK initialized');
+                const context = await sdk.context;
+                
+                // Check if we have a valid context with user info
+                // The context needs to have user data for signing to work
+                if (context && context.user) {
+                    setSdkReady(true);
+                    logger.log('✅ Farcaster SDK initialized with user context:', {
+                        fid: context.user.fid,
+                        username: context.user.username
+                    });
+                } else {
+                    logger.log('⚠️ SDK loaded but no user context - not in Farcaster frame');
+                    setSdkReady(false);
+                }
             } catch (error) {
                 logger.error('❌ Failed to initialize Farcaster SDK:', error);
                 // SDK might not be available outside of Farcaster frame
@@ -123,60 +134,77 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
 
             logger.log('✅ Base manifest built:', JSON.stringify(baseManifest, null, 2));
 
-            // Sign manifest with Farcaster SDK
-            logger.log('✍️ Step 2: Signing manifest with Farcaster...');
+            // Sign manifest with Farcaster SDK (if available)
+            logger.log('✍️ Step 2: Preparing manifest...');
             let manifest;
             
-            if (!sdkReady) {
-                logger.error('❌ Farcaster SDK not initialized');
-                throw new Error('Please open this app in Warpcast to publish. Visit https://warpcast.com/');
-            }
-
-            try {
-                // Extract domain from homeUrl
-                const homeUrlObj = new URL(formData.homeUrl);
-                const domain = homeUrlObj.hostname;
-                logger.log('🌐 Extracted domain:', domain);
-                
-                // Use SDK to sign the domain manifest with user's FID
-                // See: https://miniapps.farcaster.xyz/docs/sdk/actions/sign-manifest
-                const accountAssociation = await sdk.experimental.signManifest({
-                    domain: domain
-                });
-                
-                logger.log('✅ Manifest signed successfully:', accountAssociation);
-                
-                if (!accountAssociation || !accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
-                    throw new Error('Failed to sign manifest. Incomplete signature returned.');
+            if (sdkReady) {
+                // We're in a Farcaster frame - sign with SDK
+                logger.log('📱 Running in Farcaster frame - will sign with SDK');
+                try {
+                    // Extract domain from homeUrl
+                    const homeUrlObj = new URL(formData.homeUrl);
+                    const domain = homeUrlObj.hostname;
+                    logger.log('🌐 Extracted domain:', domain);
+                    
+                    // Use SDK to sign the domain manifest with user's FID
+                    // See: https://miniapps.farcaster.xyz/docs/sdk/actions/sign-manifest
+                    const accountAssociation = await sdk.experimental.signManifest({
+                        domain: domain
+                    });
+                    
+                    logger.log('✅ Manifest signed successfully:', accountAssociation);
+                    
+                    if (!accountAssociation || !accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
+                        throw new Error('Failed to sign manifest. Incomplete signature returned.');
+                    }
+                    
+                    // Combine base manifest with signature
+                    manifest = {
+                        accountAssociation: {
+                            header: accountAssociation.header,
+                            payload: accountAssociation.payload,
+                            signature: accountAssociation.signature
+                        },
+                        ...baseManifest
+                    };
+                    
+                    logger.log('📝 Complete signed manifest:', JSON.stringify(manifest, null, 2));
+                } catch (signError: unknown) {
+                    logger.error('❌ Signing error:', signError);
+                    
+                    // Handle specific error types from the SDK
+                    const errorConstructorName = (signError as { constructor?: { name?: string } })?.constructor?.name;
+                    const errorMessage = (signError as { message?: string })?.message;
+                    
+                    if (errorConstructorName === 'RejectedByUser') {
+                        throw new Error('You declined to sign the manifest. Please try again and approve the signing request.');
+                    } else if (errorConstructorName === 'InvalidDomain') {
+                        throw new Error('Invalid domain format in your app URL. Please check the Home URL.');
+                    } else if (errorConstructorName === 'GenericError') {
+                        throw new Error(`Signing failed: ${errorMessage || 'This could be due to host restrictions or network issues.'}`);
+                    }
+                    
+                    // If SDK signing fails, fall back to unsigned manifest
+                    logger.log('⚠️ SDK signing failed, falling back to unsigned manifest');
+                    manifest = {
+                        accountAssociation: null,
+                        ...baseManifest
+                    };
+                    logger.log('📝 Using unsigned manifest as fallback:', JSON.stringify(manifest, null, 2));
                 }
+            } else {
+                // Not in Farcaster frame - publish without SDK signature
+                logger.log('🌐 Not in Farcaster frame - publishing without SDK signature');
+                logger.log('ℹ️ Note: To sign with your Farcaster account, open this app in Warpcast');
                 
-                // Combine base manifest with signature
+                // Publish without accountAssociation (server supports this)
                 manifest = {
-                    accountAssociation: {
-                        header: accountAssociation.header,
-                        payload: accountAssociation.payload,
-                        signature: accountAssociation.signature
-                    },
+                    accountAssociation: null,
                     ...baseManifest
                 };
                 
-                logger.log('📝 Complete signed manifest:', JSON.stringify(manifest, null, 2));
-            } catch (signError: unknown) {
-                logger.error('❌ Signing error:', signError);
-                
-                // Handle specific error types from the SDK
-                const errorConstructorName = (signError as { constructor?: { name?: string } })?.constructor?.name;
-                const errorMessage = (signError as { message?: string })?.message;
-                
-                if (errorConstructorName === 'RejectedByUser') {
-                    throw new Error('You declined to sign the manifest. Please try again and approve the signing request.');
-                } else if (errorConstructorName === 'InvalidDomain') {
-                    throw new Error('Invalid domain format in your app URL. Please check the Home URL.');
-                } else if (errorConstructorName === 'GenericError') {
-                    throw new Error(`Signing failed: ${errorMessage || 'This could be due to host restrictions or network issues.'}`);
-                }
-                
-                throw new Error('Failed to sign manifest with Farcaster. Please ensure you are logged into Warpcast.');
+                logger.log('📝 Complete manifest (unsigned):', JSON.stringify(manifest, null, 2));
             }
 
             // Send to API for server-side processing
@@ -339,20 +367,43 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 <div className="p-6 overflow-y-auto max-h-[60vh]">
                     {/* Step 1: Form */}
                     {currentStep === 1 && (
-                        <div className="space-y-4">
-                            {/* Farcaster SDK Warning */}
+                        <>
+                            {/* SDK Status Banner */}
                             {!sdkReady && (
-                                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                                    <p className="text-sm text-purple-800 font-medium mb-1">
-                                        📱 Open in Warpcast to Sign Manifest
-                                    </p>
-                                    <p className="text-xs text-purple-700">
-                                        To associate this app with your Farcaster ID, please open this app in Warpcast. 
-                                        The manifest will be signed with your FID. Visit <a href="https://warpcast.com/" target="_blank" rel="noopener noreferrer" className="underline font-medium">warpcast.com</a>
-                                    </p>
+                                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <div className="flex items-start gap-3">
+                                        <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-blue-900 mb-1">
+                                                Publishing in Web Mode
+                                            </p>
+                                            <p className="text-sm text-blue-800">
+                                                You&apos;re publishing without Farcaster frame signature. The manifest will still be valid and work on Farcaster. To sign with your Farcaster account, open this app in Warpcast.
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
-                            
+                            {sdkReady && (
+                                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                                    <div className="flex items-start gap-3">
+                                        <svg className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-green-900 mb-1">
+                                                Farcaster Frame Mode Active
+                                            </p>
+                                            <p className="text-sm text-green-800">
+                                                Your app will be signed with your Farcaster account and associated with your FID.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        <div className="space-y-4">
                             {/* Authentication Warning */}
                             {!isAuthenticated && (
                                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
@@ -361,12 +412,6 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     </p>
                                 </div>
                             )}
-
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-blue-800">
-                                    Fill in your app details below. The manifest will be signed with your Farcaster account and deployed to Vercel at <code className="bg-blue-100 px-1 rounded">/.well-known/farcaster.json</code>.
-                                </p>
-                            </div>
 
                             {error && (
                                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
@@ -466,15 +511,21 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 </div>
                             </div>
                         </div>
+                        </>
                     )}
 
-                    {/* Step 2: Signing */}
+                    {/* Step 2: Publishing */}
                     {currentStep === 2 && (
                         <div className="flex flex-col items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-black mb-4"></div>
-                            <h3 className="text-xl font-semibold text-black mb-2">Signing with Farcaster...</h3>
+                            <h3 className="text-xl font-semibold text-black mb-2">
+                                {sdkReady ? 'Signing & Publishing...' : 'Publishing...'}
+                            </h3>
                             <p className="text-gray-600 text-center max-w-md">
-                                Signing your manifest with your Farcaster account and deploying to Vercel. This will associate the app with your FID.
+                                {sdkReady 
+                                    ? 'Signing your manifest with your Farcaster account and deploying. This will associate the app with your FID.'
+                                    : 'Publishing your manifest and deploying. Your app will be available on Farcaster shortly.'
+                                }
                             </p>
                         </div>
                     )}
