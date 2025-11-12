@@ -3,7 +3,7 @@ import { mergeProps } from "@base-ui-components/react/merge-props"
 import { useRender } from "@base-ui-components/react/use-render"
 
 import { cn } from "@/lib/utils"
-import { Separator } from "@workspace/ui/ui/separator"
+import { Separator } from "@/components/ui/separator"
 
 function Group({
   className,

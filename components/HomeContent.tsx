@@ -138,10 +138,14 @@ export default function HomeContent() {
   });
 
   useEffect(() => {
-    if (fetchedProject) {
+    if (!selectedProjectId) {
+      return;
+    }
+
+    if (fetchedProject && fetchedProject.projectId === selectedProjectId) {
       setCurrentProject(fetchedProject);
     }
-  }, [fetchedProject, setCurrentProject]);
+  }, [fetchedProject, selectedProjectId, setCurrentProject]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -149,29 +153,11 @@ export default function HomeContent() {
     }
   }, [selectedProjectId, setCurrentProject]);
 
-  const handleProjectSelect = async (project: { id: string; name: string; description?: string; previewUrl?: string; vercelUrl?: string; createdAt: string; updatedAt: string }) => {
-    console.log('🔍 handleProjectSelect called with project:', project);
-    setSelectedProjectId(project.id);
-    router.push(`/${project.id}`);
-
-    const cachedProject = queryClient.getQueryData<GeneratedProject>(['project', project.id]);
-    if (cachedProject) {
-      console.log('🗃️ Using cached project data for:', project.id);
-      setCurrentProject(cachedProject);
-    } else {
-      setCurrentProject(null);
-    }
-
-    if (sessionToken) {
-      await queryClient.prefetchQuery({
-        queryKey: ['project', project.id],
-        queryFn: () => fetchProjectById(project.id),
-      });
-    }
-  };
-
   const handleNewProject = useCallback(({ redirect = true }: { redirect?: boolean } = {}) => {
     console.log('🆕 handleNewProject called - clearing current project');
+    if (selectedProjectId) {
+      queryClient.removeQueries({ queryKey: ['project', selectedProjectId] });
+    }
     resetProjectState();
     if (redirect) {
       router.push('/', { scroll: false });
@@ -186,7 +172,7 @@ export default function HomeContent() {
         chatInterfaceRef.current?.focusInput();
       }, 100);
     }
-  }, [resetProjectState, router]);
+  }, [resetProjectState, router, selectedProjectId, queryClient]);
 
   useEffect(() => {
     if (routeProjectId && routeProjectId !== selectedProjectId) {

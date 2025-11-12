@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { buttonVariants } from "@workspace/ui/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 
 const toastManager = Toast.createToastManager()
 

@@ -1,12 +1,11 @@
 "use client";
 
-import { DiscoverMiniapps } from "@/components/DiscoverMiniapps";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useProjectStore } from "@/store/useProjectStore";
+import { PlusIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Button } from "./ui/button";
-import { PlusIcon } from "lucide-react";
-import { useProjectStore } from "@/store/useProjectStore";
 
 interface Project {
   id: string;
@@ -80,11 +79,6 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
     const handleNewProject = () => {
       onNewProject();
       router.push("/");
-    };
-
-    // Get project initial for bubble
-    const getProjectInitial = (name: string) => {
-      return name.charAt(0).toUpperCase();
     };
 
     return (

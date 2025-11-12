@@ -6,11 +6,11 @@ import { ToggleGroup as ToggleGroupPrimitive } from "@base-ui-components/react/t
 import { type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
-import { Separator } from "@workspace/ui/ui/separator"
+import { Separator } from "@/components/ui/separator"
 import {
   Toggle as ToggleComponent,
   toggleVariants,
-} from "@workspace/ui/ui/toggle"
+} from "@/components/ui/toggle"
 
 const ToggleGroupContext = React.createContext<
   VariantProps<typeof toggleVariants>
