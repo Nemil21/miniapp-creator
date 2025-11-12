@@ -190,7 +190,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             if (chat.length === 0 && !aiLoading) {
                 setChat([{
                     role: 'ai',
-                    content: `Minidev is your on-chain sidekick that transforms ideas into fully functional Farcaster Mini Apps — no coding required.`,
+                    content: getWelcomeMessage(appType),
                     phase: 'requirements',
                     timestamp: Date.now()
                 }]);
@@ -199,7 +199,37 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
         loadChatMessages();
         // REMOVED currentPhase from dependencies to prevent reset loop during generation
-    }, [currentProject, sessionToken, chat.length, aiLoading, currentPhase]);
+    }, [currentProject, sessionToken, chat.length, aiLoading, currentPhase, appType]);
+
+    // Helper function to get welcome message based on app type
+    const getWelcomeMessage = (type: 'farcaster' | 'web3') => {
+        if (type === 'web3') {
+            return 'Minidev is your on-chain sidekick that transforms ideas into fully functional Web3 Web Apps — no coding required.';
+        }
+        return 'Minidev is your on-chain sidekick that transforms ideas into fully functional Farcaster Mini Apps — no coding required.';
+    };
+
+    // Helper function to get Minidev pfp based on app type
+    const getMinidevPfp = (type: 'farcaster' | 'web3') => {
+        if (type === 'web3') {
+            return '/minidevpfpweb.png';
+        }
+        return '/minidevpfpfarcaster.jpeg';
+    };
+
+    // Update welcome message when app type changes
+    useEffect(() => {
+        // Only update if we have exactly one message (the welcome message) and no project
+        if (chat.length === 1 && !currentProject && chat[0].role === 'ai' && chat[0].phase === 'requirements') {
+            logger.log(`🔄 App type changed to ${appType}, updating welcome message`);
+            setChat([{
+                role: 'ai',
+                content: getWelcomeMessage(appType),
+                phase: 'requirements',
+                timestamp: Date.now()
+            }]);
+        }
+    }, [appType, chat, currentProject]);
 
     // Show warning message once when user hasn't started chatting
     useEffect(() => {
@@ -970,16 +1000,16 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // };
 
     return (
-        <div className="flex-1 w-full flex flex-col bg-[#0000000A] max-h-full">
+        <div className="flex-1 w-full flex flex-col bg-[#0000000A] h-full overflow-hidden">
             {/* Chat Messages */}
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-[20px] pt-4">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-[20px] pt-4 min-h-0">
                 <div className="space-y-4">
                     {chat.map((msg, idx) => (
                         <div key={idx} className={`flex gap-3 items-start ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {/* Profile Picture for AI (left side) */}
                             {msg.role === 'ai' && (
                                 <Image 
-                                    src="/minidevpfp.png" 
+                                    src={getMinidevPfp(appType)}
                                     alt="MiniDev"
                                     width={32}
                                     height={32}
@@ -1061,7 +1091,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     {aiLoading && (
                         <div className="flex gap-3 items-start justify-start">
                             <Image 
-                                src="/minidevpfp.png" 
+                                src={getMinidevPfp(appType)}
                                 alt="MiniDev"
                                 width={32}
                                 height={32}
@@ -1095,8 +1125,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 </div>
             </div>
 
-            {/* Chat Input */}
-            <div className="pb-4 px-[20px]">
+            {/* Chat Input - Fixed at bottom */}
+            <div className="flex-shrink-0 pb-4 px-[20px] bg-[#0000000A]">
                 {/* Insufficient Credits Warning */}
                 {shouldBlockChat && (
                     <div className="mb-3">
