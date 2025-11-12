@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useSidebarContext } from '@/components/SidebarContext';
 
 interface UserProfileHeaderProps {
   onOpenSidebar?: () => void;
@@ -16,6 +17,7 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
   const walletAddress = wallets[0]?.address;
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { toggleSidebar } = useSidebarContext();
 
   // Check if Farcaster is connected
   const hasFarcaster = privyUser?.linkedAccounts?.some(
@@ -137,7 +139,7 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
       <div className="flex items-center gap-3">
         {/* Sidebar Toggle Button */}
         <button
-          onClick={onOpenSidebar}
+          onClick={onOpenSidebar ?? toggleSidebar}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           title="Toggle Projects"
         >

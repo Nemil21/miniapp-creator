@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Icons } from './sections/icons';
-import { config } from '../../lib/config';
+import { config } from '@/lib/config';
 
 interface PasswordProtectionProps {
     onAuthenticated: () => void;

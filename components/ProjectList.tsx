@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { useApiUtils } from '../../lib/apiUtils';
+import { useApiUtils } from '@/lib/apiUtils';
 
 interface Project {
   id: string;

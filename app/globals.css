@@ -66,19 +66,48 @@
   --radius-56px: 56px;
 
   /* Custom font family */
-  --font-funnel-sans: Inter, system-ui, sans-serif;
-}
-
-:root {
-  --background: #171717;
-  --foreground: #ffffff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.21 0.006 285.885);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.006 285.885);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.7024 0.1972 44.56);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0 0 0 / 4%);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0 0 0 / 4%);
+  --muted-foreground: oklch(0.442 0.017 285.786);
+  --accent: oklch(0 0 0 / 4%);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.637 0.237 25.331);
+  --destructive-foreground: oklch(0.505 0.213 27.518);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.488 0.243 264.376);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.555 0.163 48.998);
+  --border: oklch(0 0 0 / 10%);
+  --input: oklch(0 0 0 / 10%);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-primary: oklch(0.274 0.006 286.033);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0 0 0 / 4%);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0 0 0 / 10%);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --code: oklch(1 0 0);
+  --code-foreground: var(--foreground);
+  --code-highlight: oklch(0 0 0 / 4%);
 }
 
 body {

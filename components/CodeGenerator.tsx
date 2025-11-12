@@ -25,12 +25,12 @@ interface GeneratedProject {
 interface CodeGeneratorProps {
   currentProject: GeneratedProject | null;
   isGenerating?: boolean;
-  onOpenSidebar?: () => void;
+  isProjectLoading?: boolean;
   activeAgent?: EarnKit;
   feeModelType?: "free-tier" | "credit-based";
 }
 
-export function CodeGenerator({ currentProject, isGenerating = false, onOpenSidebar, activeAgent, feeModelType }: CodeGeneratorProps) {
+export function CodeGenerator({ currentProject, isGenerating = false, isProjectLoading = false, activeAgent, feeModelType }: CodeGeneratorProps) {
   const { sessionToken } = useAuthContext();
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('preview');
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -241,7 +241,7 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
       <CodeEditorAndPreview
         currentProject={currentProject}
         isGenerating={isGenerating}
-        onOpenSidebar={onOpenSidebar}
+        isLoading={isProjectLoading}
         viewMode={viewMode}
         onFileChange={(filePath, content) => {
           logger.log('File changed:', filePath, content.substring(0, 100));

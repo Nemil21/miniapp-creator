@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { CodeGenerator } from '@/components/CodeGenerator';
 import { ChatInterface, ChatInterfaceRef } from '@/components/ChatInterface';
-import { HoverSidebar, HoverSidebarRef } from '@/components/HoverSidebar';
 import { UserProfileHeader } from '@/components/UserProfileHeader';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useApiUtils } from '@/lib/apiUtils';
@@ -30,7 +29,6 @@ export default function HomeContent() {
   const { sessionToken } = useAuthContext();
   const { apiCall } = useApiUtils();
   const chatInterfaceRef = useRef<ChatInterfaceRef>(null);
-  const hoverSidebarRef = useRef<HoverSidebarRef>(null);
   const hasAppliedPromptRef = useRef(false);
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -176,7 +174,7 @@ export default function HomeContent() {
     console.log('🆕 handleNewProject called - clearing current project');
     resetProjectState();
     if (redirect) {
-      router.push('/');
+      router.push('/', { scroll: false });
     }
     
     // Clear chat and focus input
@@ -189,8 +187,6 @@ export default function HomeContent() {
       }, 100);
     }
   }, [resetProjectState, router]);
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (routeProjectId && routeProjectId !== selectedProjectId) {
@@ -214,56 +210,40 @@ export default function HomeContent() {
   }, [searchParams, handleNewProject, router]);
 
   return (
-    <div className="flex min-h-screen h-screen font-funnel-sans relative bg-white">
-      {/* Thin Permanent Sidebar */}
-      <HoverSidebar
-        ref={hoverSidebarRef}
-        onProjectSelect={handleProjectSelect}
-        onNewProject={handleNewProject}
-        isOpen={isSidebarOpen}
-        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-      />
+    <div className="flex h-screen bg-white">
+      {/* Left Section - Chat/Agent */}
+      <section className="w-full lg:w-1/3 border-r border-gray-200 h-full flex flex-col bg-white overflow-hidden">
+        <UserProfileHeader />
 
-      {/* Main Content - Chat and Preview */}
-      <div className={`flex flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-0' : 'ml-0'}`}>
-        {/* Left Section - Chat/Agent */}
-        <section className="w-1/3 border-r border-gray-200 h-screen flex flex-col bg-white overflow-hidden">
-          {/* User Profile Header - positioned above chat only */}
-          <UserProfileHeader 
-            onOpenSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          />
-          
-          {/* Chat Interface */}
-          <ChatInterface
-            ref={chatInterfaceRef}
-            currentProject={currentProject}
-            onProjectGenerated={(project) => {
-              if (project) {
-                setSelectedProjectId(project.projectId);
-                setCurrentProject(project);
-                queryClient.setQueryData(['project', project.projectId], project);
-                router.push(`/${project.projectId}`);
-              } else {
-                resetProjectState();
-                router.push('/');
-              }
-            }}
-            onGeneratingChange={setIsGenerating}
-            activeAgent={activeAgent || undefined}
-          />
-        </section>
+        <ChatInterface
+          ref={chatInterfaceRef}
+          currentProject={currentProject}
+          onProjectGenerated={(project) => {
+            if (project) {
+              setSelectedProjectId(project.projectId);
+              setCurrentProject(project);
+              queryClient.setQueryData(['project', project.projectId], project);
+              router.push(`/${project.projectId}`, { scroll: false });
+            } else {
+              resetProjectState();
+              router.push('/', { scroll: false });
+            }
+          }}
+          onGeneratingChange={setIsGenerating}
+          activeAgent={activeAgent || undefined}
+        />
+      </section>
 
-        {/* Right Section - Code/Preview */}
-        <section className="w-2/3 h-screen bg-gray-50 transition-all duration-500">
-          <CodeGenerator
-            currentProject={currentProject}
-            isGenerating={isGenerating || isProjectLoading}
-            onOpenSidebar={() => hoverSidebarRef.current?.openSidebar()}
-            activeAgent={activeAgent || undefined}
-            feeModelType={feeModelType}
-          />
-        </section>
-      </div>
+      {/* Right Section - Code/Preview */}
+      <section className="hidden lg:block w-2/3 h-full bg-gray-50 transition-all duration-500">
+        <CodeGenerator
+          currentProject={currentProject}
+          isGenerating={isGenerating}
+          isProjectLoading={isProjectLoading}
+          activeAgent={activeAgent || undefined}
+          feeModelType={feeModelType}
+        />
+      </section>
     </div>
   );
 }

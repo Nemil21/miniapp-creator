@@ -1,6 +1,6 @@
-import { logger } from "./logger";
+import { logger } from '@/lib/logger';
 import { useCallback } from 'react';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 /**
  * Utility function to handle API responses and automatically redirect on session expiration

@@ -1,7 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { useAuthContext } from '@/contexts/AuthContext';
+import { DiscoverMiniapps } from "@/components/DiscoverMiniapps";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { usePathname, useRouter } from "next/navigation";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { Button } from "./ui/button";
+import { PlusIcon } from "lucide-react";
 
 interface Project {
   id: string;
@@ -26,110 +30,133 @@ export interface HoverSidebarRef {
 }
 
 export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
-  function HoverSidebar({ onProjectSelect, onNewProject, isOpen, onToggle }, ref) {
-  const { sessionToken } = useAuthContext();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  function HoverSidebar(
+    { onProjectSelect, onNewProject, isOpen, onToggle },
+    ref
+  ) {
+    const { sessionToken } = useAuthContext();
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const router = useRouter();
+    const pathname = usePathname();
+    const isDiscoverRoute = pathname === "/discover";
 
-  // Expose methods to parent
-  useImperativeHandle(ref, () => ({
-    openSidebar: () => onToggle(),
-    closeSidebar: () => onToggle()
-  }));
+    // Expose methods to parent
+    useImperativeHandle(ref, () => ({
+      openSidebar: () => onToggle(),
+      closeSidebar: () => onToggle(),
+    }));
 
-  // Load projects
-  useEffect(() => {
-    const loadProjects = async () => {
-      if (!sessionToken) return;
-      
-      setIsLoading(true);
-      try {
-        const response = await fetch('/api/projects', {
-          headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setProjects(data.projects || []);
+    // Load projects
+    useEffect(() => {
+      const loadProjects = async () => {
+        if (!sessionToken) return;
+
+        setIsLoading(true);
+        try {
+          const response = await fetch("/api/projects", {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setProjects(data.projects || []);
+          }
+        } catch (error) {
+          console.error("Failed to load projects:", error);
+        } finally {
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error('Failed to load projects:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      };
+
+      loadProjects();
+    }, [sessionToken]);
+
+    const handleProjectSelect = (project: Project) => {
+      onProjectSelect(project);
     };
 
-    loadProjects();
-  }, [sessionToken]);
+    const handleNewProject = () => {
+      onNewProject();
+      router.push("/");
+    };
 
-  const handleProjectSelect = (project: Project) => {
-    onProjectSelect(project);
-  };
+    // Get project initial for bubble
+    const getProjectInitial = (name: string) => {
+      return name.charAt(0).toUpperCase();
+    };
 
-  const handleNewProject = () => {
-    onNewProject();
-  };
+    return (
+      <div
+        className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${
+          isOpen ? "w-64" : "w-0 border-r-0 overflow-hidden"
+        }`}
+      >
+        {isOpen && (
+          <>
+            <div className="flex-1 overflow-y-auto py-4 px-4">
+              <div className="flex flex-col items-center gap-2 mb-4">
+                <Button
+                  variant="default"
+                  onClick={handleNewProject}
+                  title="New Project"
+                  className="w-full justify-center gap-2"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  <span className="text-sm font-medium text-gray-700">
+                    New Project
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/discover")}
+                  className={`flex-1 justify-center w-full font-semibold transition-colors ${
+                    isDiscoverRoute
+                      ? "bg-white shadow-sm border-gray-300 text-black"
+                      : "text-gray-500 hover:text-black"
+                  }`}
+                >
+                  Discover
+                </Button>
+              </div>
 
-  // Get project initial for bubble
-  const getProjectInitial = (name: string) => {
-    return name.charAt(0).toUpperCase();
-  };
-
-  return (
-    <div className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isOpen ? 'w-64' : 'w-0 border-r-0 overflow-hidden'}`}>
-      {isOpen && (
-        <>
-          {/* Projects Section */}
-          <div className="flex-1 overflow-y-auto py-4">
-            <div className="flex flex-col items-center gap-3">
-              {/* New Project Button */}
-              <button
-                onClick={handleNewProject}
-                className="flex items-center justify-center transition-all rounded-lg hover:bg-gray-100 w-full mx-3 px-3 py-2"
-                title="New Project"
-              >
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span className="ml-2 text-sm font-medium text-gray-700">New Project</span>
-              </button>
-
-              {/* Project List */}
-              {isLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
-                </div>
-              ) : (
-                projects.map((project) => (
-                  <button
-                    key={project.id}
-                    onClick={() => handleProjectSelect(project)}
-                    className="flex items-center transition-all rounded-lg hover:bg-gray-100 w-full mx-3 px-3 py-2 justify-start"
-                    title={project.name}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-medium text-xs">
-                        {getProjectInitial(project.name)}
-                      </span>
-                    </div>
-                    <div className="ml-3 flex-1 text-left overflow-hidden">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {project.name}
-                      </p>
-                      {project.description && (
-                        <p className="text-xs text-gray-500 truncate">
-                          {project.description}
+              <div className="flex flex-col items-center gap-3">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                  </div>
+                ) : (
+                  projects.map((project) => (
+                    <Button
+                      key={project.id}
+                      onClick={() => handleProjectSelect(project)}
+                      variant="ghost"
+                      title={project.name}
+                      className="w-[calc(100%-24px)] justify-start gap-3 hover:bg-gray-100"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white font-medium text-xs">
+                          {getProjectInitial(project.name)}
+                        </span>
+                      </div>
+                      <div className="flex-1 text-left overflow-hidden">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {project.name}
                         </p>
-                      )}
-                    </div>
-                  </button>
-                ))
-              )}
+                        {project.description && (
+                          <p className="text-xs text-gray-500 truncate">
+                            {project.description}
+                          </p>
+                        )}
+                      </div>
+                    </Button>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-});
-
+          </>
+        )}
+      </div>
+    );
+  }
+);

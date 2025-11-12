@@ -1,8 +1,6 @@
 'use client';
 
-
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { CodeEditor } from './CodeEditor';
 import { Preview } from './Preview';
 import { DevelopmentLogs } from './DevelopmentLogs';
@@ -22,41 +20,35 @@ interface GeneratedProject {
 interface CodeEditorAndPreviewProps {
     currentProject: GeneratedProject | null;
     isGenerating?: boolean;
+    isLoading?: boolean;
     onFileChange?: (filePath: string, content: string) => void;
     onSaveFile?: (filePath: string, content: string) => Promise<boolean>;
-    onOpenSidebar?: () => void;
     viewMode: 'code' | 'preview';
 }
 
 export function CodeEditorAndPreview({
     currentProject,
     isGenerating = false,
+    isLoading = false,
     onFileChange,
     onSaveFile,
     viewMode,
 }: CodeEditorAndPreviewProps) {
-    const [showLogs, setShowLogs] = useState(false);
-
-    // Hide logs when generation completes
-    useEffect(() => {
-        if (!isGenerating && showLogs) {
-            setShowLogs(false);
-        }
-    }, [isGenerating, showLogs]);
-
-    // Show development logs when generating
-    if (isGenerating || showLogs) {
+    if (isGenerating) {
         return (
             <div className="h-full flex flex-col">
-                <DevelopmentLogs
-                    onComplete={() => {
-                        // Only hide logs if generation is actually complete
-                        // Don't trigger onComplete if isGenerating is still true
-                        if (!isGenerating) {
-                            setShowLogs(false);
-                        }
-                    }}
-                />
+                <DevelopmentLogs onComplete={() => { /* no-op, generation completion handled upstream */ }} />
+            </div>
+        );
+    }
+
+    if (isLoading) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center bg-gray-50">
+                <div className="flex flex-col items-center gap-4 text-gray-500">
+                    <div className="w-8 h-8 border-2 border-gray-300 border-t-black rounded-full animate-spin" />
+                    <p className="text-sm font-medium text-gray-600">Loading project…</p>
+                </div>
             </div>
         );
     }
