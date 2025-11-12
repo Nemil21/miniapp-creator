@@ -34,6 +34,7 @@ export async function executeEnhancedPipeline(
     stageName: string,
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
+  appType: 'farcaster' | 'web3' = 'farcaster',
   isInitialGeneration: boolean = false,
   projectDir?: string
 ): Promise<EnhancedPipelineResult> {
@@ -81,7 +82,8 @@ export async function executeEnhancedPipeline(
         enhancedFiles,
         callLLM,
         projectId,
-        projectDir
+        projectDir,
+        appType
       );
     } else {
       pipelineResult = await executeFollowUpPipeline(
@@ -89,7 +91,8 @@ export async function executeEnhancedPipeline(
         enhancedFiles,
         callLLM,
         projectId,
-        projectDir
+        projectDir,
+        appType
       );
     }
 

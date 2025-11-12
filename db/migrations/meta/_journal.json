@@ -36,6 +36,13 @@
       "when": 1760346800928,
       "tag": "0004_add_farcaster_manifest",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1762864153442,
+      "tag": "0005_happy_iron_man",
+      "breakpoints": true
     }
   ]
 }

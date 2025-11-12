@@ -107,20 +107,25 @@ async function writeFilesToDir(
 }
 
 // Fetch boilerplate from GitHub API
-async function fetchBoilerplateFromGitHub(targetDir: string) {
+async function fetchBoilerplateFromGitHub(targetDir: string, appType: 'farcaster' | 'web3' = 'farcaster') {
   const repoOwner = "Nemil21";
-  const repoName = "minidev-boilerplate";
+  const repoName = appType === 'web3' ? 'web3-boilerplate' : 'minidev-boilerplate';
   
   // Fetch repository contents recursively
   async function fetchDirectoryContents(dirPath: string = ""): Promise<void> {
     const url = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${dirPath}`;
     
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'minidev-app'
-      }
-    });
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'minidev-app'
+    };
+    
+    // Add authentication if GitHub token is available
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+    }
+    
+    const response = await fetch(url, { headers });
     
     if (!response.ok) {
       throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
@@ -399,7 +404,8 @@ async function fixDeploymentErrors(
   deploymentError: string,
   deploymentLogs: string,
   currentFiles: { filename: string; content: string }[],
-  projectId: string
+  projectId: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<{ filename: string; content: string }[]> {
   logger.log("\n" + "=".repeat(70));
   logger.log("🔧 DEPLOYMENT ERROR DETECTED - ATTEMPTING TO FIX");
@@ -447,7 +453,8 @@ async function fixDeploymentErrors(
   const fixPrompt = getStage4ValidatorPrompt(
     filesToFix,
     [errorMessage],
-    false // Use diff-based fixes, not complete file rewrites
+    false, // Use diff-based fixes, not complete file rewrites
+    appType // Pass app type for correct context
   );
 
   logger.log(`\n🤖 Calling LLM to fix deployment errors...`);
@@ -643,11 +650,16 @@ async function executeInitialGenerationJob(
 
     fs.mkdirSync(outputDir, { recursive: true });
 
+    // Get app type from job (defaults to 'farcaster' for backward compatibility)
+    const appType = (job.appType as 'farcaster' | 'web3') || 'farcaster';
+    const boilerplateName = appType === 'web3' ? 'web3-boilerplate' : 'minidev-boilerplate';
+    logger.log(`🎯 Using ${boilerplateName} for ${appType} app`);
+
     // Use local boilerplate in development, GitHub API in production
     if (process.env.NODE_ENV === 'production') {
-      logger.log("📋 Fetching boilerplate from GitHub API (production mode)...");
+      logger.log(`📋 Fetching ${boilerplateName} from GitHub API (production mode)...`);
       try {
-        await fetchBoilerplateFromGitHub(boilerplateDir);
+        await fetchBoilerplateFromGitHub(boilerplateDir, appType);
         logger.log("✅ Boilerplate fetched successfully");
       } catch (error) {
         logger.error("❌ Failed to fetch boilerplate:", error);
@@ -655,13 +667,13 @@ async function executeInitialGenerationJob(
       }
     } else {
       // Development mode: use local boilerplate
-      logger.log("📋 Copying from local minidev-boilerplate folder (development mode)...");
-      const localBoilerplatePath = path.join(process.cwd(), '..', 'minidev-boilerplate');
+      logger.log(`📋 Copying from local ${boilerplateName} folder (development mode)...`);
+      const localBoilerplatePath = path.join(process.cwd(), '..', boilerplateName);
       try {
         await fs.copy(localBoilerplatePath, boilerplateDir);
-        logger.log("✅ Boilerplate copied successfully from local folder");
+        logger.log(`✅ Boilerplate copied successfully from local ${boilerplateName}`);
       } catch (error) {
-        logger.error("❌ Failed to copy local boilerplate:", error);
+        logger.error(`❌ Failed to copy local ${boilerplateName}:`, error);
         throw new Error(`Failed to copy boilerplate: ${error}`);
       }
     }
@@ -716,6 +728,7 @@ async function executeInitialGenerationJob(
       projectId,
       accessToken,
       callLLM,
+      appType, // Pass app type for correct LLM context
       true, // isInitialGeneration
       userDir
     );
@@ -870,7 +883,8 @@ async function executeInitialGenerationJob(
               previewData.deploymentError,
               previewData.deploymentLogs || '', // Use empty string if logs not available
               generatedFiles,
-              projectId
+              projectId,
+              (job.appType as 'farcaster' | 'web3') || 'farcaster' // Pass app type for correct LLM context
             );
 
             logger.log(`🔍 [RETRY-DEBUG] fixDeploymentErrors returned ${fixedFiles.length} files`);
@@ -1149,6 +1163,7 @@ async function executeFollowUpJob(
 
   const { prompt, existingProjectId: projectId, useDiffBased = true } = context;
   const accessToken = process.env.PREVIEW_AUTH_TOKEN;
+  const appType = (job.appType as 'farcaster' | 'web3') || 'farcaster';
 
   if (!accessToken) {
     throw new Error("Missing preview auth token");
@@ -1250,6 +1265,7 @@ async function executeFollowUpJob(
       projectId,
       accessToken,
       callLLM,
+      appType,
       false,  // isInitialGeneration = false
       userDir
     );

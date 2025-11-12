@@ -184,10 +184,11 @@ const FARCASTER_BOILERPLATE_CONTEXT = {
     mobileFirst: "375px width, touch targets ≥44px",
     singlePage: "Tab-based SPA, all logic in src/app/page.tsx",
     connectors:
-      "Only farcasterMiniApp() from @farcaster/miniapp-wagmi-connector",
+      "🚨 CRITICAL: ONLY farcasterMiniApp() from @farcaster/miniapp-wagmi-connector - NO RainbowKit, NO MetaMask, NO other wallet connectors",
     userManagement: "Always use useUser hook from @/hooks for user data",
     noPackageChanges: "Do not modify package.json unless absolutely necessary",
     wagmiConfig: "For Web3 apps: Modify wagmi.ts to import CHAIN from contractConfig. For non-Web3 apps: Do not modify wagmi.ts",
+    noMultiWallet: "🚨 FORBIDDEN: DO NOT import or use @rainbow-me/rainbowkit, MetaMask, WalletConnect, or any multi-wallet providers. Farcaster apps use ONLY farcasterMiniApp connector.",
   },
   keyComponents: {
     useUser: {
@@ -211,6 +212,57 @@ const FARCASTER_BOILERPLATE_CONTEXT = {
       location: "src/app/page.tsx",
       structure: "Header + Tab Navigation + Content areas",
       responsive: "Mobile-first design with proper spacing",
+    },
+  },
+};
+
+// Web3 Web App Boilerplate Context
+const WEB3_BOILERPLATE_CONTEXT = {
+  structure: `web3-app/
+├── src/
+│   ├── app/                        # Next.js app
+│   │   ├── page.tsx                # Main page
+│   │   ├── providers.tsx           # Wagmi + RainbowKit
+│   ├── components/
+│   │   ├── ui/                     # Button, Input, Tabs
+│   │   └── wallet/
+│   │       └── ConnectWallet.tsx   # RainbowKit wallet UI
+│   ├── hooks/
+│   │   └── useUser.ts              # Simple wallet hook (NO Farcaster)
+│   ├── lib/
+│   │   ├── utils.ts                # Utilities
+│   │   └── wagmi.ts                # Multi-chain config
+`,
+  availableFeatures: {
+    wallets: "MetaMask, Coinbase Wallet (NO WalletConnect without Project ID)",
+    chains: "Mainnet, Base, Base Sepolia, Optimism, Arbitrum, Polygon",
+    ui: "Button, Input, Tabs, ConnectWallet (RainbowKit)",
+    hooks: "useUser - wallet data ONLY (address, balance, ensName)",
+    contracts: "useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useBalance",
+  },
+  constraints: {
+    noFarcaster: "🚨 CRITICAL: NO Farcaster SDK, NO miniapp features, NO Farcaster data",
+    userManagement: "🚨 useUser returns ONLY: address, isConnected, isConnecting, isDisconnected, balance, balanceFormatted, ensName, chainId",
+    forbiddenProperties: "NEVER use: username, fid, displayName, pfpUrl, isMiniApp - these don't exist!",
+    singlePage: "Tab-based SPA in src/app/page.tsx",
+  },
+  keyComponents: {
+    useUser: {
+      location: "src/hooks/useUser.ts",
+      purpose: "Simple Web3 wallet hook - NO FARCASTER",
+      correctUsage: "const { address, isConnected, balance, ensName } = useUser()",
+      availableFields: "address, isConnected, isConnecting, isDisconnected, balance, balanceFormatted, ensName, chainId",
+      forbiddenFields: "username, fid, displayName, pfpUrl, isMiniApp, location",
+      example: `
+// ✅ CORRECT - Web3 useUser
+const { address, isConnected, balance, ensName, chainId } = useUser();
+if (isConnected && address) {
+  // Use wallet data
+}
+
+// ❌ WRONG - These don't exist in Web3!
+const { username, fid, isMiniApp } = useUser(); // ERROR!
+`,
     },
   },
 };
@@ -336,24 +388,71 @@ export interface IntentSpec {
   contractName?: string; // e.g., "MyNFT", "RewardToken"
 }
 
-export function getStage1IntentParserPrompt(): string {
-  return `
-ROLE: Intent Parser for Farcaster Miniapp Generation
+export function getStage1IntentParserPrompt(appType: 'farcaster' | 'web3' = 'farcaster'): string {
+  const context = getContextForAppType(appType);
+  const appTypeName = appType === 'web3' ? 'Web3 Web App' : 'Farcaster Miniapp';
+  
+  const web3Warning = appType === 'web3' ? `
+${'='.repeat(80)}
+🚨🚨🚨 CRITICAL: THIS IS A WEB3 WEB APP - NOT A FARCASTER MINI APP! 🚨🚨🚨
+${'='.repeat(80)}
+
+THE useUser HOOK IN THIS PROJECT RETURNS **ONLY** WALLET DATA:
+  ✅ AVAILABLE: address, isConnected, isConnecting, isDisconnected, balance, balanceFormatted, ensName, chainId
+  ❌ FORBIDDEN: username, fid, displayName, pfpUrl, isMiniApp, location, isLoading
+
+⚠️ CRITICAL DIFFERENCES FROM FARCASTER:
+  - Use isConnecting NOT isLoading ❌
+  - Use address NOT username ❌
+  - Use ensName NOT displayName ❌
+  - NO profile pictures (pfpUrl) ❌
+  - NO Farcaster IDs (fid) ❌
+
+NEVER USE THESE FARCASTER PROPERTIES - THEY DON'T EXIST IN WEB3 APPS:
+  - userData.isLoading ❌ → Use userData.isConnecting ✅
+  - userData.username ❌ → Use userData.address ✅
+  - userData.fid ❌
+  - userData.displayName ❌ → Use userData.ensName ✅
+  - userData.pfpUrl ❌
+  - userData.isMiniApp ❌
+
+CORRECT Web3 useUser USAGE:
+  const { address, isConnected, isConnecting, balance, ensName } = useUser();
+  if (isConnecting) { return <div>Loading...</div>; }
+  if (isConnected && address) { /* use wallet data */ }
+
+${'='.repeat(80)}
+` : '';
+  
+  return `${web3Warning}
+ROLE: Intent Parser for ${appTypeName} Generation
 
 TASK: Parse user request into structured JSON specification and determine if changes are needed
 
 BOILERPLATE CONTEXT:
-${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+${JSON.stringify(context, null, 2)}
 
 AVAILABLE FEATURES:
+${appType === 'farcaster' ? `
 - Farcaster SDK integration (@farcaster/miniapp-sdk)
-- Wallet connection (farcasterMiniApp() from @farcaster/miniapp-wagmi-connector)
-- ALWAYS use useUser hook from @/hooks for user data like username, fid, displayName, pfpUrl, etc. and always take address from useAccount hook from wagmi
-- Tab-based single page application (Tabs component from @/components/ui/Tabs)
+- 🚨 CRITICAL: Wallet connection ONLY via farcasterMiniApp() - NO MetaMask, NO RainbowKit, NO other wallets
+- 🚨 CRITICAL: ALWAYS use useUser hook from @/hooks for user data (username, fid, displayName, pfpUrl)
+- 🚨 FORBIDDEN: DO NOT import or use RainbowKit, MetaMask, WalletConnect, or any multi-wallet libraries
+- Tab-based single page application
 - Mobile-first UI components (Button, Input, ConnectWallet, Tabs)
 - Automatic environment detection (Mini App vs Browser)
 - Pre-configured API endpoint for Farcaster authentication (/api/me)
-- For Web3 apps: Modify wagmi.ts to import CHAIN from contractConfig. For non-Web3 apps: Do not modify wagmi.ts
+- ConnectWallet component uses ONLY wagmi's useConnect hook with farcasterMiniApp connector
+` : `
+- 🚨 CRITICAL: NO Farcaster SDK - this is a Web3 Web App!
+- Multi-wallet support: MetaMask, Coinbase Wallet (via RainbowKit)
+- Multi-chain: Mainnet, Base, Optimism, Arbitrum, Polygon
+- 🚨 CRITICAL: useUser hook returns ONLY wallet data (address, isConnected, balance, ensName, chainId)
+- 🚨 FORBIDDEN: username, fid, displayName, pfpUrl, isMiniApp - THESE DON'T EXIST!
+- Tab-based single page application
+- Responsive UI components (Button, Input, ConnectWallet with RainbowKit, Tabs)
+- Wagmi hooks: useAccount, useBalance, useReadContract, useWriteContract
+`}
 - Do not modify package.json unless absolutely necessary
 
 🚨 CRITICAL TEMPLATE ENFORCEMENT:
@@ -362,8 +461,7 @@ AVAILABLE FEATURES:
 - ALWAYS use wagmi hooks (useReadContract, useWriteContract) directly in components
 - DO NOT create wrapper API routes for contract interactions
 - ONLY modify src/app/page.tsx and create components in src/components/
-- For Web3: ONLY modify contracts/src/ for smart contracts
-- NEVER create src/app/api/contract/ or similar API wrappers
+${appType === 'farcaster' ? '- For Web3 contracts: ONLY modify contracts/ directory' : '- For smart contracts: use wagmi hooks directly'}
 
 CRITICAL: You MUST return ONLY valid JSON. No explanations, no text, no markdown, no code fences.
 
@@ -577,11 +675,30 @@ export interface FileDiff {
 export function getStage2PatchPlannerPrompt(
   intentSpec: IntentSpec,
   currentFiles: { filename: string; content: string }[],
-  isInitialGeneration: boolean = false
+  isInitialGeneration: boolean = false,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): string {
+  const context = getContextForAppType(appType);
+  const appTypeName = appType === 'web3' ? 'Web3 Web App' : 'Farcaster Miniapp';
+  
+  const web3Warning = appType === 'web3' ? `
+${'='.repeat(80)}
+🚨🚨🚨 CRITICAL: THIS IS A WEB3 WEB APP - NOT A FARCASTER MINI APP! 🚨🚨🚨
+${'='.repeat(80)}
+
+THE useUser HOOK RETURNS **ONLY** WALLET DATA - NO FARCASTER DATA:
+  ✅ AVAILABLE: address, isConnected, balance, ensName, chainId
+  ❌ FORBIDDEN: username, fid, displayName, pfpUrl, isMiniApp
+
+NEVER PLAN TO USE THESE PROPERTIES - THEY DON'T EXIST:
+  - userData?.username, userData?.fid, userData?.isMiniApp - ALL FORBIDDEN! ❌
+
+${'='.repeat(80)}
+` : '';
+  
   if (isInitialGeneration) {
-    return `
-ROLE: Patch Planner for Farcaster Miniapp - Initial Generation
+    return `${web3Warning}
+ROLE: Patch Planner for ${appTypeName} - Initial Generation
 
 INTENT: ${JSON.stringify(intentSpec, null, 2)}
 
@@ -597,7 +714,7 @@ INITIAL GENERATION APPROACH:
 - No need for diff hunks or unified diffs - Stage 3 will generate complete files
 
 BOILERPLATE CONTEXT:
-${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+${JSON.stringify(context, null, 2)}
 
 🚨 CRITICAL TEMPLATE ENFORCEMENT:
 - ONLY use the boilerplate template files provided
@@ -747,8 +864,8 @@ REMEMBER: Return ONLY the JSON object above surrounded by __START_JSON__ and __E
 `;
   } else {
     // Follow-up changes - use diff-based approach
-    return `
-ROLE: Patch Planner for Farcaster Miniapp - Follow-up Changes
+    return `${web3Warning}
+ROLE: Patch Planner for ${appTypeName} - Follow-up Changes
 
 INTENT: ${JSON.stringify(intentSpec, null, 2)}
 
@@ -829,7 +946,7 @@ HUNK VALIDATION CHECKLIST:
 - Are context lines exactly matching the numbered content from CURRENT FILES?
 
 BOILERPLATE CONTEXT:
-${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+${JSON.stringify(context, null, 2)}
 
 CRITICAL: Return ONLY valid JSON. Surround the JSON with EXACT markers:
 __START_JSON__
@@ -1177,6 +1294,22 @@ ERC721 APPS:
 
 DEPLOYMENT SCRIPT (contracts/scripts/deploy.js):
 
+🚨 CRITICAL: DEPLOYMENT SCRIPTS MUST WRITE deployment-info.json
+Every custom deploy.js MUST include this at the end:
+
+  const fs = require('fs');
+  const deploymentInfo = {
+    YourContract: await yourContract.getAddress(),
+    deployer: deployer.address,
+    network: 'baseSepolia',
+    chainId: 84532,
+    timestamp: new Date().toISOString()
+  };
+  fs.writeFileSync('./deployment-info.json', JSON.stringify(deploymentInfo, null, 2));
+  console.log("📄 Deployment info saved to deployment-info.json");
+
+This file is REQUIRED for the system to extract contract addresses!
+
 🚨 CRITICAL: DEPLOYMENT SCRIPTS SHOULD ONLY DEPLOY CONTRACTS
 ❌ DO NOT call contract methods in deploy.js (e.g., contract.addFunds(), contract.mint(), etc.)
 ❌ DO NOT send ETH to contracts during deployment
@@ -1341,8 +1474,43 @@ export function getStage3CodeGeneratorPrompt(
   patchPlan: PatchPlan,
   intentSpec: IntentSpec,
   currentFiles: { filename: string; content: string }[],
-  isInitialGeneration: boolean = false
+  isInitialGeneration: boolean = false,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): string {
+  const context = getContextForAppType(appType);
+  
+  const web3Warning = appType === 'web3' ? `
+${'='.repeat(80)}
+🚨🚨🚨 CRITICAL: THIS IS A WEB3 WEB APP - NOT A FARCASTER MINI APP! 🚨🚨🚨
+${'='.repeat(80)}
+
+WHEN GENERATING CODE, THE useUser HOOK RETURNS **ONLY** WALLET DATA:
+  ✅ CORRECT: const { address, isConnected, isConnecting, balance, ensName } = useUser();
+  ❌ WRONG: const { username, fid, isMiniApp, isLoading } = useUser(); // THESE DON'T EXIST!
+
+⚠️ CRITICAL: LOADING STATE PROPERTY NAME IS DIFFERENT!
+  - userData.isLoading ❌ DOES NOT EXIST → Use userData.isConnecting ✅
+  - if (userData.isLoading) ❌ WRONG → if (userData.isConnecting) ✅
+
+NEVER WRITE CODE THAT ACCESSES THESE PROPERTIES:
+  - userData.isLoading ❌ FORBIDDEN → Use isConnecting ✅
+  - userData.username ❌ FORBIDDEN → Use address ✅
+  - userData.fid ❌ FORBIDDEN
+  - userData.displayName ❌ FORBIDDEN → Use ensName ✅
+  - userData.pfpUrl ❌ FORBIDDEN
+  - userData.isMiniApp ❌ FORBIDDEN
+
+IF YOU GENERATE CODE WITH ANY OF THESE PROPERTIES, THE BUILD WILL FAIL!
+
+CORRECT LOADING CHECK FOR WEB3:
+  const userData = useUser();
+  if (userData.isConnecting) { return <div>Connecting...</div>; }
+  if (!userData.isConnected) { return <ConnectWallet />; }
+  // Now use userData.address, userData.balance, etc.
+
+${'='.repeat(80)}
+` : '';
+  
   // Build modular prompt based on intent
   const storageRules = intentSpec.storageType === 'localStorage'
     ? getLocalStorageRules()
@@ -1356,8 +1524,8 @@ export function getStage3CodeGeneratorPrompt(
     : getNonWeb3AuthRules();
 
   if (isInitialGeneration) {
-    return `
-ROLE: Code Generator for Farcaster Miniapp - Initial Generation
+    return `${web3Warning}
+ROLE: Code Generator for ${appType === 'web3' ? 'Web3 Web App' : 'Farcaster Miniapp'} - Initial Generation
 
 INTENT: ${JSON.stringify(intentSpec, null, 2)}
 
@@ -1367,7 +1535,7 @@ CURRENT FILES (Boilerplate):
 ${currentFiles.map((f) => `---${f.filename}---\n${f.content}`).join("\n\n")}
 
 BOILERPLATE CONTEXT:
-${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+${JSON.stringify(context, null, 2)}
 
 TASK: Generate complete file contents based on the detailed patch plan for initial project generation
 
@@ -1384,8 +1552,8 @@ REMEMBER: Return ONLY the JSON array above surrounded by __START_JSON__ and __EN
 `;
   } else {
     // Follow-up changes - use diff-based approach
-    return `
-ROLE: Code Generator for Farcaster Miniapp - Follow-up Changes
+    return `${web3Warning}
+ROLE: Code Generator for ${appType === 'web3' ? 'Web3 Web App' : 'Farcaster Miniapp'} - Follow-up Changes
 
 INTENT: ${JSON.stringify(intentSpec, null, 2)}
 
@@ -1399,7 +1567,7 @@ ${currentFiles.map((f) => {
 }).join("\n\n")}
 
 BOILERPLATE CONTEXT:
-${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+${JSON.stringify(context, null, 2)}
 
 TASK: Generate unified diff patches based on the detailed patch plan. Apply surgical changes using the provided diff hunks rather than rewriting entire files. For new files, generate complete content. For modifications, output only the unified diff patches.
 
@@ -1494,9 +1662,29 @@ export interface ValidationResult {
 export function getStage4ValidatorPrompt(
   generatedFiles: { filename: string; content: string }[],
   errors: string[],
-  isInitialGeneration: boolean = false
+  isInitialGeneration: boolean = false,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): string {
-  return `
+  const context = getContextForAppType(appType);
+  
+  const web3Warning = appType === 'web3' ? `
+${'='.repeat(80)}
+🚨🚨🚨 CRITICAL: FIXING ERRORS IN A WEB3 WEB APP - NOT FARCASTER! 🚨🚨🚨
+${'='.repeat(80)}
+
+IF THE ERROR MENTIONS: "Property 'username', 'fid', 'isMiniApp' does not exist"
+THIS IS BECAUSE THOSE PROPERTIES DON'T EXIST IN WEB3 useUser HOOK!
+
+THE useUser HOOK IN THIS PROJECT RETURNS **ONLY** WALLET DATA:
+  ✅ AVAILABLE: address, isConnected, balance, ensName, chainId
+  ❌ FORBIDDEN: username, fid, displayName, pfpUrl, isMiniApp
+
+TO FIX: REMOVE ALL REFERENCES TO FARCASTER PROPERTIES!
+
+${'='.repeat(80)}
+` : '';
+  
+  return `${web3Warning}
 ROLE: Code Validator for Next.js 15 + TypeScript + React
 
 ERRORS FOUND:
@@ -1508,7 +1696,7 @@ ${generatedFiles.map((f) => `---${f.filename}---\n${f.content}`).join("\n\n")}
 TASK: Fix critical errors that would prevent the project from running. ${isInitialGeneration ? 'Generate complete corrected files for initial project generation.' : 'Generate unified diff patches for surgical fixes rather than rewriting entire files. PRESERVE the existing implementation from Stage 3 - only fix the specific validation errors mentioned.'}
 
 BOILERPLATE CONTEXT:
-${JSON.stringify(FARCASTER_BOILERPLATE_CONTEXT, null, 2)}
+${JSON.stringify(context, null, 2)}
 
 CRITICAL: Return ONLY a JSON array. Surround the JSON with EXACT markers:
 __START_JSON__
@@ -1613,10 +1801,16 @@ CRITICAL: Return ONLY the JSON array above surrounded by __START_JSON__ and __EN
 }
 
 // Helper function to get boilerplate context
-export function getBoilerplateContext() {
+// Helper to get the right context based on app type
+function getContextForAppType(appType: 'farcaster' | 'web3' = 'farcaster') {
+  return appType === 'web3' ? WEB3_BOILERPLATE_CONTEXT : FARCASTER_BOILERPLATE_CONTEXT;
+}
+
+export function getBoilerplateContext(appType: 'farcaster' | 'web3' = 'farcaster') {
+  const context = getContextForAppType(appType);
   return {
-    structure: BOILERPLATE_STRUCTURE,
-    context: FARCASTER_BOILERPLATE_CONTEXT,
+    structure: appType === 'web3' ? context.structure : BOILERPLATE_STRUCTURE,
+    context,
   };
 }
 
@@ -1938,7 +2132,8 @@ async function executeStage1IntentParser(
     stageName: string,
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
-  projectId?: string
+  projectId?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<IntentSpec> {
   logger.log("\n" + "=".repeat(50));
   logger.log("📋 STAGE 1: Intent Parser");
@@ -1948,14 +2143,14 @@ async function executeStage1IntentParser(
   logger.log("📤 Sending to LLM (Stage 1):");
   logger.log(
     "System Prompt Length:",
-    getStage1IntentParserPrompt().length,
+    getStage1IntentParserPrompt(appType).length,
     "chars"
   );
   logger.log("User Prompt:", intentPrompt);
 
   const startTime1 = Date.now();
   const intentResponse = await callLLM(
-    getStage1IntentParserPrompt(),
+    getStage1IntentParserPrompt(appType),
     intentPrompt,
     "Stage 1: Intent Parser",
     "STAGE_1_INTENT_PARSER"
@@ -1965,7 +2160,7 @@ async function executeStage1IntentParser(
   // Log Stage 1 response for debugging
   if (projectId) {
     logStageResponse(projectId, 'stage1-intent-parser', intentResponse, {
-      systemPromptLength: getStage1IntentParserPrompt().length,
+      systemPromptLength: getStage1IntentParserPrompt(appType).length,
       userPromptLength: intentPrompt.length,
       responseTime: endTime1 - startTime1
     });
@@ -2039,7 +2234,8 @@ async function executeStage2PatchPlanner(
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
   isInitialGeneration: boolean,
-  projectId?: string
+  projectId?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<PatchPlan> {
   logger.log("\n" + "=".repeat(50));
   logger.log("📝 STAGE 2: Patch Planner");
@@ -2063,7 +2259,7 @@ async function executeStage2PatchPlanner(
   logger.log("📤 Sending to LLM (Stage 2):");
   logger.log(
     "System Prompt Length:",
-    getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration).length,
+    getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration, appType).length,
     "chars"
   );
   logger.log("User Prompt:", patchPrompt);
@@ -2071,7 +2267,7 @@ async function executeStage2PatchPlanner(
 
   const startTime2 = Date.now();
   const patchResponse = await callLLM(
-    getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration),
+    getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration, appType),
     patchPrompt,
     "Stage 2: Patch Planner",
     "STAGE_2_PATCH_PLANNER"
@@ -2081,7 +2277,7 @@ async function executeStage2PatchPlanner(
   // Log Stage 2 response for debugging
   if (projectId) {
     logStageResponse(projectId, 'stage2-patch-planner', patchResponse, {
-      systemPromptLength: getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration).length,
+      systemPromptLength: getStage2PatchPlannerPrompt(intentSpec, relevantFiles, isInitialGeneration, appType).length,
       userPromptLength: patchPrompt.length,
       responseTime: endTime2 - startTime2,
       intentSpec: intentSpec
@@ -2187,7 +2383,8 @@ export async function executeInitialGenerationPipeline(
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
   projectId?: string,
-  projectDir?: string
+  projectDir?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<{ files: { filename: string; content: string }[]; intentSpec: IntentSpec }> {
   try {
     logger.log("🚀 Starting INITIAL GENERATION pipeline...");
@@ -2195,7 +2392,7 @@ export async function executeInitialGenerationPipeline(
     logger.log("📁 Current Files Count:", currentFiles.length);
 
     // Stage 1: Intent Parser
-    const intentSpec = await executeStage1IntentParser(userPrompt, callLLM, projectId);
+    const intentSpec = await executeStage1IntentParser(userPrompt, callLLM, projectId, appType);
 
     // Check if changes are needed
     if (!intentSpec.needsChanges) {
@@ -2222,7 +2419,8 @@ export async function executeInitialGenerationPipeline(
       filteredFiles, // ← Using filtered files instead of currentFiles
       callLLM,
       true, // isInitialGeneration = true
-      projectId
+      projectId,
+      appType
     );
 
     // Stage 3: Code Generator (Complete Files) - using filtered files
@@ -2232,7 +2430,8 @@ export async function executeInitialGenerationPipeline(
       intentSpec,
       filteredFiles, // ← Using filtered files instead of currentFiles
       callLLM,
-      projectId
+      projectId,
+      appType
     );
 
     // Stage 4: Validator (Complete Files) - using ORIGINAL files for validation context
@@ -2283,7 +2482,8 @@ export async function executeFollowUpPipeline(
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
   projectId?: string,
-  projectDir?: string
+  projectDir?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<{ 
   files: { filename: string; content: string }[]; 
   diffs: FileDiff[];
@@ -2296,7 +2496,7 @@ export async function executeFollowUpPipeline(
     logger.log("📁 Current Files Count:", currentFiles.length);
 
     // Stage 1: Intent Parser
-    const intentSpec = await executeStage1IntentParser(userPrompt, callLLM, projectId);
+    const intentSpec = await executeStage1IntentParser(userPrompt, callLLM, projectId, appType);
 
     // Check if changes are needed
     if (!intentSpec.needsChanges) {
@@ -2322,7 +2522,8 @@ export async function executeFollowUpPipeline(
       filteredFiles, // ← Using filtered files instead of currentFiles
       callLLM,
       false, // isInitialGeneration = false
-      projectId
+      projectId,
+      appType
     );
 
     // Stage 3: Code Generator (Diffs) - using filtered files
@@ -2332,7 +2533,8 @@ export async function executeFollowUpPipeline(
       intentSpec,
       filteredFiles, // ← Using filtered files instead of currentFiles
       callLLM,
-      projectId
+      projectId,
+      appType
     );
     const { files: filesWithDiffs, diffs } = stage3Result;
 
@@ -2392,7 +2594,8 @@ async function executeStage3InitialGeneration(
     stageName: string,
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
-  projectId?: string
+  projectId?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<{ filename: string; content: string }[]> {
   logger.log("\n" + "=".repeat(50));
   logger.log("💻 STAGE 3: Code Generator (Initial Generation)");
@@ -2402,13 +2605,13 @@ async function executeStage3InitialGeneration(
   logger.log("📤 Sending to LLM (Stage 3):");
   logger.log(
     "System Prompt Length:",
-    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true).length,
+    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true, appType).length,
     "chars"
   );
 
   const startTime3 = Date.now();
   const codeResponse = await callLLM(
-    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true),
+    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true, appType),
     codePrompt,
     "Stage 3: Code Generator",
     "STAGE_3_CODE_GENERATOR"
@@ -2418,7 +2621,7 @@ async function executeStage3InitialGeneration(
   // Log Stage 3 response
   if (projectId) {
     logStageResponse(projectId, 'stage3-code-generator', codeResponse, {
-      systemPromptLength: getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true).length,
+      systemPromptLength: getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true, appType).length,
       userPromptLength: codePrompt.length,
       responseTime: endTime3 - startTime3,
       patchPlan: patchPlan,
@@ -2480,7 +2683,7 @@ For example, if you need a "MusicArtistToken":
 Now regenerate the code using ONLY the templates above.`;
 
       const retryResponse = await callLLM(
-        getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true) + 
+        getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, true, appType) + 
         "\n\n🚨 TEMPLATE-ONLY MODE: You previously tried to create invalid contracts. Use ONLY ERC20Template.sol, ERC721Template.sol, or EscrowTemplate.sol",
         retryPrompt,
         "Stage 3: Code Generator (Retry - Template Only)",
@@ -2546,7 +2749,8 @@ async function executeStage3FollowUpGeneration(
     stageName: string,
     stageType?: keyof typeof STAGE_MODEL_CONFIG
   ) => Promise<string>,
-  projectId?: string
+  projectId?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ): Promise<{ files: { filename: string; content: string }[]; diffs: FileDiff[] }> {
   logger.log("\n" + "=".repeat(50));
   logger.log("💻 STAGE 3: Code Generator (Follow-Up Changes - Diff-Based)");
@@ -2556,13 +2760,13 @@ async function executeStage3FollowUpGeneration(
   logger.log("📤 Sending to LLM (Stage 3):");
   logger.log(
     "System Prompt Length:",
-    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false).length,
+    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false, appType).length,
     "chars"
   );
 
   const startTime3 = Date.now();
   const codeResponse = await callLLM(
-    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false),
+    getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false, appType),
     codePrompt,
     "Stage 3: Code Generator",
     "STAGE_3_CODE_GENERATOR"
@@ -2572,7 +2776,7 @@ async function executeStage3FollowUpGeneration(
   // Log Stage 3 response
   if (projectId) {
     logStageResponse(projectId, 'stage3-code-generator', codeResponse, {
-      systemPromptLength: getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false).length,
+      systemPromptLength: getStage3CodeGeneratorPrompt(patchPlan, intentSpec, currentFiles, false, appType).length,
       userPromptLength: codePrompt.length,
       responseTime: endTime3 - startTime3,
       patchPlan: patchPlan,

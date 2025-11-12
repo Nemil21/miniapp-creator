@@ -53,6 +53,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     const [chat, setChat] = useState<ChatMessage[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [hasShownWarning, setHasShownWarning] = useState(false);
+    const [appType, setAppType] = useState<'farcaster' | 'web3'>('farcaster');
     const chatBottomRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const { sessionToken, user } = useAuthContext();
@@ -734,7 +735,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 },
                 body: JSON.stringify({
                     prompt: generationPrompt,
-                    projectId: chatProjectId || undefined  // Pass existing project ID for chat preservation
+                    projectId: chatProjectId || undefined,  // Pass existing project ID for chat preservation
+                    appType: appType  // Pass selected app type to use correct boilerplate
                 }),
             });
 
@@ -1139,19 +1141,6 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     }}
                     className="bg-transparent text-black rounded-3xl p-2 border-2 border-black-10 mb-2 flex flex-col items-center gap-1"
                 >
-                    {/* <input
-                        value={prompt}
-                        onChange={e => setPrompt(e.target.value)}
-                        placeholder={
-                            currentPhase === 'requirements'
-                                ? "Ask Minidev"
-                                : currentPhase === 'building'
-                                    ? "Ask Minidev"
-                                    : "Ask Minidev"
-                        }
-                        className="flex-1 resize-none p-2 px-4 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-semibold"
-                        disabled={aiLoading || isGenerating}
-                    /> */}
                     <textarea
                         ref={textareaRef}
                         value={prompt}
@@ -1200,6 +1189,43 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                             </svg>
                         )}
                     </button>
+                    
+                    {/* App Type Selector - Below the input, styled like the reference image */}
+                    {!currentProject && chat.length <= 1 && (
+                        <div className="relative mt-1">
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const select = document.getElementById('appTypeSelect') as HTMLSelectElement;
+                                    if (select) {
+                                        select.focus();
+                                        select.click();
+                                    }
+                                }}
+                                className="w-full flex items-center justify-between px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 rounded transition-colors cursor-pointer"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm">{appType === 'farcaster' ? '🎯' : '🌐'}</span>
+                                    <span className="font-medium">
+                                        {appType === 'farcaster' ? 'Farcaster Mini App' : 'Web3 Web App'}
+                                    </span>
+                                </div>
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-gray-400">
+                                    <path d="M3 5L6 8L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </button>
+                            <select
+                                id="appTypeSelect"
+                                value={appType}
+                                onChange={(e) => setAppType(e.target.value as 'farcaster' | 'web3')}
+                                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                            >
+                                <option value="farcaster">🎯 Farcaster Mini App</option>
+                                <option value="web3">🌐 Web3 Web App</option>
+                            </select>
+                        </div>
+                    )}
                 </form>
                 <p className="text-xs text-gray-400 text-center">
                     Outputs are auto-generated — please review before deploying.

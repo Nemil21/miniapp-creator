@@ -103,12 +103,17 @@ async function fetchBoilerplateFromGitHub(targetDir: string) {
   async function fetchDirectoryContents(dirPath: string = ""): Promise<void> {
     const url = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${dirPath}`;
     
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'minidev-app'
-      }
-    });
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'minidev-app'
+    };
+    
+    // Add authentication if GitHub token is available
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+    }
+    
+    const response = await fetch(url, { headers });
     
     if (!response.ok) {
       throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
@@ -549,7 +554,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const { prompt, useMultiStage = true, projectId: existingProjectId } = await request.json();
+      const { prompt, useMultiStage = true, projectId: existingProjectId, appType = 'farcaster' } = await request.json();
 
       if (!prompt) {
         return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
@@ -557,6 +562,7 @@ export async function POST(request: NextRequest) {
 
       logger.log(`📝 Creating generation job for user: ${user.email || user.id}`);
       logger.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
+      logger.log(`🎯 App Type: ${appType}`);
 
       // Create job in database
       const job = await createGenerationJob(
@@ -567,7 +573,8 @@ export async function POST(request: NextRequest) {
           existingProjectId,
           useMultiStage,
         },
-        existingProjectId
+        existingProjectId,
+        appType  // Pass app type to determine which boilerplate to use
       );
 
       logger.log(`✅ Job created with ID: ${job.id}`);
@@ -664,7 +671,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { prompt, useMultiStage = true, projectId: existingProjectId } = await request.json();
+    const { prompt, useMultiStage = true, projectId: existingProjectId, appType = 'farcaster' } = await request.json();
     const accessToken = process.env.PREVIEW_AUTH_TOKEN;
     logger.log("🔑 Preview auth token:", accessToken);
     if (!accessToken) {
@@ -679,6 +686,7 @@ export async function POST(request: NextRequest) {
     }
 
     logger.log(`🚀 Starting project generation for prompt: ${prompt}`);
+    logger.log(`🎯 App Type: ${appType}`);
     logger.log(
       `🔧 Using ${useMultiStage ? "multi-stage" : "single-stage"} pipeline`
     );
@@ -810,6 +818,7 @@ export async function POST(request: NextRequest) {
       projectId,
       accessToken,
       callLLM,
+      appType, // appType: 'farcaster' | 'web3'
       true, // isInitialGeneration = true for POST requests
       userDir // projectDir
     );
@@ -1099,6 +1108,18 @@ export async function PATCH(request: NextRequest) {
         { error: "Missing projectId or prompt" },
         { status: 400 }
       );
+    }
+
+    // Load project to get appType
+    let appType: 'farcaster' | 'web3' = 'farcaster'; // default
+    try {
+      const project = await getProjectById(projectId);
+      if (project && project.appType) {
+        appType = project.appType as 'farcaster' | 'web3';
+        logger.log(`📱 Project appType: ${appType}`);
+      }
+    } catch {
+      logger.warn(`⚠️ Could not load project appType, using default: farcaster`);
     }
 
     // Use local generated folder for development, /tmp/generated for production
@@ -1522,6 +1543,7 @@ export async function PATCH(request: NextRequest) {
         projectId,
         accessToken,
         callLLM,
+        appType, // appType: 'farcaster' | 'web3'
         false, // isInitialGeneration = false for PATCH requests
         userDir // projectDir
       );
@@ -1589,7 +1611,8 @@ export async function PATCH(request: NextRequest) {
             projectId,
             accessToken,
             callLLM,
-            false,
+            appType, // appType: 'farcaster' | 'web3'
+            false, // isInitialGeneration = false
             userDir
           );
           

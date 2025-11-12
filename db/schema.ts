@@ -18,6 +18,7 @@ export const projects = pgTable('projects', {
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   name: text('name').notNull(),
   description: text('description'),
+  appType: text('app_type').default('farcaster').notNull(), // 'farcaster' or 'web3'
   status: text('status').default('active').notNull(), // 'active', 'archived', 'deleted'
   previewUrl: text('preview_url'),
   vercelUrl: text('vercel_url'),
@@ -87,6 +88,7 @@ export const generationJobs = pgTable('generation_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  appType: text('app_type').default('farcaster').notNull(), // 'farcaster' or 'web3'
   status: text('status').default('pending').notNull(), // 'pending', 'processing', 'completed', 'failed'
   prompt: text('prompt').notNull(),
   context: jsonb('context').notNull(), // Chat history, project info, etc.

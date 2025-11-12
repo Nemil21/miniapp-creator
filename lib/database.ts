@@ -414,7 +414,8 @@ export async function createGenerationJob(
   userId: string,
   prompt: string,
   context: Record<string, unknown>,
-  projectId?: string
+  projectId?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ) {
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours from now
@@ -422,6 +423,7 @@ export async function createGenerationJob(
   const [job] = await db.insert(generationJobs).values({
     userId,
     projectId: projectId || null,
+    appType,
     prompt,
     context,
     expiresAt,
