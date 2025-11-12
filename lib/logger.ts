@@ -1,25 +1,28 @@
 /**
- * Development-only logger
- * Logs are suppressed in production to keep logs clean
+ * Logger with environment-based controls
+ * - Development: All logs enabled
+ * - Production: Only errors by default, can enable all logs with NEXT_PUBLIC_ENABLE_LOGS=true
  */
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const ENABLE_PROD_LOGS = process.env.NEXT_PUBLIC_ENABLE_LOGS === 'true';
+const SHOULD_LOG = IS_DEV || ENABLE_PROD_LOGS;
 
 export const logger = {
   log: (...args: unknown[]) => {
-    if (IS_DEV) {
+    if (SHOULD_LOG) {
       console.log(...args);
     }
   },
   
   info: (...args: unknown[]) => {
-    if (IS_DEV) {
+    if (SHOULD_LOG) {
       console.info(...args);
     }
   },
   
   warn: (...args: unknown[]) => {
-    if (IS_DEV) {
+    if (SHOULD_LOG) {
       console.warn(...args);
     }
   },
@@ -30,17 +33,17 @@ export const logger = {
   },
   
   debug: (...args: unknown[]) => {
-    if (IS_DEV) {
+    if (SHOULD_LOG) {
       console.debug(...args);
     }
   },
 };
 
 /**
- * Log API requests (dev only)
+ * Log API requests (dev only or when logging enabled)
  */
 export function logApiRequest(method: string, path: string, userId?: string) {
-  if (IS_DEV) {
+  if (SHOULD_LOG) {
     console.log(`🔍 ${method} ${path}${userId ? ` - user: ${userId}` : ''}`);
   }
 }
@@ -50,7 +53,7 @@ export function logApiRequest(method: string, path: string, userId?: string) {
  */
 export function logErrorWithContext(error: unknown, context: string, additionalInfo?: Record<string, unknown>) {
   console.error(`❌ Error in ${context}:`, error);
-  if (additionalInfo && IS_DEV) {
+  if (additionalInfo && SHOULD_LOG) {
     console.error('Additional context:', additionalInfo);
   }
 }

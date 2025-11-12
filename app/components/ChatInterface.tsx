@@ -220,16 +220,21 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // Update welcome message when app type changes
     useEffect(() => {
         // Only update if we have exactly one message (the welcome message) and no project
-        if (chat.length === 1 && !currentProject && chat[0].role === 'ai' && chat[0].phase === 'requirements') {
-            logger.log(`🔄 App type changed to ${appType}, updating welcome message`);
-            setChat([{
-                role: 'ai',
-                content: getWelcomeMessage(appType),
-                phase: 'requirements',
-                timestamp: Date.now()
-            }]);
-        }
-    }, [appType, chat, currentProject]);
+        // Don't use chat in the condition check to avoid race conditions
+        setChat(prev => {
+            // Only update if it's just the welcome message
+            if (prev.length === 1 && !currentProject && prev[0].role === 'ai' && prev[0].phase === 'requirements') {
+                logger.log(`🔄 App type changed to ${appType}, updating welcome message`);
+                return [{
+                    role: 'ai',
+                    content: getWelcomeMessage(appType),
+                    phase: 'requirements',
+                    timestamp: Date.now()
+                }];
+            }
+            return prev;
+        });
+    }, [appType, currentProject]);
 
     // Show warning message once when user hasn't started chatting
     useEffect(() => {
