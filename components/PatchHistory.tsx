@@ -1,9 +1,9 @@
 'use client';
-import { logger } from "../../lib/logger";
+import { logger } from "@/lib/logger";
 
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 interface Patch {
   id: string;

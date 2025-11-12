@@ -1,7 +1,18 @@
 import { exec } from "child_process";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+export function absoluteUrl(path: string) {
+  return `${process.env.NEXT_PUBLIC_APP_URL}${path}`
+}
+
 
 // Generate a random port between 3000 and 9999
 export function getRandomPort(): number {

@@ -1,10 +1,10 @@
 'use client';
-import { logger } from "../../lib/logger";
+import { logger } from '@/lib/logger';
 
 
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 // Monaco Editor (dynamically loaded for SSR)
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { 

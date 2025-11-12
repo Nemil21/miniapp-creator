@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Funnel_Display, Funnel_Sans, Geist, Geist_Mono } from "next/font/google";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import "./globals.css";
+import { TopLoader } from "@/components/TopLoader";
 import Providers from "./providers";
 
 const geistSans = Geist({
@@ -108,7 +110,8 @@ export default function RootLayout({
         {/* Desktop Content */}
         <div className="hidden md:block">
           <Providers>
-            {children}
+            <TopLoader />
+            <NuqsAdapter>{children}</NuqsAdapter>
           </Providers>
         </div>
       </body>

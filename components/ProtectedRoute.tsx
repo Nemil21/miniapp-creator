@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { EmailLogin } from './EmailLogin';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {

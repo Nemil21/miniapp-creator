@@ -1,9 +1,9 @@
 'use client';
-import { logger } from "../../lib/logger";
+import { logger } from "@/lib/logger";
 
 
 import { useState, useEffect } from 'react';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { sdk } from '@farcaster/miniapp-sdk';
 
 interface PublishModalProps {

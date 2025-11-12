@@ -1,7 +1,8 @@
 'use client';
-import { logger } from "../../lib/logger";
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Icons } from './sections/icons';
 
 interface GeneratedProject {
@@ -25,6 +26,7 @@ export function Preview({ currentProject }: PreviewProps) {
     const [iframeError, setIframeError] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [iframeKey, setIframeKey] = useState(0);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
     // Force iframe refresh when project is updated (after edits)
     useEffect(() => {
@@ -36,24 +38,131 @@ export function Preview({ currentProject }: PreviewProps) {
         }
     }, [currentProject?.lastUpdated]);
 
+    useEffect(() => {
+        if (currentProject) {
+            setSelectedTemplateId(null);
+        }
+    }, [currentProject]);
+
     if (!currentProject) {
+        const templateOptions = [
+            {
+                id: 'farcaster-miniapp',
+                title: 'Farcaster Miniapp',
+                description: 'Launch a Warpcast-ready experience with frame interactions and onchain actions.',
+                logo: '/farcaster.svg',
+                prompt:
+                    'Help me build a Farcaster miniapp. I want a Warpcast frame that showcases trending onchain activity with quick actions for users.',
+            },
+            {
+                id: 'base-webapp',
+                title: 'Webapp',
+                description: 'Spin up a Base-connected web experience that works great on desktop and mobile.',
+                logo: '/globe.svg',
+                prompt:
+                    'Help me build a Base web app. I want a responsive site that lets users connect a wallet and interact with Base onchain data.',
+            },
+        ] as const;
+
+        const handleTemplateSelect = (prompt: string) => {
+            if (typeof window === 'undefined') {
+                return;
+            }
+            const event = new CustomEvent('templateSelect', { detail: prompt });
+            window.dispatchEvent(event);
+        };
+
         return (
             <div className="h-full flex flex-col bg-white overflow-y-auto">
-                <div className="flex-1 flex items-center justify-center p-4">
-                    <div className="text-center max-w-md">
+                <div className="flex-1 flex items-center justify-center p-6">
+                    <div className="w-full max-w-xl">
                         <div className="mb-6 flex justify-center">
-                            <Icons.earnySmallGrayIcon className="w-16 h-16 text-gray-400" />
+                            <Icons.earnySmallGrayIcon className="w-16 h-16 text-gray-200" />
                         </div>
-                        <h3 className="text-xl font-semibold text-black mb-2">No Project Selected</h3>
-                        <p className="text-sm text-black-60 mb-6">
-                            Please Select a project or start a new project in the chat.
+                        <h3 className="text-2xl font-semibold text-black text-center">Choose Your Build</h3>
+                        <p className="mt-2 text-sm text-black-60 text-center">
+                            Select a starting point to prefill the chat. You can still describe anything you need after choosing.
                         </p>
-                        <div className="bg-black-5 rounded-lg p-4 text-left">
-                            <p className="text-xs text-black-60 font-medium mb-2">💡 Tip:</p>
-                            <p className="text-xs text-black-60">
-                                Describe your mini app idea in the chat and Minidev will build it for you.
-                            </p>
+                        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            {templateOptions.map((template) => (
+                                <button
+                                    key={template.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedTemplateId(template.id);
+                                        handleTemplateSelect(template.prompt);
+                                    }}
+                                    className={`group flex flex-col h-full rounded-2xl border p-5 text-left shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${
+                                        selectedTemplateId === template.id
+                                            ? 'border-black bg-black text-white shadow-lg'
+                                            : 'border-gray-200 bg-white hover:-translate-y-1 hover:shadow-lg'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div
+                                                className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+                                                    selectedTemplateId === template.id ? 'bg-white/10' : 'bg-gray-50'
+                                                }`}
+                                            >
+                                                <Image
+                                                    src={template.logo}
+                                                    alt={`${template.title} logo`}
+                                                    width={32}
+                                                    height={32}
+                                                    className={`h-8 w-8 ${selectedTemplateId === template.id ? 'brightness-0 invert' : ''}`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <h4
+                                                    className={`text-base font-semibold ${
+                                                        selectedTemplateId === template.id ? 'text-white' : 'text-black'
+                                                    }`}
+                                                >
+                                                    {template.title}
+                                                </h4>
+                                                <p
+                                                    className={`text-xs font-medium uppercase tracking-wide ${
+                                                        selectedTemplateId === template.id ? 'text-white/60' : 'text-black-40'
+                                                    }`}
+                                                >
+                                                    Recommended
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <svg
+                                            className={`h-5 w-5 transition-colors ${
+                                                selectedTemplateId === template.id
+                                                    ? 'text-white'
+                                                    : 'text-gray-300 group-hover:text-black'
+                                            }`}
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </div>
+                                    <p
+                                        className={`mt-4 flex-1 text-sm ${
+                                            selectedTemplateId === template.id ? 'text-white/80' : 'text-black-60'
+                                        }`}
+                                    >
+                                        {template.description}
+                                    </p>
+                                    <div
+                                        className={`mt-4 text-xs font-semibold ${
+                                            selectedTemplateId === template.id ? 'text-white' : 'text-blue-600'
+                                        }`}
+                                    >
+                                        {selectedTemplateId === template.id ? 'Selected · Prompt added to chat' : 'Click to prefill the chat'}
+                                    </div>
+                                </button>
+                            ))}
                         </div>
+                        <p className="mt-6 text-xs text-black-40 text-center">
+                            Want something else? Select a template or start typing in the chat to describe your idea.
+                        </p>
                     </div>
                 </div>
             </div>

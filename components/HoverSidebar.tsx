@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 interface Project {
   id: string;

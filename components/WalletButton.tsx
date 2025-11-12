@@ -1,5 +1,5 @@
 "use client";
-import { logger } from "../../lib/logger";
+import { logger } from "@/lib/logger";
 
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { Button } from "./ui/button";

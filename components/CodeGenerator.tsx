@@ -1,11 +1,11 @@
 'use client';
-import { logger } from "../../lib/logger";
+import { logger } from '@/lib/logger';
 
 import { useState } from 'react';
 import { CodeEditorAndPreview } from './CodeEditorAndPreview';
 import { PublishModal } from './PublishModal';
 import TopUpDialog from './top-up-dialog';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQuery } from '@tanstack/react-query';
 import type { EarnKit } from '@earnkit/earn';

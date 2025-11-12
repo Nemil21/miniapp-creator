@@ -1,12 +1,12 @@
 'use client';
 
-import { logger } from "../../lib/logger";
+import { logger } from '@/lib/logger';
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useAuthContext } from '../contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import type { EarnKit } from '@earnkit/earn';
@@ -43,6 +43,7 @@ interface ChatInterfaceProps {
 export interface ChatInterfaceRef {
     clearChat: () => void;
     focusInput: () => void;
+    sendMessage: (message: string) => void;
 }
 
 export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
@@ -127,7 +128,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             if (textareaRef.current) {
                 textareaRef.current.focus();
             }
-        }
+            },
+            sendMessage: (message: string) => {
+                if (message.trim()) {
+                    handleSendMessage(message.trim());
+                }
+            },
     }));
 
     // Load chat messages when project changes
@@ -927,6 +933,24 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     useEffect(() => {
         adjustTextareaHeight();
     }, [prompt]);
+
+    useEffect(() => {
+        const handleTemplateSelect = (event: Event) => {
+            const customEvent = event as CustomEvent<string>;
+            if (typeof customEvent.detail === 'string') {
+                setPrompt(customEvent.detail);
+                requestAnimationFrame(() => {
+                    adjustTextareaHeight();
+                    textareaRef.current?.focus();
+                });
+            }
+        };
+
+        window.addEventListener('templateSelect', handleTemplateSelect as EventListener);
+        return () => {
+            window.removeEventListener('templateSelect', handleTemplateSelect as EventListener);
+        };
+    }, []);
 
     // const handleCleanup = async () => {
     //     if (!currentProject) return;
