@@ -18,6 +18,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import type { EarnKit } from "@earnkit/earn";
 import { toast } from "react-hot-toast";
 import { TextShimmer } from "./text-shimmer";
+import { Button } from "./ui/button";
 
 interface GeneratedProject {
   projectId: string;
@@ -1397,9 +1398,11 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 }
               }}
             />
-            <button
+            <Button
+              variant="default"
+              size="icon"
               type="submit"
-              className="p-2 bg-black-80 rounded-full disabled:opacity-50 ml-auto disabled:cursor-not-allowed"
+              className="disabled:opacity-50 rounded-full ml-auto disabled:cursor-not-allowed"
               disabled={
                 aiLoading || isGenerating || !prompt.trim() || shouldBlockChat
               }
@@ -1433,7 +1436,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                   />
                 </svg>
               )}
-            </button>
+            </Button>
           </form>
           <p className="text-xs text-gray-400 text-center">
             Outputs are auto-generated — please review before deploying.

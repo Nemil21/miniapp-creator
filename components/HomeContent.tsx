@@ -11,6 +11,7 @@ import { useAuthContext } from '../contexts/AuthContext';
 import { useApiUtils } from '@/lib/apiUtils';
 import { EarnKit } from '@earnkit/earn';
 import { useProjectStore } from '@/store/useProjectStore';
+import BalanceDisplay from './BalanceDisplay';
 
 interface GeneratedProject {
   projectId: string;
@@ -24,13 +25,24 @@ interface GeneratedProject {
   hasPackageChanges?: boolean;
 }
 
+const PANEL_WIDTH_STORAGE_KEY = 'miniapp-creator-left-panel-width';
+
 export default function HomeContent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isNavigatingHome, setIsNavigatingHome] = useState(false);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(PANEL_WIDTH_STORAGE_KEY);
+      return saved ? parseFloat(saved) : 33.33; // Default to 1/3
+    }
+    return 33.33;
+  });
+  const [isDragging, setIsDragging] = useState(false);
   const { sessionToken } = useAuthContext();
   const { apiCall } = useApiUtils();
   const chatInterfaceRef = useRef<ChatInterfaceRef>(null);
   const hasAppliedPromptRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -206,10 +218,57 @@ export default function HomeContent() {
     }, 0);
   }, [searchParams, handleNewProject, router]);
 
+  // Save panel width to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, leftPanelWidth.toString());
+    }
+  }, [leftPanelWidth]);
+
+  // Handle drag for resizing panels
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+      // Constrain between 20% and 70%
+      const constrainedWidth = Math.max(20, Math.min(70, newLeftWidth));
+      setLeftPanelWidth(constrainedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   return (
-    <div className="flex h-screen bg-white">
+    <div ref={containerRef} className="flex h-screen bg-white">
       {/* Left Section - Chat/Agent */}
-      <section className="w-full lg:w-1/3 border-r border-gray-200 h-full flex flex-col bg-white overflow-hidden">
+      <section 
+        className="w-full lg:w-auto h-full flex flex-col bg-white overflow-hidden transition-all duration-200"
+        style={{ 
+          width: typeof window !== 'undefined' && window.innerWidth >= 1024 
+            ? `${leftPanelWidth}%` 
+            : undefined 
+        }}
+      >
         <UserProfileHeader />
 
         <ChatInterface
@@ -231,8 +290,22 @@ export default function HomeContent() {
         />
       </section>
 
+      {/* Draggable Separator */}
+      <div
+        className={`hidden lg:flex items-center justify-center w-px bg-gray-200 ring-0 hover:ring-3 hover:ring-primary cursor-col-resize transition-all duration-100 ${
+          isDragging ? 'bg-border' : ''
+        }`}
+        onMouseDown={handleMouseDown}
+        style={{ userSelect: 'none' }}
+      >
+        <div className="w-0.5 h-full bg-border" />
+      </div>
+
       {/* Right Section - Code/Preview */}
-      <section className="hidden lg:block w-2/3 h-full bg-gray-50 transition-all duration-500">
+      <section 
+        className="hidden lg:block h-full bg-gray-50 transition-all duration-200"
+        style={{ width: `${100 - leftPanelWidth}%` }}
+      >
         <CodeGenerator
           currentProject={currentProject}
           isGenerating={isGenerating}

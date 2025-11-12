@@ -162,8 +162,8 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
   };
 
   return (
-    <div className="sticky top-0 left-0 bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between z-20">
-      <div className="flex items-center gap-3">
+    <div className="sticky h-[65px] top-0 left-0 bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between z-20">
+      <div className="flex items-center">
         {/* Sidebar Toggle Button */}
         <Button
           variant="ghost"
@@ -188,7 +188,9 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
 
         {/* User Profile - Clickable with Dropdown */}
         <div className="relative" ref={dropdownRef}>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setShowDropdown(!showDropdown)}
             className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
           >
@@ -239,7 +241,7 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
                 d="M19 9l-7 7-7-7"
               />
             </svg>
-          </button>
+          </Button>
 
           {/* Dropdown Menu */}
           {showDropdown && (
@@ -290,19 +292,21 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
 
       {/* Connect Farcaster Button - Only show if enabled and not connected */}
       {!hasFarcaster && farcasterEnabled && (
-        <button
-          onClick={handleLinkFarcaster}
-          className="px-4 py-2 bg-transparent border-2 border-[#8A63D2] hover:bg-[#8A63D2]/10 text-[#8A63D2] text-sm font-medium rounded-full transition-colors flex items-center gap-2"
-        >
-          <Image
-            src="/farcaster.svg"
-            alt="Farcaster"
-            width={16}
-            height={16}
-            className="w-4 h-4"
-          />
-          Connect Farcaster
-        </button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleLinkFarcaster}
+        className="text-nowrap border border-[#8A63D280] hover:bg-[#8A63D2]/10 text-[#8A63D2] text-sm font-medium rounded-full transition-colors flex items-center gap-2"
+      >
+        <Image
+          src="/farcaster.svg"
+          alt="Farcaster"
+          width={16}
+          height={16}
+          className="w-4 h-4"
+        />
+        Connect Farcaster
+      </Button>
       )}
     </div>
   );

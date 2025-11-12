@@ -47,9 +47,6 @@ export default function DiscoverPage() {
     <div className="min-h-screen bg-background font-funnel-sans">
       <div className="mx-auto max-w-5xl px-6 py-10">
         <div className="mb-8">
-          <span className="inline-flex items-center rounded-full text-foreground px-3 py-1 text-xs font-semibold uppercase tracking-wide">
-            Discover
-          </span>
           <h1 className="mt-4 text-3xl font-semibold text-gray-900">
             Trending Miniapps
           </h1>

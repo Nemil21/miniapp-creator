@@ -68,7 +68,7 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
                     variant="outline"
                     size="sm"
                     onClick={linkWallet}
-                    className="px-3 py-1.5 text-xs font-medium text-black-60 transition-colors cursor-pointer rounded-3xl"
+                    className="px-3 py-1.5 text-xs font-medium text-black-60 transition-colors cursor-pointer"
                     title="Currently using temporary wallet. Click to connect your own wallet (MetaMask, Coinbase, etc.)"
                 >
                     Connect Wallet
@@ -87,7 +87,7 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
                 <Button
                     variant="outline"
                     size="sm"
-                    className="px-3 py-1.5 text-xs font-medium border-black-20 text-black-60 hover:text-black hover:border-black-30 hover:bg-black-5 transition-colors cursor-pointer rounded-3xl"
+                    className="px-3 py-1.5 text-xs font-medium border-black-20 text-black-60 hover:text-black hover:border-black-30 hover:bg-black-5 transition-colors cursor-pointer"
                 >
                     Top Up
                 </Button>
