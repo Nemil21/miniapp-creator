@@ -1065,11 +1065,15 @@ REMEMBER: Return ONLY the JSON object above surrounded by __START_JSON__ and __E
 // MODULAR RULE FUNCTIONS - DRY PRINCIPLE
 // ========================================================================
 
-function getCoreGenerationRules(): string {
+function getCoreGenerationRules(appType: 'farcaster' | 'web3' = 'farcaster'): string {
+  const useUserExample = appType === 'web3' 
+    ? '- Use useUser hook: const { address, isConnected, isConnecting, balance } = useUser() // Web3 wallet data only!'
+    : '- Use useUser hook: const { username, fid, isMiniApp, isLoading } = useUser() // Farcaster user data';
+    
   return `
 CODE GENERATION CORE RULES:
 - Mobile-first design (~375px width) with tab-based layout
-- Use useUser hook: const { username, fid, isMiniApp, isLoading } = useUser()
+${useUserExample}
 - Use Tabs component from @/components/ui/Tabs for navigation
 - Follow patch plan fields exactly (purpose, description, location, dependencies)
 - Include all required imports and implement contract interactions when specified
@@ -1090,25 +1094,25 @@ Required in ALL files with: React hooks, event handlers, or interactive JSX
 
 function getWeb3AuthRules(): string {
   return `
-=== WEB3 AUTHENTICATION (Farcaster + Wallet) ===
+=== WEB3 AUTHENTICATION (Wallet Only - NO FARCASTER) ===
+🚨 CRITICAL: This is a Web3 Web App - NOT a Farcaster Mini App!
+
 - Import ConnectWallet: import { ConnectWallet } from '@/components/wallet/ConnectWallet';
-- Import useAccount: import { useAccount } from 'wagmi';
-- Use useUser: const { isMiniApp, username, isLoading } = useUser();
-- Use useAccount: const { address } = useAccount();
-- Show loading state: if (isLoading) return <div>Loading...</div>;
+- Use useUser (Web3 version): const { address, isConnected, isConnecting, balance } = useUser();
+- Show loading state: if (isConnecting) return <div>Connecting wallet...</div>;
+- ❌ DO NOT use: isMiniApp, username, fid, displayName, isLoading - these don't exist!
 
-🚨 CRITICAL: APP MUST WORK IN BOTH ENVIRONMENTS
-Farcaster mode: Authenticated via Farcaster (isMiniApp === true)
-Browser mode: Must connect wallet for blockchain interactions (address !== null)
-
-CORRECT PATTERN:
-{isMiniApp || address ? (
-  <main><!-- Full app functionality --></main>
+CORRECT PATTERN FOR WEB3:
+{isConnected && address ? (
+  <main><!-- Full app functionality with wallet --></main>
 ) : (
   <ConnectWallet />
 )}
 
-REASONING: Web3 apps require wallet connection in browser for blockchain interactions
+❌ WRONG - Don't use Farcaster properties:
+{isMiniApp || address ? ... } // isMiniApp doesn't exist in Web3!
+
+REASONING: Web3 apps require wallet connection for blockchain interactions
 `;
 }
 
@@ -1539,7 +1543,7 @@ ${JSON.stringify(context, null, 2)}
 
 TASK: Generate complete file contents based on the detailed patch plan for initial project generation
 
-${getCoreGenerationRules()}
+${getCoreGenerationRules(appType)}
 ${getClientDirectiveRules()}
 ${authRules}
 ${getMockDataRules()}
@@ -1635,7 +1639,7 @@ EXAMPLE OUTPUT FOR NEW FILE (NOT in existing files list):
 }
 
 ${getDiffGenerationRules()}
-${getCoreGenerationRules()}
+${getCoreGenerationRules(appType)}
 ${getClientDirectiveRules()}
 ${authRules}
 ${getMockDataRules()}
