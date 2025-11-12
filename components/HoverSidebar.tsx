@@ -134,11 +134,6 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
                       title={project.name}
                       className="w-[calc(100%-24px)] justify-start gap-3 hover:bg-gray-100"
                     >
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-white font-medium text-xs">
-                          {getProjectInitial(project.name)}
-                        </span>
-                      </div>
                       <div className="flex-1 text-left overflow-hidden">
                         <p className="text-sm font-medium text-gray-900 truncate">
                           {project.name}

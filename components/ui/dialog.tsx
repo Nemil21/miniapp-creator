@@ -1,131 +1,134 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { createPortal } from "react-dom";
+import { Dialog as DialogPrimitive } from "@base-ui-components/react/dialog"
+import { XIcon } from "lucide-react"
 
-interface DialogContextValue {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
+import { cn } from "@/lib/utils"
+
+const Dialog = DialogPrimitive.Root
+
+function DialogTrigger(props: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
 
-const DialogContext = React.createContext<DialogContextValue | undefined>(undefined);
-
-interface DialogProps {
-    open?: boolean;
-    onOpenChange?: (open: boolean) => void;
-    children: React.ReactNode;
+function DialogPortal(props: DialogPrimitive.Portal.Props) {
+  return <DialogPrimitive.Portal {...props} />
 }
 
-export function Dialog({ open: controlledOpen, onOpenChange, children }: DialogProps) {
-    const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
-    const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
-    const handleOpenChange = onOpenChange || setUncontrolledOpen;
+function DialogClose(props: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+}
 
-    return (
-        <DialogContext.Provider value={{ open, onOpenChange: handleOpenChange }}>
+function DialogBackdrop({
+  className,
+  ...props
+}: DialogPrimitive.Backdrop.Props) {
+  return (
+    <DialogPrimitive.Backdrop
+      data-slot="dialog-backdrop"
+      className={cn(
+        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogPopup({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <DialogPortal>
+      <DialogBackdrop />
+      <div className="fixed inset-0 z-50">
+        <div className="flex h-[100dvh] flex-col items-center overflow-hidden pt-6 max-sm:before:flex-1 sm:overflow-y-auto sm:p-4 sm:before:basis-[20vh] sm:after:flex-1">
+          <DialogPrimitive.Popup
+            data-slot="dialog-popup"
+            className={cn(
+              "row-start-2 grid w-full min-w-0 origin-top gap-4 border bg-popover bg-clip-padding p-6 text-popover-foreground shadow-lg transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform data-ending-style:opacity-0 data-starting-style:opacity-0 max-sm:overflow-y-auto max-sm:border-none max-sm:opacity-[calc(1-min(var(--nested-dialogs),1))] max-sm:data-ending-style:translate-y-4 max-sm:data-starting-style:translate-y-4 sm:max-w-lg sm:-translate-y-[calc(1.25rem*var(--nested-dialogs))] sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:rounded-2xl sm:data-ending-style:scale-98 sm:data-starting-style:scale-98 dark:bg-clip-border",
+              "relative before:pointer-events-none before:absolute before:inset-0 before:shadow-[0_1px_--theme(--color-black/4%)] max-sm:before:hidden sm:before:rounded-[calc(var(--radius-2xl)-1px)]",
+              "sm:data-nested:data-ending-style:translate-y-8 sm:data-nested:data-starting-style:translate-y-8 dark:before:shadow-[0_-1px_--theme(--color-white/8%)]",
+              className
+            )}
+            {...props}
+          >
             {children}
-        </DialogContext.Provider>
-    );
+            {showCloseButton && (
+              <DialogPrimitive.Close className="absolute end-2 top-2 inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent opacity-72 transition-[color,background-color,box-shadow,opacity] outline-none hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+                <XIcon />
+                <span className="sr-only">Close</span>
+              </DialogPrimitive.Close>
+            )}
+          </DialogPrimitive.Popup>
+        </div>
+      </div>
+    </DialogPortal>
+  )
 }
 
-export function DialogTrigger({ children, asChild }: { children: React.ReactNode; asChild?: boolean }) {
-    const context = React.useContext(DialogContext);
-    if (!context) throw new Error("DialogTrigger must be used within Dialog");
-
-    const handleClick = () => context.onOpenChange(true);
-
-    if (asChild && React.isValidElement(children)) {
-        return React.cloneElement(children, {
-            onClick: handleClick,
-        } as React.HTMLAttributes<HTMLElement>);
-    }
-
-    return <button onClick={handleClick}>{children}</button>;
+function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn("flex flex-col gap-1 text-center sm:text-left", className)}
+      {...props}
+    />
+  )
 }
 
-export function DialogContent({
-    children,
-    className = "",
-    onPointerDownOutside,
-}: {
-    children: React.ReactNode;
-    className?: string;
-    onPointerDownOutside?: () => void;
-}) {
-    const context = React.useContext(DialogContext);
-    const [mounted, setMounted] = React.useState(false);
-
-    React.useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
-    }, []);
-
-    if (!context) throw new Error("DialogContent must be used within Dialog");
-
-    if (!context.open || !mounted) return null;
-
-    const handleBackdropClick = () => {
-        if (onPointerDownOutside) {
-            onPointerDownOutside();
-        }
-        context.onOpenChange(false);
-    };
-
-    const dialogContent = (
-        <>
-            {/* Backdrop */}
-            <div
-                className="fixed inset-0 bg-black/50 cursor-pointer"
-                style={{ zIndex: 9999 }}
-                onClick={handleBackdropClick}
-            />
-            {/* Dialog */}
-            <div 
-                className="fixed inset-0 flex items-center justify-center p-4 pointer-events-none"
-                style={{ zIndex: 9999 }}
-            >
-                <div
-                    className={`bg-white p-6 shadow-xl max-w-md w-full pointer-events-auto ${className}`}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {children}
-                </div>
-            </div>
-        </>
-    );
-
-    // Render dialog at document.body level to escape stacking context
-    return createPortal(dialogContent, document.body);
+function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        "flex flex-col-reverse gap-2 sm:-mx-6 sm:mt-2 sm:-mb-6 sm:flex-row sm:justify-end sm:rounded-b-xl sm:border-t sm:bg-muted/50 sm:px-6 sm:py-4",
+        className
+      )}
+      {...props}
+    />
+  )
 }
 
-export function DialogHeader({
-    children,
-    className = "",
-}: {
-    children: React.ReactNode;
-    className?: string;
-}) {
-    return <div className={`mb-4 ${className}`}>{children}</div>;
+function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  return (
+    <DialogPrimitive.Title
+      data-slot="dialog-title"
+      className={cn("font-heading text-xl leading-none", className)}
+      {...props}
+    />
+  )
 }
 
-export function DialogTitle({
-    children,
-    className = "",
-}: {
-    children: React.ReactNode;
-    className?: string;
-}) {
-    return <h2 className={`text-lg font-semibold ${className}`}>{children}</h2>;
+function DialogDescription({
+  className,
+  ...props
+}: DialogPrimitive.Description.Props) {
+  return (
+    <DialogPrimitive.Description
+      data-slot="dialog-description"
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  )
 }
 
-export function DialogDescription({
-    children,
-    className = "",
-}: {
-    children: React.ReactNode;
-    className?: string;
-}) {
-    return <p className={`text-sm text-gray-600 ${className}`}>{children}</p>;
+export {
+  Dialog,
+  DialogTrigger,
+  DialogPortal,
+  DialogClose,
+  DialogBackdrop,
+  DialogBackdrop as DialogOverlay,
+  DialogPopup,
+  DialogPopup as DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
 }
-
-

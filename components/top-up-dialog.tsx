@@ -184,7 +184,11 @@ export default function TopUpDialog({
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>{children}</DialogTrigger>
+            <DialogTrigger>
+                <Button variant="default" className="w-full">
+                    {children}
+                </Button>
+            </DialogTrigger>
             <DialogContent className="rounded-3xl border-black-20 bg-white shadow-lg font-funnel-sans">
                 <DialogHeader className="text-left">
                     {feeModelType === "credit-based" ? (
