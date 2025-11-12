@@ -26,6 +26,7 @@ interface GeneratedProject {
 
 export default function HomeContent() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isNavigatingHome, setIsNavigatingHome] = useState(false);
   const { sessionToken } = useAuthContext();
   const { apiCall } = useApiUtils();
   const chatInterfaceRef = useRef<ChatInterfaceRef>(null);
@@ -160,6 +161,7 @@ export default function HomeContent() {
     }
     resetProjectState();
     if (redirect) {
+      setIsNavigatingHome(true);
       router.push('/', { scroll: false });
     }
     
@@ -175,10 +177,19 @@ export default function HomeContent() {
   }, [resetProjectState, router, selectedProjectId, queryClient]);
 
   useEffect(() => {
-    if (routeProjectId && routeProjectId !== selectedProjectId) {
-      setSelectedProjectId(routeProjectId);
+    if (routeProjectId) {
+      if (!isNavigatingHome && routeProjectId !== selectedProjectId) {
+        setSelectedProjectId(routeProjectId);
+      }
+    } else {
+      if (selectedProjectId) {
+        setSelectedProjectId(null);
+      }
+      if (isNavigatingHome) {
+        setIsNavigatingHome(false);
+      }
     }
-  }, [routeProjectId, selectedProjectId, setSelectedProjectId]);
+  }, [routeProjectId, selectedProjectId, isNavigatingHome, setSelectedProjectId]);
 
   useEffect(() => {
     const promptParam = searchParams?.get('prompt');
