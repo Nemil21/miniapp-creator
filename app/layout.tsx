@@ -83,7 +83,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${funnelDisplay.variable} ${funnellsans.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${funnelDisplay.variable} ${funnellsans.variable} antialiased font-funnel-sans`}
         suppressHydrationWarning
       >
         {/* Mobile Warning */}

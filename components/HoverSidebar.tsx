@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Button } from "./ui/button";
 import { PlusIcon } from "lucide-react";
+import { useProjectStore } from "@/store/useProjectStore";
 
 interface Project {
   id: string;
@@ -40,7 +41,7 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
     const router = useRouter();
     const pathname = usePathname();
     const isDiscoverRoute = pathname === "/discover";
-
+    const { selectedProjectId } = useProjectStore();
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
       openSidebar: () => onToggle(),
@@ -103,7 +104,7 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
                   className="w-full justify-center gap-2"
                 >
                   <PlusIcon className="w-5 h-5" />
-                  <span className="text-sm font-medium text-gray-700">
+                  <span>
                     New Project
                   </span>
                 </Button>
@@ -120,7 +121,7 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
                 </Button>
               </div>
 
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-col items-center gap-1">
                 {isLoading ? (
                   <div className="flex items-center justify-center py-4">
                     <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
@@ -132,7 +133,9 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
                       onClick={() => handleProjectSelect(project)}
                       variant="ghost"
                       title={project.name}
-                      className="w-[calc(100%-24px)] justify-start gap-3 hover:bg-gray-100"
+                      className={`w-full justify-start gap-3 hover:bg-gray-100 ${
+                        project.id === selectedProjectId ? "bg-accent" : ""
+                      }`}
                     >
                       <div className="flex-1 text-left overflow-hidden">
                         <p className="text-sm font-medium text-gray-900 truncate">

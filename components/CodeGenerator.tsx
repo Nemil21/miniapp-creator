@@ -9,6 +9,9 @@ import { useAuthContext } from '@/contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQuery } from '@tanstack/react-query';
 import type { EarnKit } from '@earnkit/earn';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Button } from './ui/button';
+import { Rocket } from 'lucide-react';
 
 interface GeneratedProject {
   projectId: string;
@@ -128,24 +131,30 @@ export function CodeGenerator({ currentProject, isGenerating = false, isProjectL
     <div className="h-full flex-1 w-full flex flex-col bg-gray-50">
       <div className="sticky top-0 left-0 flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
         {/* Left side - View toggle buttons */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            {(['code', 'preview'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 rounded-md transition-colors text-sm font-medium flex items-center gap-2 ${viewMode === mode
-                  ? 'bg-black text-white'
-                  : 'text-gray-600 hover:text-black hover:bg-gray-200'
-                  }`}
-                title={`${mode === 'code' ? 'Code' : 'Preview'} view`}
-              >
-                {getViewModeIcon(mode)}
-                <span className="capitalize">{mode}</span>
-              </button>
-            ))}
-          </div>
-          
+          <div className="flex items-center gap-3">
+            <Tabs
+              value={viewMode}
+              onValueChange={(value) => setViewMode(value as 'code' | 'preview')}
+              className="w-full"
+            >
+              <TabsList className="p-1">
+                <TabsTrigger
+                  value="code"
+                  title="Code view"
+                >
+                  {getViewModeIcon('code')}
+                  <span className="capitalize">code</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="preview"
+                  title="Preview view"
+                >
+                  {getViewModeIcon('preview')}
+                  <span className="capitalize">preview</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
           {/* <div className="flex items-center gap-2">
             <Icons.earnySmallGrayIcon className="w-5 h-5 text-gray-400" />
             <span className="text-lg font-funnel-display text-black font-medium">Miniapp Preview</span>
@@ -170,8 +179,10 @@ export function CodeGenerator({ currentProject, isGenerating = false, isProjectL
               {/* Action Buttons */}
               <div className="flex items-center gap-1 ml-2">
                 {/* Copy Link Button */}
-                <button
+                <Button
                   onClick={handleCopyLink}
+                  variant="ghost"
+                  size="icon"
                   className={`p-1.5 rounded-md transition-colors ${
                     linkCopied 
                       ? 'bg-green-100 text-green-700' 
@@ -180,16 +191,18 @@ export function CodeGenerator({ currentProject, isGenerating = false, isProjectL
                   title="Copy link"
                 >
                   {getCopyIcon()}
-                </button>
+                </Button>
                 
                 {/* Open in New Tab Button */}
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={handleOpenInNewTab}
                   className="p-1.5 rounded-md transition-colors text-gray-600 hover:text-black hover:bg-gray-200"
                   title="Open in new tab"
                 >
                   {getExternalIcon()}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -212,30 +225,28 @@ export function CodeGenerator({ currentProject, isGenerating = false, isProjectL
                 feeModelType={feeModelType}
                 onSuccess={handleTopUpSuccess}
               >
-                <button
+                <Button
+                  variant="outline"
+                  size="icon"
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
                   title="Top Up Credits"
                 >
                   <span>Top Up</span>
-                </button>
+                </Button>
               </TopUpDialog>
             </div>
           )}
           
           {/* Publish Button - Always show */}
-          <button
+          <Button
+            variant="default"
             onClick={() => currentProject ? setShowPublishModal(true) : null}
             disabled={!currentProject}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-              currentProject 
-                ? 'bg-black text-white hover:bg-gray-800' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
             title={currentProject ? "Publish to Farcaster" : "No project loaded"}
           >
-            {getPublishIcon()}
             <span>Publish</span>
-          </button>
+            <Rocket className="w-4 h-4" />
+          </Button>
         </div>
       </div>
       <CodeEditorAndPreview
