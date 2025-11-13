@@ -2,9 +2,8 @@
 import { logger } from "../../lib/logger";
 
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
-import { sdk } from '@farcaster/miniapp-sdk';
 
 interface PublishModalProps {
     isOpen: boolean;
@@ -18,95 +17,67 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [manifestUrl, setManifestUrl] = useState<string | null>(null);
-    const [sdkReady, setSdkReady] = useState(false);
+    const [manifestJson, setManifestJson] = useState('');
     
     // Get authentication from context
     const { sessionToken, isAuthenticated } = useAuthContext();
 
-    // Initialize Farcaster SDK
-    useEffect(() => {
-        const initSdk = async () => {
-            try {
-                logger.log('🔧 Initializing Farcaster SDK...');
-                const context = await sdk.context;
-                
-                // Check if we have a valid context with user info
-                // The context needs to have user data for signing to work
-                if (context && context.user) {
-                    setSdkReady(true);
-                    logger.log('✅ Farcaster SDK initialized with user context:', {
-                        fid: context.user.fid,
-                        username: context.user.username
-                    });
-                } else {
-                    logger.log('⚠️ SDK loaded but no user context - not in Farcaster frame');
-                    setSdkReady(false);
-                }
-            } catch (error) {
-                logger.error('❌ Failed to initialize Farcaster SDK:', error);
-                // SDK might not be available outside of Farcaster frame
-                setSdkReady(false);
-            }
-        };
-        
-        if (isOpen) {
-            initSdk();
-        }
-    }, [isOpen]);
-
-    // Form fields
-    const [formData, setFormData] = useState({
-        name: '',
-        iconUrl: '',
-        description: '',
-        homeUrl: projectUrl || '',
-        splashImageUrl: '',
-        splashBackgroundColor: '#ffffff'
-    });
-
-    // Auto-fill homeUrl when modal opens and projectUrl is available
-    useEffect(() => {
-        if (isOpen && projectUrl) {
-            setFormData(prev => ({
-                ...prev,
-                homeUrl: projectUrl
-            }));
-        }
-    }, [isOpen, projectUrl]);
-
-    // Form validation
-    const validateForm = () => {
-        if (!formData.name.trim()) {
-            setError('App name is required');
-            return false;
-        }
-        if (!formData.iconUrl.trim()) {
-            setError('Icon URL is required');
-            return false;
-        }
-        if (!formData.homeUrl.trim()) {
-            setError('Home URL is required');
-            return false;
-        }
-        // Validate URLs
+    // Validate manifest JSON
+    const validateManifestJson = (jsonString: string): { valid: boolean; manifest?: unknown; error?: string } => {
         try {
-            new URL(formData.iconUrl);
-            new URL(formData.homeUrl);
-            if (formData.splashImageUrl && formData.splashImageUrl.trim()) {
-                new URL(formData.splashImageUrl);
+            const parsed = JSON.parse(jsonString);
+            
+            // Check if it's an object
+            if (!parsed || typeof parsed !== 'object') {
+                return { valid: false, error: 'Manifest must be a valid JSON object' };
             }
+
+            // Check for required fields based on Farcaster manifest structure
+            if (!parsed.frame && !parsed.miniapp) {
+                return { valid: false, error: 'Manifest must contain either "frame" or "miniapp" field' };
+            }
+
+            // Check for accountAssociation (required for Farcaster registry)
+            if (!parsed.accountAssociation) {
+                return { valid: false, error: 'Manifest must contain "accountAssociation" field with your Farcaster signature' };
+            }
+
+            const accountAssociation = parsed.accountAssociation;
+            if (!accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
+                return { valid: false, error: 'Account association must contain header, payload, and signature' };
+            }
+
+            // Validate frame/miniapp required fields
+            const appData = parsed.frame || parsed.miniapp;
+            const requiredFields = ['name', 'version', 'iconUrl', 'homeUrl'];
+            
+            for (const field of requiredFields) {
+                if (!appData[field]) {
+                    return { valid: false, error: `Missing required field: ${field}` };
+                }
+            }
+
+            return { valid: true, manifest: parsed };
         } catch {
-            setError('Please provide valid URLs');
-            return false;
+            return { valid: false, error: 'Invalid JSON format. Please check your manifest syntax.' };
         }
-        return true;
     };
 
-    // Handle direct publish (without Farcaster SDK)
-    const handleSignAndPublish = async () => {
-        logger.log('handleSignAndPublish called with:', { projectId, projectUrl, formData });
+    // Handle publish with user-provided manifest
+    const handlePublish = async () => {
+        logger.log('handlePublish called with:', { projectId, projectUrl });
 
-        if (!validateForm()) return;
+        // Validate manifest JSON
+        if (!manifestJson.trim()) {
+            setError('Please paste your manifest JSON from Farcaster');
+            return;
+        }
+
+        const validation = validateManifestJson(manifestJson);
+        if (!validation.valid) {
+            setError(validation.error || 'Invalid manifest');
+            return;
+        }
 
         if (!projectId) {
             logger.error('❌ Project ID is missing');
@@ -125,113 +96,15 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         setCurrentStep(2); // Move to publishing step
 
         try {
-            logger.log('📦 Step 1: Building manifest object...');
-            
-            // Build base manifest structure
-            const baseManifest = {
-                miniapp: {
-                    version: 'vNext',
-                    name: formData.name,
-                    iconUrl: formData.iconUrl,
-                    homeUrl: formData.homeUrl,
-                    ...(formData.description && { description: formData.description }),
-                    ...(formData.splashImageUrl && {
-                        splashImageUrl: formData.splashImageUrl,
-                        splashBackgroundColor: formData.splashBackgroundColor
-                    })
-                }
-            };
+            logger.log('📤 Sending manifest to API...');
 
-            logger.log('✅ Base manifest built:', JSON.stringify(baseManifest, null, 2));
-
-            // Sign manifest with Farcaster SDK (if available)
-            logger.log('✍️ Step 2: Preparing manifest...');
-            let manifest;
-            
-            if (sdkReady) {
-                // We're in a Farcaster frame - sign with SDK
-                logger.log('📱 Running in Farcaster frame - will sign with SDK');
-                try {
-                    // Extract domain from homeUrl
-                    const homeUrlObj = new URL(formData.homeUrl);
-                    const domain = homeUrlObj.hostname;
-                    logger.log('🌐 Extracted domain:', domain);
-                    
-                    // Use SDK to sign the domain manifest with user's FID
-                    // See: https://miniapps.farcaster.xyz/docs/sdk/actions/sign-manifest
-                    const accountAssociation = await sdk.experimental.signManifest({
-                        domain: domain
-                    });
-                    
-                    logger.log('✅ Manifest signed successfully:', accountAssociation);
-                    
-                    if (!accountAssociation || !accountAssociation.header || !accountAssociation.payload || !accountAssociation.signature) {
-                        throw new Error('Failed to sign manifest. Incomplete signature returned.');
-                    }
-                    
-                    // Combine base manifest with signature
-                    manifest = {
-                        accountAssociation: {
-                            header: accountAssociation.header,
-                            payload: accountAssociation.payload,
-                            signature: accountAssociation.signature
-                        },
-                        ...baseManifest
-                    };
-                    
-                    logger.log('📝 Complete signed manifest:', JSON.stringify(manifest, null, 2));
-                } catch (signError: unknown) {
-                    logger.error('❌ Signing error:', signError);
-                    
-                    // Handle specific error types from the SDK
-                    const errorConstructorName = (signError as { constructor?: { name?: string } })?.constructor?.name;
-                    const errorMessage = (signError as { message?: string })?.message;
-                    
-                    if (errorConstructorName === 'RejectedByUser') {
-                        throw new Error('You declined to sign the manifest. Please try again and approve the signing request.');
-                    } else if (errorConstructorName === 'InvalidDomain') {
-                        throw new Error('Invalid domain format in your app URL. Please check the Home URL.');
-                    } else if (errorConstructorName === 'GenericError') {
-                        throw new Error(`Signing failed: ${errorMessage || 'This could be due to host restrictions or network issues.'}`);
-                    }
-                    
-                    // If SDK signing fails, fall back to unsigned manifest
-                    logger.log('⚠️ SDK signing failed, falling back to unsigned manifest');
-                    manifest = {
-                        accountAssociation: null,
-                        ...baseManifest
-                    };
-                    logger.log('📝 Using unsigned manifest as fallback:', JSON.stringify(manifest, null, 2));
-                }
-            } else {
-                // Not in Farcaster frame - publish without SDK signature
-                logger.log('🌐 Not in Farcaster frame - publishing without SDK signature');
-                logger.log('ℹ️ Note: To sign with your Farcaster account, open this app in Warpcast');
-                
-                // Publish without accountAssociation (server supports this)
-                manifest = {
-                    accountAssociation: null,
-                    ...baseManifest
-                };
-                
-                logger.log('📝 Complete manifest (unsigned):', JSON.stringify(manifest, null, 2));
-            }
-
-            // Send to API for server-side processing
-            logger.log('🌐 Step 3: Checking authentication...');
+            // Check authentication
             if (!isAuthenticated || !sessionToken) {
                 logger.error('❌ Not authenticated');
                 throw new Error('Not authenticated. Please sign in first.');
             }
-            logger.log('✅ Authentication verified');
-            logger.log('Session token available:', !!sessionToken);
 
-            logger.log('📤 Step 4: Sending signed manifest to API...', {
-                endpoint: '/api/publish',
-                projectId,
-                hasManifest: !!manifest,
-                hasSessionToken: !!sessionToken
-            });
+            logger.log('✅ Authentication verified');
 
             const response = await fetch('/api/publish', {
                 method: 'POST',
@@ -241,23 +114,19 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 },
                 body: JSON.stringify({
                     projectId,
-                    manifest
+                    manifest: validation.manifest
                 })
             });
 
             logger.log('API response status:', response.status);
-            logger.log('API response headers:', response.headers);
 
             if (!response.ok) {
-                // Try to get error details from response
                 let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                 try {
                     const errorData = await response.json();
                     errorMessage = errorData.error || errorMessage;
                     logger.error('API error response:', errorData);
-                } catch (parseError) {
-                    // Response might not be JSON
-                    logger.error('Failed to parse error response as JSON:', parseError);
+                } catch {
                     const textError = await response.text();
                     logger.error('API error (non-JSON):', textError);
                     errorMessage = textError || errorMessage;
@@ -282,19 +151,9 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         } catch (err) {
             logger.error('Publish error:', err);
 
-            // Handle specific errors
             let errorMessage = 'Failed to publish. ';
-
             if (err instanceof Error) {
-                if (err.message.includes('not signed in') || err.message.includes('Not authenticated')) {
-                    errorMessage += 'Please sign in to Farcaster first. Visit https://warpcast.com/ to create an account.';
-                } else if (err.message.includes('signManifest')) {
-                    errorMessage += 'SDK signing failed. Make sure you are using a Farcaster-enabled browser or wallet.';
-                } else {
-                    errorMessage += err.message;
-                }
-            } else {
-                errorMessage += 'Please try again or create manifest manually at https://miniapps.farcaster.xyz/';
+                errorMessage += err.message;
             }
 
             setError(errorMessage);
@@ -309,6 +168,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         setCurrentStep(1);
         setError(null);
         setManifestUrl(null);
+        setManifestJson('');
         setIsLoading(false);
         onClose();
     };
@@ -322,11 +182,11 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 <div className="flex items-center justify-between p-6 border-b border-gray-200">
                     <div>
                         <h2 className="text-2xl font-funnel-display font-semibold text-black">
-                            Publish to Farcaster
+                            Publish to Farcaster Registry
                         </h2>
                         <p className="text-gray-600 mt-1">
-                            {currentStep === 1 && 'Enter your app details'}
-                            {currentStep === 2 && 'Signing with Farcaster...'}
+                            {currentStep === 1 && 'Register your app and paste the manifest'}
+                            {currentStep === 2 && 'Publishing your app...'}
                             {currentStep === 3 && 'Your app is published!'}
                         </p>
                     </div>
@@ -366,8 +226,8 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                     </div>
                     <div className="flex items-center justify-center mt-2">
                         <span className="text-xs text-gray-600">
-                            {currentStep === 1 && 'Step 1: Fill Details'}
-                            {currentStep === 2 && 'Step 2: Signing'}
+                            {currentStep === 1 && 'Step 1: Register & Paste Manifest'}
+                            {currentStep === 2 && 'Step 2: Publishing'}
                             {currentStep === 3 && 'Step 3: Complete'}
                         </span>
                     </div>
@@ -375,48 +235,12 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
 
                 {/* Content */}
                 <div className="p-6 overflow-y-auto max-h-[60vh]">
-                    {/* Step 1: Form */}
+                    {/* Step 1: Instructions and Manifest Input */}
                     {currentStep === 1 && (
-                        <>
-                            {/* SDK Status Banner */}
-                            {!sdkReady && (
-                                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-blue-900 mb-1">
-                                                Publishing in Web Mode
-                                            </p>
-                                            <p className="text-sm text-blue-800">
-                                                You&apos;re publishing without Farcaster frame signature. The manifest will still be valid and work on Farcaster. To sign with your Farcaster account, open this app in Warpcast.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            {sdkReady && (
-                                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-green-900 mb-1">
-                                                Farcaster Frame Mode Active
-                                            </p>
-                                            <p className="text-sm text-green-800">
-                                                Your app will be signed with your Farcaster account and associated with your FID.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         <div className="space-y-4">
                             {/* Authentication Warning */}
                             {!isAuthenticated && (
-                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                                     <p className="text-sm text-yellow-800 font-medium">
                                         ⚠️ You need to be signed in to publish. Please authenticate first.
                                     </p>
@@ -424,104 +248,107 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             )}
 
                             {error && (
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                                     <p className="text-sm text-red-800">{error}</p>
                                 </div>
                             )}
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    App Name <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="My Awesome App"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
-                                    required
-                                />
-                            </div>
+                            {/* Instructions Section */}
+                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-6 h-6 text-black mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div className="flex-1">
+                                        <h3 className="text-sm font-semibold text-black mb-2">
+                                            Register Your App on Farcaster
+                                        </h3>
+                                        <p className="text-sm text-black mb-3">
+                                            Before publishing, you need to create and sign a manifest on the: <a href="https://farcaster.xyz/~/developers/mini-apps/manifest" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-700"> Farcaster registry</a>. This associates your app with your Farcaster account.
+                                        </p>
+                                        
+                                        <div className="space-y-2 text-sm text-black mb-3">
+                                            <p className="font-medium">Instructions:</p>
+                                            <ol className="list-decimal list-inside space-y-1 pl-2">
+                                                <li>Click the button below to open the Farcaster manifest creator</li>
+                                                <li>Fill in all required fields for your app:
+                                                    <ul className="list-disc list-inside pl-6 mt-1">
+                                                        <li><strong>name</strong>: Your app&apos;s name</li>
+                                                        <li><strong>iconUrl</strong>: App icon URL (512x512px recommended)</li>
+                                                        <li><strong>homeUrl</strong>: Your app URL (use: <code className="bg-purple-100 px-1 rounded text-xs">{projectUrl || 'your-app-url'}</code>)</li>
+                                                        <li><strong>description</strong>: Brief app description</li>
+                                                        <li><strong>splashImageUrl</strong>: Splash screen image</li>
+                                                        <li><strong>splashBackgroundColor</strong>: Background color (hex)</li>
+                                                        <li><strong>primaryCategory</strong>: App category (e.g., games, social, etc.)</li>
+                                                    </ul>
+                                                </li>
+                                                <li>Sign the manifest with your Farcaster account</li>
+                                                <li>Copy the complete JSON manifest</li>
+                                                <li>Paste it in the text area below</li>
+                                            </ol>
+                                        </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Icon URL <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="url"
-                                    placeholder="https://example.com/icon.png"
-                                    value={formData.iconUrl}
-                                    onChange={(e) => setFormData({ ...formData, iconUrl: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
-                                    required
-                                />
-                                <p className="text-xs text-gray-500 mt-1">Publicly accessible icon image (recommended: 512x512px)</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Home URL <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="url"
-                                    placeholder="https://example.com"
-                                    value={formData.homeUrl}
-                                    onChange={(e) => setFormData({ ...formData, homeUrl: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
-                                    required
-                                />
-                                <p className="text-xs text-gray-500 mt-1">Your app&apos;s main URL</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Description
-                                </label>
-                                <textarea
-                                    placeholder="A brief description of your app"
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    rows={3}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Splash Image URL
-                                </label>
-                                <input
-                                    type="url"
-                                    placeholder="https://example.com/splash.png"
-                                    value={formData.splashImageUrl}
-                                    onChange={(e) => setFormData({ ...formData, splashImageUrl: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">Loading screen image (optional)</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Splash Background Color
-                                </label>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="color"
-                                        value={formData.splashBackgroundColor}
-                                        onChange={(e) => setFormData({ ...formData, splashBackgroundColor: e.target.value })}
-                                        className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={formData.splashBackgroundColor}
-                                        onChange={(e) => setFormData({ ...formData, splashBackgroundColor: e.target.value })}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
-                                        placeholder="#ffffff"
-                                    />
+                                        <a
+                                            href="https://farcaster.xyz/~/developers/mini-apps/manifest"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            </svg>
+                                            Create & Sign Manifest on Farcaster
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Manifest Input */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Paste Your Signed Manifest JSON <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    placeholder='{"frame": {...}, "accountAssociation": {...}}'
+                                    value={manifestJson}
+                                    onChange={(e) => {
+                                        setManifestJson(e.target.value);
+                                        setError(null); // Clear error on input
+                                    }}
+                                    rows={12}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black font-mono text-xs"
+                                    style={{ resize: 'vertical' }}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Paste the complete manifest JSON you copied from the Farcaster registry site
+                                </p>
+                            </div>
+
+                            {/* Your App URL Info */}
+                            {projectUrl && (
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <p className="text-xs text-blue-800">
+                                        <strong>💡 Tip:</strong> Use this URL as your <code className="bg-blue-100 px-1 rounded">homeUrl</code>:
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <code className="flex-1 text-xs text-blue-900 bg-blue-100 p-2 rounded break-all">
+                                            {projectUrl}
+                                        </code>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(projectUrl);
+                                            }}
+                                            className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                                            title="Copy URL"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        </>
                     )}
 
                     {/* Step 2: Publishing */}
@@ -529,13 +356,10 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                         <div className="flex flex-col items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-black mb-4"></div>
                             <h3 className="text-xl font-semibold text-black mb-2">
-                                {sdkReady ? 'Signing & Publishing...' : 'Publishing...'}
+                                Publishing Your App...
                             </h3>
                             <p className="text-gray-600 text-center max-w-md">
-                                {sdkReady 
-                                    ? 'Signing your manifest with your Farcaster account and deploying. This will associate the app with your FID.'
-                                    : 'Publishing your manifest and deploying. Your app will be available on Farcaster shortly.'
-                                }
+                                Deploying your manifest to the app. Your app will be available on Farcaster shortly.
                             </p>
                         </div>
                     )}
@@ -550,7 +374,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             </div>
                             <h3 className="text-2xl font-semibold text-black mb-2">Published Successfully!</h3>
                             <p className="text-gray-600 text-center mb-6">
-                                Your app is now published to Farcaster and discoverable by users.
+                                Your app is now registered on Farcaster and ready to use!
                             </p>
 
                             {manifestUrl && (
@@ -577,15 +401,16 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 </div>
                             )}
 
-                            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 w-full">
-                                <p className="text-sm text-blue-800 mb-3">
-                                    <strong>What&apos;s next?</strong>
+                            <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4 w-full">
+                                <p className="text-sm text-green-800 mb-3">
+                                    <strong>✅ What&apos;s next?</strong>
                                 </p>
-                                <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-                                    <li>Your manifest is now hosted at <code className="bg-blue-100 px-1 rounded">/.well-known/farcaster.json</code></li>
-                                    <li>Share your app URL on Farcaster for users to discover</li>
-                                    <li>Users can add your mini app directly from your website</li>
-                                </ol>
+                                <ul className="text-sm text-green-800 space-y-2 list-disc list-inside">
+                                    <li>Your manifest is now hosted at <code className="bg-green-100 px-1 rounded">/.well-known/farcaster.json</code></li>
+                                    <li>Your app is associated with your Farcaster account</li>
+                                    <li>Users can discover and add your mini app on Farcaster</li>
+                                    <li>Share your app URL to let users try it!</li>
+                                </ul>
                             </div>
                         </div>
                     )}
@@ -602,12 +427,12 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 Cancel
                             </button>
                             <button
-                                onClick={handleSignAndPublish}
-                                disabled={isLoading || !isAuthenticated}
+                                onClick={handlePublish}
+                                disabled={isLoading || !isAuthenticated || !manifestJson.trim()}
                                 className={`px-6 py-2 bg-black text-white rounded-lg font-medium transition-colors ${
-                                    isLoading || !isAuthenticated ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'
+                                    isLoading || !isAuthenticated || !manifestJson.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'
                                 }`}
-                                title={!isAuthenticated ? 'Please sign in first' : 'Publish to Farcaster'}
+                                title={!isAuthenticated ? 'Please sign in first' : !manifestJson.trim() ? 'Please paste your manifest' : 'Publish to Farcaster'}
                             >
                                 {!isAuthenticated ? 'Sign In Required' : 'Publish'}
                             </button>

@@ -19,14 +19,14 @@ const templateOptions: TemplateOption[] = [
   {
     id: "farcaster-miniapp",
     title: "Farcaster Miniapp",
-    description: "Launch a Farcaster miniapp with onchain actions.",
+    description: "Create and Launch an app that runs inside Farcaster.",
     logo: "/farcaster.svg",
     appType: 'farcaster',
   },
   {
     id: "base-webapp",
     title: "Web3 App",
-    description: "Spin up a Base-connected web experience that works great on desktop and mobile.",
+    description: "Create a web app deployed on Base mainnet.",
     logo: "/base-logo.svg",
     appType: 'web3',
   },

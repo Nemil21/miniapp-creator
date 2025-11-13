@@ -29,6 +29,7 @@ interface CodeEditorAndPreviewProps {
     viewMode: 'code' | 'preview';
     selectedAppType?: 'farcaster' | 'web3';
     onSelectTemplate?: (appType: 'farcaster' | 'web3') => void;
+    previewReloadTrigger?: number;
 }
 
 export function CodeEditorAndPreview({
@@ -39,6 +40,7 @@ export function CodeEditorAndPreview({
     viewMode,
     selectedAppType,
     onSelectTemplate,
+    previewReloadTrigger,
 }: CodeEditorAndPreviewProps) {
     const [showLogs, setShowLogs] = useState(false);
 
@@ -85,6 +87,7 @@ export function CodeEditorAndPreview({
                         currentProject={currentProject}
                         selectedAppType={selectedAppType}
                         onSelectTemplate={onSelectTemplate}
+                        reloadTrigger={previewReloadTrigger}
                     />
                 </div>
             </div>

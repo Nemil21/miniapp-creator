@@ -363,12 +363,16 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 action?: string;
                 projectId?: string;
                 walletAddress?: string;
+                appType?: 'farcaster' | 'web3';
             } = {
                 sessionId: chatSessionId,
                 message: userMessage,
                 stream: false,
-                projectId: currentProject?.projectId,
-                walletAddress: walletAddress // Send wallet address for server-side validation
+                // Use chatProjectId (from draft project) if no current project exists
+                // This ensures conversation continuity across messages
+                projectId: currentProject?.projectId || chatProjectId || undefined,
+                walletAddress: walletAddress, // Send wallet address for server-side validation
+                appType: appType // Send app type for context-aware prompts
             };
 
             // Determine the appropriate action based on current phase
@@ -665,10 +669,24 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     });
                     setCurrentPhase('building');
 
-                    // Use the AI's analysis as the final prompt
-                    const finalPrompt = aiResponse;
+                    // Build comprehensive prompt from full conversation history
+                    // This includes all user messages and AI responses leading to this point
+                    const conversationContext = chat
+                        .filter(msg => msg.role === 'user')
+                        .map(msg => msg.content)
+                        .join('\n\n');
+                    
+                    const finalPrompt = `BUILD THIS ${appType === 'farcaster' ? 'FARCASTER MINIAPP' : 'WEB3 APP'}:
 
-                    logger.log('🚀 Triggering project generation with AI analysis:', finalPrompt.substring(0, 200) + '...');
+User Requirements (from conversation):
+${conversationContext}
+
+Project Summary:
+${aiResponse}
+
+Please build this project with all the features and requirements discussed above.`;
+
+                    logger.log('🚀 Triggering project generation with full context:', finalPrompt.substring(0, 300) + '...');
 
                     // Clear any existing timeout before scheduling a new one to prevent duplicates
                     if (generationTimeoutRef.current) {
@@ -679,7 +697,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                     // Store timeout reference for cleanup
                     generationTimeoutRef.current = setTimeout(() => {
                         logger.log('⏰ Timeout fired, calling handleGenerateProject');
-                        handleGenerateProject(aiResponse);
+                        handleGenerateProject(finalPrompt);
                         generationTimeoutRef.current = null; // Clear ref after execution
                     }, 1000);
                     logger.log('⏰ Generation timeout scheduled for 1 second');
@@ -901,8 +919,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
                 // Add generation success message to chat
                 const aiMessage = project.generatedFiles && project.generatedFiles.length > 0
-                    ? `🎉 Your miniapp has been created! I've generated ${project.generatedFiles.length} files and your app is now running. You can preview it on the right and continue chatting with me to make changes.`
-                    : '🎉 Your miniapp has been created! The preview should be available shortly. You can continue chatting with me to make changes.';
+                    ? `Your miniapp has been created! I've generated ${project.generatedFiles.length} files and your app is now running. You can preview it on the right and continue chatting with me to make changes.`
+                    : 'Your miniapp has been created! The preview should be available shortly. You can continue chatting with me to make changes.';
 
                 const successMsg: ChatMessage = {
                     role: 'ai',
@@ -963,8 +981,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
             // Add generation success message to chat
             const aiMessage = project.generatedFiles && project.generatedFiles.length > 0
-                ? `🎉 Your miniapp has been created! I've generated ${project.generatedFiles.length} files and your app is now running. You can preview it on the right and continue chatting with me to make changes.`
-                : '🎉 Your miniapp has been created! The preview should be available shortly. You can continue chatting with me to make changes.';
+                ? `Your miniapp has been created! I've generated ${project.generatedFiles.length} files and your app is now running. You can preview it on the right and continue chatting with me to make changes.`
+                : 'Your miniapp has been created! The preview should be available shortly. You can continue chatting with me to make changes.';
 
             const successMsg: ChatMessage = {
                 role: 'ai',
@@ -1205,7 +1223,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                 height={32}
                                 className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
                             />
-                            <div className="rounded-lg px-1 py-1 max-w-[80%]">
+                            <div className="rounded-lg px-1 py-2 max-w-[80%]">
                                 <div className="flex items-center gap-1">
                                    
                                     <TextShimmer>

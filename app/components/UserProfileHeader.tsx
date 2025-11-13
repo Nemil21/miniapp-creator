@@ -151,7 +151,7 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
         <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setShowDropdown(!showDropdown)}
-          className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
+          className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors max-w-[240px] md:max-w-[200px] lg:max-w-[220px] xl:max-w-[240px]"
         >
           {getUserPfpUrl() ? (
             <Image 
@@ -169,8 +169,8 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
               </span>
             </div>
           )}
-          <div className="flex flex-col text-left">
-            <span className="text-sm font-medium text-black">
+          <div className="hidden xl:flex flex-col text-left min-w-0 flex-1">
+            <span className="text-sm font-medium text-black truncate">
               {getUserDisplay()}
             </span>
             {walletAddress ? (
@@ -202,6 +202,31 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
         {/* Dropdown Menu */}
         {showDropdown && (
           <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50">
+            {/* User Info Section - Only shows on screens below xl (since it's in header on xl+) */}
+            <div className="px-4 py-3 border-b border-gray-100 xl:hidden">
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-gray-900 break-words">
+                  {getUserDisplay()}
+                </span>
+                {walletAddress ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600 font-mono break-all">
+                        {walletAddress}
+                      </span>
+                    </div>
+                    <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded-full font-medium w-fit">
+                      Base Network
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    No wallet connected
+                  </span>
+                )}
+              </div>
+            </div>
+            
             {/* Disconnect Farcaster - Only show if enabled and connected */}
             {hasFarcaster && farcasterEnabled && (
               <button
@@ -234,9 +259,9 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
         {!hasFarcaster && farcasterEnabled && (
           <button
             onClick={handleLinkFarcaster}
-            className="px-4 py-2 bg-transparent border-2 border-[#8A63D2] hover:bg-[#8A63D2]/10 text-[#8A63D2] text-sm font-medium rounded-full transition-colors flex items-center gap-2"
+            className="md:px-3 md:py-1.5 2xl:px-4 2xl:py-2 px-4 py-2 bg-transparent border-2 border-[#6A3CFF] hover:bg-[#8A63D2]/10 text-[#6A3CFF] text-sm font-medium rounded-full transition-colors flex items-center gap-2 whitespace-nowrap"
           >
-            <Image src="/farcaster.svg" alt="Farcaster" width={16} height={16} className="w-4 h-4" />
+            <Image src="/farcaster.svg" alt="Farcaster" width={16} height={16} className="w-4 h-4 md:hidden 2xl:inline-block" />
             Connect Farcaster
           </button>
         )}

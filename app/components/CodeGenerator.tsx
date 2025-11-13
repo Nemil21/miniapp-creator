@@ -39,6 +39,7 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('preview');
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [previewReloadTrigger, setPreviewReloadTrigger] = useState(0);
 
   // For balance display
   const { ready: privyReady, authenticated } = usePrivy();
@@ -86,11 +87,6 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
     }
   };
 
-  const getPublishIcon = () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-    </svg>
-  );
 
   const getLinkIcon = () => (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,6 +145,19 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
               </button>
             ))}
           </div>
+          
+          {/* Reload Preview Button - Only show when in preview mode and project exists */}
+          {viewMode === 'preview' && currentProject && (
+            <button
+              onClick={() => setPreviewReloadTrigger(prev => prev + 1)}
+              className="p-2 rounded-md transition-colors text-gray-600 hover:text-black hover:bg-gray-100"
+              title="Reload preview"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
           
           {/* <div className="flex items-center gap-2">
             <Icons.earnySmallGrayIcon className="w-5 h-5 text-gray-400" />
@@ -236,7 +245,9 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
               className="px-4 py-2 bg-black text-white hover:bg-gray-800 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
               title="Publish to Farcaster"
             >
-              {getPublishIcon()}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+              </svg>
               <span>Publish</span>
             </button>
           )}
@@ -249,6 +260,7 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
         viewMode={viewMode}
         selectedAppType={selectedAppType}
         onSelectTemplate={onSelectTemplate}
+        previewReloadTrigger={previewReloadTrigger}
         onFileChange={(filePath, content) => {
           logger.log('File changed:', filePath, content.substring(0, 100));
         }}

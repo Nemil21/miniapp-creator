@@ -76,10 +76,16 @@ async function saveMessageToDBAndCache(
   }
 }
 
-const REQUIREMENTS_GATHERING_PROMPT = `You are an expert Farcaster Miniapp developer and requirements analyst.
+function getRequirementsGatheringPrompt(appType: 'farcaster' | 'web3') {
+  const appTypeLabel = appType === 'farcaster' ? 'Farcaster Miniapp' : 'Web3 Web App';
+  const appTypeDescription = appType === 'farcaster' 
+    ? 'a minimal Farcaster miniapp'
+    : 'a minimal Web3 web app';
+  
+  return `You are an expert ${appTypeLabel} developer and requirements analyst.
 
-GOAL: Understand user requirements quickly and propose a complete minimal solution with minimal questions. Make sure to have only minimal features and functionality as we are building a minimal Farcaster miniapp.
-IMPORTANT: Respond ONLY in natural, conversational language. Do NOT mention technical programming details, file names, or code structure. The user doesn't understand programming, so keep everything in plain English.
+GOAL: Understand user requirements quickly and propose a complete minimal solution with minimal questions. Make sure to have only minimal features and functionality as we are building ${appTypeDescription}.
+IMPORTANT: Respond ONLY in natural, conversational language. DO NOT mention technical programming details, file names, or code structure. The user doesn't understand programming, so keep everything in plain English.
 
 CRITICAL: When the user confirms your proposal (says "yes", "proceed", "continue", "build", etc.), immediately move to the confirmation phase. Do NOT ask more questions or repeat the proposal.
 
@@ -99,7 +105,7 @@ Guidelines:
 - **Recognize confirmation**: When user says yes/proceed/continue, move to building phase
 
 Example approach:
-- User: "Create a miniapp for airdrop erc20 tokens"
+- User: "Create ${appType === 'farcaster' ? 'a miniapp' : 'an app'} for airdrop erc20 tokens"
 - You: "I understand you want to create a platform where people can give away tokens to others. Here's what I propose:
   1. **For Token Givers**: Users can select which tokens they want to give away, set how much to give, and choose who gets them
   2. **For Token Receivers**: Users can see available token giveaways and claim their share
@@ -107,15 +113,20 @@ Example approach:
   Does this match what you have in mind, or would you prefer a different approach?"
 
 Current conversation: {conversationHistory}`;
+}
 
-const CONFIRMATION_PROMPT = `You are finalizing requirements for a Farcaster Miniapp. The user has confirmed they want to proceed with building.
+function getConfirmationPrompt(appType: 'farcaster' | 'web3') {
+  const appTypeLabel = appType === 'farcaster' ? 'Farcaster Miniapp' : 'Web3 Web App';
+  const appTypeWord = appType === 'farcaster' ? 'miniapp' : 'app';
+  
+  return `You are finalizing requirements for a ${appTypeLabel}. The user has confirmed they want to proceed with building.
 
-IMPORTANT: Write ONLY in natural, conversational language. Do NOT mention technical programming details, file names, code structure, or technical implementation details. The user doesn't understand programming, so describe everything in plain English.
+IMPORTANT: Write ONLY in natural, conversational language. DO NOT mention technical programming details, file names, code structure, or technical implementation details. The user doesn't understand programming, so describe everything in plain English.
 
 Based on the conversation, provide a final summary and then PROCEED TO BUILD:
 
 ## 🎯 Final Project Summary
-- **What We're Building**: Simple description of what the miniapp does for users
+- **What We're Building**: Simple description of what the ${appTypeWord} does for users
 - **Who Will Use It**: Clear description of the target audience  
 - **What Problem It Solves**: The main benefit users will get
 
@@ -131,7 +142,8 @@ Based on the conversation, provide a final summary and then PROCEED TO BUILD:
 
 Requirements gathered: {requirements}
 
-After providing this summary, end with: "Perfect! I'll now proceed to build your miniapp. This will take a moment while I create all the necessary files and set up the project structure. You'll see the preview appear shortly."`;
+After providing this summary, end with: "Perfect! I'll now proceed to build your ${appTypeWord}. This will take a moment while I create all the necessary files and set up the project structure. You'll see the preview appear shortly."`;
+}
 
 async function callClaude(
   systemPrompt: string,
@@ -176,7 +188,7 @@ async function callClaude(
 
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId, message, action, stream = false, projectId, walletAddress } = await request.json();
+    const { sessionId, message, action, stream = false, projectId, walletAddress, appType = 'farcaster' } = await request.json();
 
     if (!sessionId || !message) {
       return NextResponse.json(
@@ -262,8 +274,39 @@ export async function POST(request: NextRequest) {
     
     // If no projectId provided, we need to create one for this chat session
     if (!currentProjectId) {
-      // Check if this session already has a project mapped
+      // Check if this session already has a project mapped (in-memory)
       currentProjectId = sessionToProjectMap.get(sessionId);
+      
+      // If not in memory, check database for existing draft projects from this user
+      if (!currentProjectId) {
+        try {
+          const { getProjectsByUserId } = await import('../../../lib/database');
+          const userProjects = await getProjectsByUserId(user.id);
+          
+          // Look for recent draft project (created in last 24 hours, no deployment URL)
+          const recentDraft = userProjects.find((p: { 
+            vercelUrl: string | null; 
+            previewUrl: string | null; 
+            createdAt: Date | string;
+            name: string;
+          }) => {
+            if (p.vercelUrl || p.previewUrl) return false; // Skip deployed projects
+            const projectAge = Date.now() - new Date(p.createdAt).getTime();
+            const isRecent = projectAge < 24 * 60 * 60 * 1000; // Within 24 hours
+            const isDraft = p.name.startsWith('Chat Project');
+            logger.log(`Checking project: ${p.name}, age: ${projectAge}ms, isRecent: ${isRecent}, isDraft: ${isDraft}`);
+            return isRecent && isDraft;
+          });
+          
+          if (recentDraft) {
+            currentProjectId = recentDraft.id;
+            sessionToProjectMap.set(sessionId, currentProjectId);
+            logger.log(`📎 Resuming existing draft project ${currentProjectId} for session ${sessionId}`);
+          }
+        } catch (error) {
+          logger.warn("Failed to check for existing draft projects:", error);
+        }
+      }
       
       // If still no project, create one
       if (!currentProjectId) {
@@ -274,11 +317,11 @@ export async function POST(request: NextRequest) {
             "Chat conversation project",
             undefined,
             undefined,
-            'farcaster' // Default to farcaster for chat projects (will be updated when project is actually generated)
+            appType // Use the user's selected app type (defaults to 'farcaster' from line 191)
           );
           currentProjectId = draftProject.id;
           sessionToProjectMap.set(sessionId, currentProjectId);
-          logger.log(`Created project ${currentProjectId} for session ${sessionId}`);
+          logger.log(`🆕 Created new project ${currentProjectId} for session ${sessionId} with appType: ${appType}`);
         } catch (error) {
           logger.warn("Failed to create project:", error);
           return NextResponse.json(
@@ -287,6 +330,8 @@ export async function POST(request: NextRequest) {
           );
         }
       }
+    } else {
+      logger.log(`📌 Using provided projectId: ${currentProjectId}`);
     }
 
     // Get or create chat session (using projectId as key for proper mapping)
@@ -302,6 +347,17 @@ export async function POST(request: NextRequest) {
       };
       chatSessions.set(currentProjectId, session);
       logger.log(`Loaded ${existingMessages.length} messages from DB for project ${currentProjectId}`);
+    }
+
+    // Sync project's appType with user's selection if it differs
+    // This ensures the project uses the correct boilerplate when generated
+    try {
+      const { updateProject } = await import('../../../lib/database');
+      await updateProject(currentProjectId, { appType });
+      logger.log(`✅ Project ${currentProjectId} appType synced to: ${appType}`);
+    } catch (error) {
+      logger.warn(`⚠️ Failed to sync project appType:`, error);
+      // Non-critical error - continue with chat flow
     }
 
     // Save user message to database and update cache
@@ -320,8 +376,8 @@ export async function POST(request: NextRequest) {
 
       const systemPrompt =
         action === "confirm_project"
-          ? CONFIRMATION_PROMPT.replace("{requirements}", conversationHistory)
-          : REQUIREMENTS_GATHERING_PROMPT.replace(
+          ? getConfirmationPrompt(appType).replace("{requirements}", conversationHistory)
+          : getRequirementsGatheringPrompt(appType).replace(
               "{conversationHistory}",
               conversationHistory
             );
@@ -351,13 +407,24 @@ export async function POST(request: NextRequest) {
         message.toLowerCase().includes("go ahead") ||
         message.toLowerCase().includes("sounds good") ||
         message.toLowerCase().includes("perfect") ||
-        message.toLowerCase().includes("that works");
+        message.toLowerCase().includes("that works") ||
+        message.toLowerCase().includes("interested") ||
+        message.toLowerCase().includes("forward") ||
+        message.toLowerCase().includes("let's do it") ||
+        message.toLowerCase().includes("lets do it") ||
+        message.toLowerCase().includes("make it") ||
+        message.toLowerCase().includes("create it") ||
+        message.toLowerCase().includes("start") ||
+        message.toLowerCase().includes("okay") ||
+        message.toLowerCase().includes("sure") ||
+        message.toLowerCase().includes("confirmed") ||
+        message.toLowerCase().includes("agree");
 
       if (action === "confirm_project" || userConfirmed) {
         const requirements = session.messages
           .map((m) => `${m.role}: ${m.content}`)
           .join("\n");
-        const systemPrompt = CONFIRMATION_PROMPT.replace(
+        const systemPrompt = getConfirmationPrompt(appType).replace(
           "{requirements}",
           requirements
         );
@@ -367,7 +434,7 @@ export async function POST(request: NextRequest) {
         const conversationHistory = session.messages
           .map((m) => `${m.role}: ${m.content}`)
           .join("\n");
-        const systemPrompt = REQUIREMENTS_GATHERING_PROMPT.replace(
+        const systemPrompt = getRequirementsGatheringPrompt(appType).replace(
           "{conversationHistory}",
           conversationHistory
         );

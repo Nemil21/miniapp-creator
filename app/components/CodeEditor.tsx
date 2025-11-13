@@ -658,7 +658,7 @@ export function CodeEditor({ currentProject, onFileChange }: CodeEditorProps) {
                                     disabled={isDeploying}
                                     className="text-xs px-3 py-1.5 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
-                                    {isDeploying ? 'Deploying...' : '🚀 Save & Redeploy'}
+                                    {isDeploying ? 'Deploying...' : 'Save & Redeploy'}
                                 </button>
                             </div>
                         )}
