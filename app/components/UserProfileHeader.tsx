@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useAuthContext } from '../contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import WalletButton from './WalletButton';
 
 interface UserProfileHeaderProps {
   onOpenSidebar?: () => void;
@@ -172,7 +173,7 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
             <span className="text-sm font-medium text-black">
               {getUserDisplay()}
             </span>
-            {walletAddress && (
+            {walletAddress ? (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-black-60 font-mono">
                   {formatAddress(walletAddress)}
@@ -181,6 +182,10 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
                   Base
                 </span>
               </div>
+            ) : (
+              <span className="text-xs text-gray-400">
+                No wallet connected
+              </span>
             )}
           </div>
           {/* Dropdown Arrow */}
@@ -223,16 +228,19 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
         </div>
       </div>
 
-      {/* Connect Farcaster Button - Only show if enabled and not connected */}
-      {!hasFarcaster && farcasterEnabled && (
-        <button
-          onClick={handleLinkFarcaster}
+      <div className="flex items-center gap-3">
+
+        {/* Connect Farcaster Button - Only show if enabled and not connected */}
+        {!hasFarcaster && farcasterEnabled && (
+          <button
+            onClick={handleLinkFarcaster}
             className="px-4 py-2 bg-transparent border-2 border-[#8A63D2] hover:bg-[#8A63D2]/10 text-[#8A63D2] text-sm font-medium rounded-full transition-colors flex items-center gap-2"
-        >
-          <Image src="/farcaster.svg" alt="Farcaster" width={16} height={16} className="w-4 h-4" />
-          Connect Farcaster
-        </button>
-      )}
+          >
+            <Image src="/farcaster.svg" alt="Farcaster" width={16} height={16} className="w-4 h-4" />
+            Connect Farcaster
+          </button>
+        )}
+      </div>
     </div>
   );
 }

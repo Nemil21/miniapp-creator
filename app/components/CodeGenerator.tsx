@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { CodeEditorAndPreview } from './CodeEditorAndPreview';
 import { PublishModal } from './PublishModal';
 import TopUpDialog from './top-up-dialog';
+import WalletButton from './WalletButton';
 import { useAuthContext } from '../contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQuery } from '@tanstack/react-query';
@@ -200,28 +201,31 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
           {/* Balance & Top Up - Show when credit system is available */}
           {activeAgent && feeModelType && (
             <div className="flex items-center gap-3">
-              {/* Balance Display */}
-              <div className="text-sm text-gray-600">
-                {walletAddress ? (
-                  <span>Balance: {balance ? `${balance.credits} Credits` : '0 Credits'}</span>
-                ) : (
-                  <span>Balance: Not connected</span>
-                )}
-              </div>
-              
-              {/* Top Up Button */}
-              <TopUpDialog
-                activeAgent={activeAgent}
-                feeModelType={feeModelType}
-                onSuccess={handleTopUpSuccess}
-              >
-                <button
-                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
-                  title="Top Up Credits"
-                >
-                  <span>Top Up</span>
-                </button>
-              </TopUpDialog>
+              {walletAddress ? (
+                <>
+                  {/* Balance Display */}
+                  <div className="text-sm text-gray-600">
+                    <span>Balance: {balance ? `${balance.credits} Credits` : '0 Credits'}</span>
+                  </div>
+                  
+                  {/* Top Up Button */}
+                  <TopUpDialog
+                    activeAgent={activeAgent}
+                    feeModelType={feeModelType}
+                    onSuccess={handleTopUpSuccess}
+                  >
+                    <button
+                      className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      title="Top Up Credits"
+                    >
+                      <span>Top Up</span>
+                    </button>
+                  </TopUpDialog>
+                </>
+              ) : (
+                /* Connect Wallet Button - Show when no wallet is connected */
+                <WalletButton />
+              )}
             </div>
           )}
           

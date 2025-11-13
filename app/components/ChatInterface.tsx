@@ -81,8 +81,10 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     const credsOff = process.env.NEXT_PUBLIC_CREDS_OFF === 'true';
     
     // Check if user has enough credits (need 1 credit per message)
-    const hasEnoughCredits = balance ? parseInt(balance.credits) >= 1 : true; // Default to true if no activeAgent
-    const shouldBlockChat = !credsOff && !!(activeAgent && walletAddress && !hasEnoughCredits);
+    const hasEnoughCredits = balance ? parseInt(balance.credits) >= 1 : false; // Default to false if no balance data
+    
+    // Block chat if credits are enabled AND (no wallet OR insufficient credits)
+    const shouldBlockChat = !credsOff && activeAgent && (!walletAddress || !hasEnoughCredits);
 
     // Timeout ref for cleanup to prevent duplicate calls
     const generationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -297,9 +299,13 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     const handleSendMessage = async (userMessage: string) => {
         if (!chatSessionId || !sessionToken) return;
         
-        // Check credits BEFORE starting any UI updates
+        // Check wallet and credits BEFORE starting any UI updates
         if (shouldBlockChat) {
-            toast.error('Insufficient credits. Please top up your balance to continue chatting.');
+            if (!walletAddress) {
+                toast.error('Please connect a wallet to start chatting.');
+            } else {
+                toast.error('Insufficient credits. Please top up your balance to continue chatting.');
+            }
             return;
         }
         
@@ -344,7 +350,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
         // Credit tracking - handled entirely server-side to prevent double charging
         // Previously, both client and server were tracking credits, causing double charges
-        const walletAddress = wallets[0]?.address;
+        // walletAddress is already declared at component level (line 66)
 
         try {
             // Credit validation and tracking is now done server-side only in /api/chat
@@ -1215,7 +1221,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
             {/* Chat Input - Fixed at bottom */}
             <div className="flex-shrink-0 pb-4 px-[20px] bg-gray-100">
-                {/* Insufficient Credits Warning */}
+                {/* Wallet/Credits Warning */}
                 {shouldBlockChat && (
                     <div className="mb-3">
                         <div className="bg-red-50 border border-red-200 rounded-full px-4 py-2.5 text-sm">
@@ -1226,7 +1232,11 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                     </svg>
                                 </div>
                                 <div className="text-red-700">
-                                    <p className="font-normal text-xs">Insufficient credits. Please top up to continue chatting (1 credit per message).</p>
+                                    <p className="font-normal text-xs">
+                                        {!walletAddress 
+                                            ? 'Please connect a wallet to start chatting.' 
+                                            : 'Insufficient credits. Please top up to continue chatting (1 credit per message).'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -1263,7 +1273,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         ref={textareaRef}
                         value={prompt}
                         onChange={handleInputChange}
-                        placeholder={shouldBlockChat ? "Insufficient credits - Please top up" : "Ask Minidev"}
+                        placeholder={shouldBlockChat ? (!walletAddress ? "Connect wallet to chat" : "Insufficient credits - Please top up") : "Ask Minidev"}
                         className="w-full max-w-full max-h-[100px] overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={aiLoading || isGenerating || shouldBlockChat}
                         rows={1}
@@ -1280,7 +1290,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         type="submit"
                         className="p-2 bg-black-80 rounded-full disabled:opacity-50 ml-auto disabled:cursor-not-allowed"
                         disabled={aiLoading || isGenerating || !prompt.trim() || shouldBlockChat}
-                        title={shouldBlockChat ? "Insufficient credits - Please top up" : "Send message"}
+                        title={shouldBlockChat ? (!walletAddress ? "Connect wallet first" : "Insufficient credits - Please top up") : "Send message"}
                     >
                         {aiLoading ? (
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
