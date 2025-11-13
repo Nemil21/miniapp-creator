@@ -120,9 +120,10 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // Track selected template for pfp display
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(() => {
       if (typeof window !== "undefined") {
-        return localStorage.getItem("minidev_selected_template");
+        const stored = localStorage.getItem("minidev_selected_template");
+        return stored || "farcaster-miniapp"; // Default to farcaster-miniapp
       }
-      return null;
+      return "farcaster-miniapp"; // Default to farcaster-miniapp
     });
 
     // Listen for template changes
@@ -130,7 +131,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
       const handleStorageChange = () => {
         if (typeof window !== "undefined") {
           const template = localStorage.getItem("minidev_selected_template");
-          setSelectedTemplate(template);
+          setSelectedTemplate(template || "farcaster-miniapp"); // Default to farcaster-miniapp
         }
       };
       
@@ -141,8 +142,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
       const interval = setInterval(() => {
         if (typeof window !== "undefined") {
           const template = localStorage.getItem("minidev_selected_template");
-          if (template !== selectedTemplate) {
-            setSelectedTemplate(template);
+          const templateToUse = template || "farcaster-miniapp"; // Default to farcaster-miniapp
+          if (templateToUse !== selectedTemplate) {
+            setSelectedTemplate(templateToUse);
           }
         }
       }, 100);
@@ -170,6 +172,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
       }
       return "/minidevpfp.png"; // Default
     };
+
+    // Static placeholder - never changes based on template
+    const TEXTAREA_PLACEHOLDER = "Ask Minidev";
 
     // Function to scroll to bottom of chat
     const scrollToBottom = () => {
@@ -274,22 +279,45 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
           setCurrentPhase("requirements");
         }
 
-        // Add welcome message when no project or no messages
+        // Get welcome message based on selected template
+        const getWelcomeMessage = () => {
+          if (selectedTemplate === "farcaster-miniapp") {
+            return `Minidev is your on-chain sidekick that transforms ideas into fully functional Farcaster Mini Apps — no coding required.`;
+          } else if (selectedTemplate === "base-webapp") {
+            return `Minidev is your on-chain sidekick that transforms ideas into fully functional Web3 Web Apps — no coding required.`;
+          }
+          return `Minidev is your on-chain sidekick that transforms ideas into fully functional Farcaster Mini Apps — no coding required.`; // Default
+        };
+
+        // Add or update welcome message when no project or no messages
         if (chat.length === 0 && !aiLoading) {
           setChat([
             {
               role: "ai",
-              content: `Minidev is your on-chain sidekick that transforms ideas into fully functional Farcaster Mini Apps — no coding required.`,
+              content: getWelcomeMessage(),
               phase: "requirements",
               timestamp: Date.now(),
             },
           ]);
+        } else if (chat.length === 1 && chat[0].role === "ai" && !aiLoading && !currentProject) {
+          // Update welcome message if it's the only message and template changed
+          const currentWelcomeMessage = getWelcomeMessage();
+          if (chat[0].content !== currentWelcomeMessage) {
+            setChat([
+              {
+                role: "ai",
+                content: currentWelcomeMessage,
+                phase: "requirements",
+                timestamp: Date.now(),
+              },
+            ]);
+          }
         }
       };
 
       loadChatMessages();
       // REMOVED currentPhase from dependencies to prevent reset loop during generation
-    }, [currentProject, sessionToken, chat.length, aiLoading, currentPhase]);
+    }, [currentProject, sessionToken, chat.length, aiLoading, currentPhase, selectedTemplate]);
 
     // Show warning message once when user hasn't started chatting
     useEffect(() => {
@@ -1440,7 +1468,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                   ? "Insufficient credits - Please top up"
                   : "Ask Minidev"
               }
-              className="w-full max-w-full max-h-[100px] overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full max-w-full max-h-[100px] text-sm overflow-y-auto resize-none p-2 bg-transparent rounded-lg border-none focus:outline-none focus:border-none font-funnel-sans text-black-80 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={aiLoading || isGenerating || shouldBlockChat}
               rows={1}
               onKeyDown={(e) => {

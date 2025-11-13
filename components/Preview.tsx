@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Icons } from "./sections/icons";
+import { CheckIcon, ChevronRightIcon } from "lucide-react";
 
 interface GeneratedProject {
   projectId: string;
@@ -27,7 +28,14 @@ export function Preview({ currentProject }: PreviewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null
+    () => {
+      // Default to "farcaster-miniapp" if no template is stored
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("minidev_selected_template");
+        return stored || "farcaster-miniapp";
+      }
+      return "farcaster-miniapp";
+    }
   );
 
   // Force iframe refresh when project is updated (after edits)
@@ -50,6 +58,18 @@ export function Preview({ currentProject }: PreviewProps) {
       if (typeof window !== "undefined") {
         localStorage.removeItem("minidev_selected_template");
       }
+    } else {
+      // When no project, ensure default template is set
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("minidev_selected_template");
+        if (!stored) {
+          localStorage.setItem("minidev_selected_template", "farcaster-miniapp");
+          setSelectedTemplateId("farcaster-miniapp");
+        } else {
+          // Sync state with localStorage
+          setSelectedTemplateId(stored);
+        }
+      }
     }
   }, [currentProject]);
 
@@ -58,8 +78,7 @@ export function Preview({ currentProject }: PreviewProps) {
       {
         id: "farcaster-miniapp",
         title: "Farcaster Miniapp",
-        description:
-          "Launch a Farcaster miniapp with onchain actions.",
+        description: "Launch a Farcaster miniapp with onchain actions.",
         logo: "/farcaster.svg",
         prompt:
           "Help me build a Farcaster miniapp. I want a Farcaster miniapp with onchain actions.",
@@ -94,7 +113,7 @@ export function Preview({ currentProject }: PreviewProps) {
               Choose Your Build
             </h3>
             <p className="mt-2 text-sm text-black-60 text-center">
-            Select a app template to start building your web3 app.
+              Select a app template to start building your web3 app.
             </p>
             <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {templateOptions.map((template) => (
@@ -105,11 +124,14 @@ export function Preview({ currentProject }: PreviewProps) {
                     setSelectedTemplateId(template.id);
                     // Store template ID in localStorage for ChatInterface to use
                     if (typeof window !== "undefined") {
-                      localStorage.setItem("minidev_selected_template", template.id);
+                      localStorage.setItem(
+                        "minidev_selected_template",
+                        template.id
+                      );
                     }
                     handleTemplateSelect(template.prompt);
                   }}
-                  className={`group flex flex-col h-full rounded-2xl border p-5 text-left shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${
+                  className={`group flex flex-col h-full rounded-2xl border p-5 text-left shadow-sm transition-all focus:outline-none ring-0 focus:ring-2 focus:ring-black/30 ${
                     selectedTemplateId === template.id
                       ? "border-black bg-black text-white shadow-lg"
                       : "border-gray-200 bg-white"
@@ -130,7 +152,10 @@ export function Preview({ currentProject }: PreviewProps) {
                           width={32}
                           height={32}
                           className={`h-8 w-8 ${
-                            selectedTemplateId === template.id && template.title === "Web3 App" ? "brightness-0 invert" : ""
+                            selectedTemplateId === template.id &&
+                            template.title === "Web3 App"
+                              ? "brightness-0 invert"
+                              : ""
                           }`}
                         />
                       </div>
@@ -146,23 +171,11 @@ export function Preview({ currentProject }: PreviewProps) {
                         </h4>
                       </div>
                     </div>
-                    <svg
-                      className={`h-5 w-5 transition-colors ${
-                        selectedTemplateId === template.id
-                          ? "text-white"
-                          : "text-gray-300 group-hover:text-black"
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
+                    {selectedTemplateId === template.id ? (
+                      <CheckIcon className="h-5 w-5 text-white" />
+                    ) : (
+                      <ChevronRightIcon className="h-5 w-5 text-black" />
+                    )}
                   </div>
                   <p
                     className={`mt-4 flex-1 text-sm ${
