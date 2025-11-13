@@ -780,10 +780,25 @@ async function executeInitialGenerationJob(
       logger.log("=".repeat(70) + "\n");
 
       try {
+        // Filter out hardhat.config files to use boilerplate's configuration
+        // The boilerplate's hardhat.config.js has proper Base network configuration
+        const contractFiles = generatedFiles.filter(file => {
+          const isHardhatConfig = file.filename === 'hardhat.config.js' || 
+                                  file.filename === 'hardhat.config.ts' ||
+                                  file.filename === 'contracts/hardhat.config.js' ||
+                                  file.filename === 'contracts/hardhat.config.ts';
+          if (isHardhatConfig) {
+            logger.log(`🛡️ Filtering out ${file.filename} to use boilerplate's hardhat config`);
+          }
+          return !isHardhatConfig;
+        });
+        
+        logger.log(`📤 Deploying contracts with ${contractFiles.length} files (filtered out hardhat configs)`);
+        
         // Deploy contracts and get real addresses
         contractAddresses = await deployContractsFirst(
           projectId,
-          generatedFiles,
+          contractFiles,
           accessToken
         );
 

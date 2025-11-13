@@ -245,9 +245,6 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
               className="px-4 py-2 bg-black text-white hover:bg-gray-800 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
               title="Publish to Farcaster"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-              </svg>
               <span>Publish</span>
             </button>
           )}
