@@ -2,6 +2,7 @@ import { logger } from "../../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { createPreview } from "@/lib/previewManager";
+import { getProjectById } from "@/lib/database";
 import fs from "fs-extra";
 import path from "path";
 
@@ -95,16 +96,22 @@ export async function POST(
         await readDir(projectDir, projectDir);
         logger.log(`📦 Read ${files.length} files for redeployment`);
 
+        // Get project's app type from database
+        const project = await getProjectById(projectId);
+        const appType = (project?.appType as 'farcaster' | 'web3') || 'farcaster';
+        logger.log(`🎯 Project app type: ${appType}`);
+
         // Use PREVIEW_AUTH_TOKEN to authenticate with orchestrator
         // NOT the user's session token
         const previewAuthToken = process.env.PREVIEW_AUTH_TOKEN || '';
 
-        // Trigger deployment
+        // Trigger deployment with correct boilerplate based on project's app type
         const previewData = await createPreview(
           projectId,
           files,
           previewAuthToken,
-          true, // isWeb3
+          appType, // Which boilerplate to use
+          undefined, // isWeb3 - not deploying contracts
           true  // skipContracts - already deployed
         );
 

@@ -834,12 +834,22 @@ async function executeInitialGenerationJob(
         // Skip contract deployment in /deploy endpoint if we already deployed them
         const skipContractsInDeploy = !!contractAddresses; // true if we already deployed contracts
         logger.log(`🔍 [RETRY-DEBUG] skipContractsInDeploy: ${skipContractsInDeploy}`);
+        
+        // CRITICAL LOGGING: Track appType and isWeb3 before deployment
+        logger.log(`\n${'='.repeat(70)}`);
+        logger.log(`🎯 DEPLOYMENT PARAMETERS`);
+        logger.log(`${'='.repeat(70)}`);
+        logger.log(`📦 appType (user-selected boilerplate): "${appType}"`);
+        logger.log(`🔗 isWeb3 (LLM-detected contracts): ${enhancedResult.intentSpec?.isWeb3}`);
+        logger.log(`⏭️  skipContractsInDeploy: ${skipContractsInDeploy}`);
+        logger.log(`${'='.repeat(70)}\n`);
 
         previewData = await createPreview(
           projectId,
           generatedFiles, // Already contains real addresses if Web3
           accessToken,
-          enhancedResult.intentSpec?.isWeb3, // Pass isWeb3 flag to preview API
+          appType, // Use user-selected app type for boilerplate selection
+          enhancedResult.intentSpec?.isWeb3, // Whether to deploy contracts (LLM's analysis)
           skipContractsInDeploy, // Skip contracts if we already deployed them
           jobId // Pass jobId for background deployment error reporting
         );
@@ -1008,9 +1018,10 @@ async function executeInitialGenerationJob(
         projectName,
         `AI-generated project: ${userRequest.substring(0, 100)}...`,
         projectUrl,
-        projectId
+        projectId,
+        appType // Pass appType from the generation job
       );
-      logger.log("✅ Project created in database");
+      logger.log(`✅ Project created in database with appType: ${appType}`);
     } else {
       logger.log("ℹ️ Project already exists in database, updating files");
     }
@@ -1127,6 +1138,7 @@ async function executeInitialGenerationJob(
       vercelUrl: previewData?.vercelUrl,
       projectName,
       contractAddresses: contractAddresses, // Include contract addresses in result
+      appType, // Include appType so UI knows which boilerplate was used
     };
 
     logger.log(`📝 Updating job ${jobId} status to completed with result:`, {
@@ -1296,7 +1308,7 @@ async function executeFollowUpJob(
   const hasContracts = result.files.some(f => 
     f.filename.startsWith('contracts/') && f.filename.endsWith('.sol')
   );
-  const isWeb3 = hasContracts;
+  const isWeb3 = hasContracts; // Whether contracts exist (for potential deployment)
 
   // Redeploy to Vercel with updated files
   try {
@@ -1308,7 +1320,8 @@ async function executeFollowUpJob(
       projectId,
       result.files,
       accessToken,
-      isWeb3,
+      appType, // Use original project's app type for boilerplate
+      isWeb3, // Whether contracts exist (not deploying them though - skipContracts=true)
       jobId
     );
     
@@ -1372,6 +1385,7 @@ async function executeFollowUpJob(
     generatedFiles: changedFilenames, // Add this for frontend compatibility
     previewUrl: getPreviewUrl(projectId),
     totalFiles: result.files.length,
+    appType, // Include appType for consistency
   };
 
   logger.log(`📝 Updating follow-up job ${jobId} status to completed`);

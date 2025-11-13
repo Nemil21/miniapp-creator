@@ -51,7 +51,8 @@ export async function createProject(
   name: string,
   description?: string,
   previewUrl?: string,
-  customId?: string
+  customId?: string,
+  appType: 'farcaster' | 'web3' = 'farcaster'
 ) {
   const [project] = await db.insert(projects).values({
     id: customId, // Use custom ID if provided, otherwise let database generate one
@@ -59,6 +60,7 @@ export async function createProject(
     name,
     description,
     previewUrl,
+    appType,
   }).returning();
   return project;
 }

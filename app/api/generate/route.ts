@@ -957,7 +957,8 @@ export async function POST(request: NextRequest) {
         projectName,
         `AI-generated project: ${userRequest.substring(0, 100)}...`,
         projectUrl,
-        projectId // Pass the custom project ID
+        projectId, // Pass the custom project ID
+        appType // Pass appType from request
       );
       
       // Save ALL project files to database (boilerplate + generated)
@@ -998,6 +999,7 @@ export async function POST(request: NextRequest) {
       aliasSuccess: previewData.aliasSuccess,
       isNewDeployment: previewData.isNewDeployment,
       hasPackageChanges: previewData.hasPackageChanges,
+      appType: appType, // Include appType so UI knows which boilerplate was used
     });
   } catch (err) {
     const duration = Date.now() - startTime;
@@ -1450,7 +1452,8 @@ export async function PATCH(request: NextRequest) {
             `Project ${projectId.substring(0, 8)}`,
             `AI-generated project updated via PATCH`,
             getPreviewUrl(projectId) || undefined,
-            projectId
+            projectId,
+            appType // Pass appType (loaded from project or defaulted to 'farcaster')
           );
           logger.log(`✅ Created project ${projectId} in database`);
         }

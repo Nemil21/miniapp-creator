@@ -11,7 +11,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import type { EarnKit } from '@earnkit/earn';
 import { toast } from 'react-hot-toast';
-
+import { TextShimmer } from "./text-shimmer";
 interface GeneratedProject {
     projectId: string;
     port: number;
@@ -23,6 +23,7 @@ interface GeneratedProject {
     isNewDeployment?: boolean;
     hasPackageChanges?: boolean;
     lastUpdated?: number; // Timestamp to trigger iframe refresh after edits
+    appType?: 'farcaster' | 'web3'; // Which boilerplate was used
 }
 
 interface ChatMessage {
@@ -38,22 +39,24 @@ interface ChatInterfaceProps {
     onProjectGenerated: (project: GeneratedProject | null) => void;
     onGeneratingChange: (isGenerating: boolean) => void;
     activeAgent?: EarnKit;
+    initialAppType?: 'farcaster' | 'web3';
 }
 
 export interface ChatInterfaceRef {
     clearChat: () => void;
     focusInput: () => void;
+    setAppType: (appType: 'farcaster' | 'web3') => void;
 }
 
 export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
-    function ChatInterface({ currentProject, onProjectGenerated, onGeneratingChange, activeAgent }, ref) {
+    function ChatInterface({ currentProject, onProjectGenerated, onGeneratingChange, activeAgent, initialAppType = 'farcaster' }, ref) {
     const [prompt, setPrompt] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     // const [error, setError] = useState<string | null>(null);
     const [chat, setChat] = useState<ChatMessage[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [hasShownWarning, setHasShownWarning] = useState(false);
-    const [appType, setAppType] = useState<'farcaster' | 'web3'>('farcaster');
+    const [appType, setAppType] = useState<'farcaster' | 'web3'>(initialAppType);
     const chatBottomRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const { sessionToken, user } = useAuthContext();
@@ -87,6 +90,16 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // Flag to prevent chat state overwrites during message sending
     const isSendingMessageRef = useRef(false);
 
+    // Sync appType state with currentProject.appType when a project is loaded or initialAppType changes
+    useEffect(() => {
+        if (currentProject?.appType) {
+            logger.log(`🔄 Syncing appType from loaded project: ${currentProject.appType}`);
+            setAppType(currentProject.appType);
+        } else {
+            // Use initialAppType when no project is loaded
+            setAppType(initialAppType);
+        }
+    }, [currentProject?.appType, initialAppType]);
 
     // Chat session state - persist chatSessionId in sessionStorage to survive re-mounts
     const [chatSessionId] = useState<string>(() => {
@@ -128,9 +141,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             if (textareaRef.current) {
                 textareaRef.current.focus();
             }
+        },
+        setAppType: (newAppType: 'farcaster' | 'web3') => {
+            setAppType(newAppType);
         }
     }));
-
+    
     // Load chat messages when project changes
     useEffect(() => {
         const loadChatMessages = async () => {
@@ -303,9 +319,28 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             phase: currentPhase,
             timestamp: Date.now()
         };
+        
+        // Save to state immediately
         setChat(prev => [...prev, userMsg]);
 
-        // User message will be saved to database by the chat API
+        // Save user message to database immediately if we have a project
+        // This prevents race conditions where messages disappear
+        if (currentProject?.projectId) {
+            try {
+                await fetch(`/api/projects/${currentProject.projectId}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({
+                        role: 'user',
+                        content: userMessage,
+                        phase: currentPhase
+                    })
+                });
+                logger.log('💾 User message saved to database (initial save)');
+            } catch (error) {
+                logger.error('❌ Failed to save user message to database:', error);
+            }
+        }
 
         // Credit tracking - handled entirely server-side to prevent double charging
         // Previously, both client and server were tracking credits, causing double charges
@@ -579,9 +614,29 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 phase: currentPhase,
                 timestamp: Date.now()
             };
+            
+            // Save to state first
             setChat(prev => [...prev, aiMsg]);
 
-            // AI message will be saved to database by the chat API
+            // Save AI message to database immediately to prevent race conditions
+            // The chat API might have already saved it, but we save again to be sure
+            const projectIdToSave = data.projectId || chatProjectId || currentProject?.projectId;
+            if (projectIdToSave) {
+                try {
+                    await fetch(`/api/projects/${projectIdToSave}/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                        body: JSON.stringify({
+                            role: 'ai',
+                            content: aiResponse,
+                            phase: currentPhase
+                        })
+                    });
+                    logger.log('💾 AI message saved to database');
+                } catch (error) {
+                    logger.error('❌ Failed to save AI message to database:', error);
+                }
+            }
 
             // Check if we should transition to building phase
             // Only allow generation in requirements phase
@@ -637,15 +692,33 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             // If the call fails, server won't capture the tracked credits
             
             // setError(err instanceof Error ? err.message : 'An error occurred');
-            setChat(prev => [
-                ...prev,
-                {
-                    role: 'ai',
-                    content: 'Sorry, I encountered an error. Please try again.',
-                    phase: currentPhase,
-                    timestamp: Date.now()
+            const errorMsg: ChatMessage = {
+                role: 'ai',
+                content: 'Sorry, I encountered an error. Please try again.',
+                phase: currentPhase,
+                timestamp: Date.now()
+            };
+            
+            setChat(prev => [...prev, errorMsg]);
+            
+            // Save error message to database too
+            const projectIdToSave = chatProjectId || currentProject?.projectId;
+            if (projectIdToSave) {
+                try {
+                    await fetch(`/api/projects/${projectIdToSave}/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                        body: JSON.stringify({
+                            role: 'ai',
+                            content: errorMsg.content,
+                            phase: currentPhase
+                        })
+                    });
+                    logger.log('💾 Error message saved to database');
+                } catch (saveError) {
+                    logger.error('❌ Failed to save error message to database:', saveError);
                 }
-            ]);
+            }
         } finally {
             setAiLoading(false);
             setPrompt('');
@@ -695,6 +768,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                             generatedFiles: job.result.generatedFiles,
                             previewUrl: job.result.previewUrl,
                             vercelUrl: job.result.vercelUrl,
+                            appType: job.result.appType || appType, // Include appType from job result
+                            isNewDeployment: true, // Mark as new deployment for delay logic
                         };
 
                         resolve(project);
@@ -871,6 +946,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             // Chat messages are already in the right place! No migration needed
             // because /api/chat created the project first and saved messages there
 
+            // Mark as new deployment for delay logic
+            project.isNewDeployment = true;
+
             logger.log('✅ Generation complete, updating UI state...');
             onProjectGenerated(project);
             logger.log('✅ Project state updated via onProjectGenerated');
@@ -933,15 +1011,34 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             }
             
             // setError(errorMessage);
-            setChat(prev => [
-                ...prev,
-                {
-                    role: 'ai',
-                    content: displayMessage.includes('**Deployment Failed**') ? displayMessage : `❌ ${displayMessage}`,
-                    phase: 'building',
-                    timestamp: Date.now()
+            const errorContent = displayMessage.includes('**Deployment Failed**') ? displayMessage : `❌ ${displayMessage}`;
+            const genErrorMsg: ChatMessage = {
+                role: 'ai',
+                content: errorContent,
+                phase: 'building',
+                timestamp: Date.now()
+            };
+            
+            setChat(prev => [...prev, genErrorMsg]);
+            
+            // Save generation error message to database
+            const projectIdToSave = chatProjectId || currentProject?.projectId;
+            if (projectIdToSave) {
+                try {
+                    await fetch(`/api/projects/${projectIdToSave}/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                        body: JSON.stringify({
+                            role: 'ai',
+                            content: errorContent,
+                            phase: 'building'
+                        })
+                    });
+                    logger.log('💾 Generation error message saved to database');
+                } catch (saveError) {
+                    logger.error('❌ Failed to save generation error message to database:', saveError);
                 }
-            ]);
+            }
         } finally {
             setIsGenerating(false);
         }
@@ -1010,7 +1107,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-[20px] pt-4 min-h-0">
                 <div className="space-y-4">
                     {chat.map((msg, idx) => (
-                        <div key={idx} className={`flex gap-3 items-start ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div key={idx} className={`flex gap-1 items-start ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {/* Profile Picture for AI (left side) */}
                             {msg.role === 'ai' && (
                                 <Image 
@@ -1022,8 +1119,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                 />
                             )}
                             
-                            <div className={`rounded-lg px-4 py-2 max-w-[80%] text-sm ${msg.role === 'user'
-                                ? 'bg-white text-black break-all'
+                            <div className={`rounded-lg px-1 py-2 max-w-[80%] text-sm ${msg.role === 'user'
+                                ? 'bg-transparent text-black break-all'
                                 : 'bg-transparent text-black'
                                 }`}>
                                 {/* <div className="flex items-center gap-2 mb-1">
@@ -1094,7 +1191,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         </div>
                     ))}
                     {aiLoading && (
-                        <div className="flex gap-3 items-start justify-start">
+                        <div className="flex gap-1 items-start justify-start">
                             <Image 
                                 src={getMinidevPfp(appType)}
                                 alt="MiniDev"
@@ -1102,26 +1199,12 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                                 height={32}
                                 className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
                             />
-                            <div className="rounded-lg px-4 py-3 max-w-[80%] bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 shadow-sm">
-                                <div className="flex items-center gap-3">
-                                    {/* Bouncing dots animation */}
-                                    <div className="flex gap-1.5">
-                                        <div
-                                            className="w-2 h-2 bg-gray-600 rounded-full animate-bounce"
-                                            style={{ animationDelay: '0ms', animationDuration: '1000ms' }}
-                                        ></div>
-                                        <div
-                                            className="w-2 h-2 bg-gray-600 rounded-full animate-bounce"
-                                            style={{ animationDelay: '150ms', animationDuration: '1000ms' }}
-                                        ></div>
-                                        <div
-                                            className="w-2 h-2 bg-gray-600 rounded-full animate-bounce"
-                                            style={{ animationDelay: '300ms', animationDuration: '1000ms' }}
-                                        ></div>
-                                    </div>
-                                    <span className="text-sm text-gray-700 font-medium animate-pulse">
+                            <div className="rounded-lg px-1 py-1 max-w-[80%]">
+                                <div className="flex items-center gap-1">
+                                   
+                                    <TextShimmer>
                                         Thinking...
-                                    </span>
+                                    </TextShimmer>
                                 </div>
                             </div>
                         </div>
@@ -1131,7 +1214,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             </div>
 
             {/* Chat Input - Fixed at bottom */}
-            <div className="flex-shrink-0 pb-4 px-[20px] bg-[#0000000A]">
+            <div className="flex-shrink-0 pb-4 px-[20px] bg-gray-100">
                 {/* Insufficient Credits Warning */}
                 {shouldBlockChat && (
                     <div className="mb-3">
@@ -1224,43 +1307,6 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                             </svg>
                         )}
                     </button>
-                    
-                    {/* App Type Selector - Below the input, styled like the reference image */}
-                    {!currentProject && chat.length <= 1 && (
-                        <div className="relative mt-1">
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    const select = document.getElementById('appTypeSelect') as HTMLSelectElement;
-                                    if (select) {
-                                        select.focus();
-                                        select.click();
-                                    }
-                                }}
-                                className="w-full flex items-center justify-between px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 rounded transition-colors cursor-pointer"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm">{appType === 'farcaster' ? '🎯' : '🌐'}</span>
-                                    <span className="font-medium">
-                                        {appType === 'farcaster' ? 'Farcaster Mini App' : 'Web3 Web App'}
-                                    </span>
-                                </div>
-                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-gray-400">
-                                    <path d="M3 5L6 8L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                            </button>
-                            <select
-                                id="appTypeSelect"
-                                value={appType}
-                                onChange={(e) => setAppType(e.target.value as 'farcaster' | 'web3')}
-                                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                            >
-                                <option value="farcaster">🎯 Farcaster Mini App</option>
-                                <option value="web3">🌐 Web3 Web App</option>
-                            </select>
-                        </div>
-                    )}
                 </form>
                 <p className="text-xs text-gray-400 text-center">
                     Outputs are auto-generated — please review before deploying.

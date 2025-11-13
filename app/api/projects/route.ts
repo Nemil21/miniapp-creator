@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, description, files } = await request.json();
+    const { name, description, files, appType = 'farcaster' } = await request.json();
 
     if (!name) {
       return NextResponse.json(
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the project
-    const project = await createProject(user.id, name, description);
+    const project = await createProject(user.id, name, description, undefined, undefined, appType);
 
     // Save project files if provided
     if (files && Array.isArray(files)) {

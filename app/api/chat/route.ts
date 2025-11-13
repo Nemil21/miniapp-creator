@@ -272,7 +272,9 @@ export async function POST(request: NextRequest) {
             user.id,
             `Chat Project ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
             "Chat conversation project",
-            undefined
+            undefined,
+            undefined,
+            'farcaster' // Default to farcaster for chat projects (will be updated when project is actually generated)
           );
           currentProjectId = draftProject.id;
           sessionToProjectMap.set(sessionId, currentProjectId);

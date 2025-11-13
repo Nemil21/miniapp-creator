@@ -64,6 +64,16 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         splashBackgroundColor: '#ffffff'
     });
 
+    // Auto-fill homeUrl when modal opens and projectUrl is available
+    useEffect(() => {
+        if (isOpen && projectUrl) {
+            setFormData(prev => ({
+                ...prev,
+                homeUrl: projectUrl
+            }));
+        }
+    }, [isOpen, projectUrl]);
+
     // Form validation
     const validateForm = () => {
         if (!formData.name.trim()) {

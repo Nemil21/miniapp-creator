@@ -3,6 +3,7 @@ import { logger } from "../../lib/logger";
 
 import { useState, useEffect } from 'react';
 import { Icons } from './sections/icons';
+import { TemplateSelector } from './TemplateSelector';
 
 interface GeneratedProject {
     projectId: string;
@@ -15,13 +16,16 @@ interface GeneratedProject {
     isNewDeployment?: boolean;
     hasPackageChanges?: boolean;
     lastUpdated?: number; // Timestamp to track when project was last updated
+    appType?: 'farcaster' | 'web3'; // Which boilerplate was used
 }
 
 interface PreviewProps {
     currentProject: GeneratedProject | null;
+    selectedAppType?: 'farcaster' | 'web3';
+    onSelectTemplate?: (appType: 'farcaster' | 'web3') => void;
 }
 
-export function Preview({ currentProject }: PreviewProps) {
+export function Preview({ currentProject, selectedAppType = 'farcaster', onSelectTemplate }: PreviewProps) {
     const [iframeError, setIframeError] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [iframeKey, setIframeKey] = useState(0);
@@ -95,21 +99,10 @@ export function Preview({ currentProject }: PreviewProps) {
         return (
             <div className="h-full flex flex-col bg-white overflow-y-auto">
                 <div className="flex-1 flex items-center justify-center p-4">
-                    <div className="text-center max-w-md">
-                        <div className="mb-6 flex justify-center">
-                            <Icons.earnySmallGrayIcon className="w-16 h-16 text-gray-400" />
-                        </div>
-                        <h3 className="text-xl font-semibold text-black mb-2">No Project Selected</h3>
-                        <p className="text-sm text-black-60 mb-6">
-                            Please Select a project or start a new project in the chat.
-                        </p>
-                        <div className="bg-black-5 rounded-lg p-4 text-left">
-                            <p className="text-xs text-black-60 font-medium mb-2">💡 Tip:</p>
-                            <p className="text-xs text-black-60">
-                                Describe your mini app idea in the chat and Minidev will build it for you.
-                            </p>
-                        </div>
-                    </div>
+                    <TemplateSelector 
+                        selectedAppType={selectedAppType}
+                        onSelectTemplate={onSelectTemplate || (() => {})} 
+                    />
                 </div>
             </div>
         );

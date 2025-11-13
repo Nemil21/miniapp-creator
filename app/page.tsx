@@ -24,15 +24,19 @@ interface GeneratedProject {
   aliasSuccess?: boolean;
   isNewDeployment?: boolean;
   hasPackageChanges?: boolean;
+  appType?: 'farcaster' | 'web3'; // Which boilerplate was used
 }
 
 function HomeContent() {
   const [currentProject, setCurrentProject] = useState<GeneratedProject | null>(null);
+  const [projectForPreview, setProjectForPreview] = useState<GeneratedProject | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedAppType, setSelectedAppType] = useState<'farcaster' | 'web3'>('farcaster');
   const { sessionToken } = useAuthContext();
   const { apiCall } = useApiUtils();
   const chatInterfaceRef = useRef<ChatInterfaceRef>(null);
   const hoverSidebarRef = useRef<HoverSidebarRef>(null);
+  const previewDelayTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize EarnKit
   const activeAgent = useMemo(() => {
@@ -79,13 +83,59 @@ function HomeContent() {
     console.log('🏠 currentProject state changed to:', currentProject ? 'present' : 'null');
   }, [currentProject]);
 
-  const handleProjectSelect = async (project: { id: string; name: string; description?: string; previewUrl?: string; vercelUrl?: string; createdAt: string; updatedAt: string }) => {
+  // Delay showing preview for new deployments to give Vercel time to deploy
+  useEffect(() => {
+    // Clear any existing timer
+    if (previewDelayTimerRef.current) {
+      clearTimeout(previewDelayTimerRef.current);
+    }
+
+    if (currentProject) {
+      console.log('🔍 Project changed:', {
+        projectId: currentProject.projectId,
+        isNewDeployment: currentProject.isNewDeployment,
+        hasVercelUrl: !!currentProject.vercelUrl,
+        hasPreviewUrl: !!currentProject.previewUrl
+      });
+
+      // If it's a new deployment OR the project has a vercel/preview URL but we haven't shown it yet, wait
+      // This handles both initial deployments and cases where deployment just completed
+      const shouldWaitForDeployment = currentProject.isNewDeployment || 
+        (currentProject.vercelUrl && !projectForPreview) || 
+        (currentProject.previewUrl && !projectForPreview);
+
+      if (shouldWaitForDeployment) {
+        console.log('🕐 Deployment detected, waiting 10 seconds before showing preview...');
+        previewDelayTimerRef.current = setTimeout(() => {
+          console.log('✅ Preview delay complete, showing preview now');
+          setProjectForPreview(currentProject);
+        }, 10000); // Increased to 10 seconds for better reliability
+      } else {
+        // For existing projects or edits, show immediately
+        console.log('📱 Showing preview immediately');
+        setProjectForPreview(currentProject);
+      }
+    } else {
+      // No project, clear preview
+      console.log('🗑️ Clearing preview');
+      setProjectForPreview(null);
+    }
+
+    // Cleanup timer on unmount
+    return () => {
+      if (previewDelayTimerRef.current) {
+        clearTimeout(previewDelayTimerRef.current);
+      }
+    };
+  }, [currentProject]);
+
+  const handleProjectSelect = async (project: { id: string; name: string; description?: string; appType?: 'farcaster' | 'web3'; previewUrl?: string; vercelUrl?: string; createdAt: string; updatedAt: string }) => {
     try {
       console.log('🔍 handleProjectSelect called with project:', project);
       console.log('🔍 Attempting to fetch project with ID:', project.id);
       
       // Load project files and create a GeneratedProject object using apiCall
-      const data = await apiCall<{ project: { id: string; name: string; description?: string; previewUrl?: string; vercelUrl?: string; files: unknown[]; chatMessages: unknown[] } }>(`/api/projects/${project.id}`, {
+      const data = await apiCall<{ project: { id: string; name: string; description?: string; appType?: 'farcaster' | 'web3'; previewUrl?: string; vercelUrl?: string; files: unknown[]; chatMessages: unknown[] } }>(`/api/projects/${project.id}`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
           'Content-Type': 'application/json',
@@ -106,6 +156,7 @@ function HomeContent() {
         aliasSuccess: !!(projectData.vercelUrl || projectData.previewUrl),
         isNewDeployment: false,
         hasPackageChanges: false,
+        appType: projectData.appType || 'farcaster', // Include appType from database
       };
 
       console.log('🔍 Generated project loaded:', {
@@ -113,6 +164,7 @@ function HomeContent() {
         vercelUrl: generatedProject.vercelUrl,
         previewUrl: generatedProject.previewUrl,
         url: generatedProject.url,
+        appType: generatedProject.appType,
       });
 
       setCurrentProject(generatedProject);
@@ -125,6 +177,14 @@ function HomeContent() {
   const handleNewProject = () => {
     console.log('🆕 handleNewProject called - clearing current project');
     setCurrentProject(null);
+    setProjectForPreview(null);
+    setSelectedAppType('farcaster'); // Reset to default
+    
+    // Clear any preview delay timer
+    if (previewDelayTimerRef.current) {
+      clearTimeout(previewDelayTimerRef.current);
+      previewDelayTimerRef.current = null;
+    }
     
     // Clear chat and focus input
     if (chatInterfaceRef.current) {
@@ -134,6 +194,16 @@ function HomeContent() {
       setTimeout(() => {
         chatInterfaceRef.current?.focusInput();
       }, 100);
+    }
+  };
+
+  const handleTemplateSelect = (appType: 'farcaster' | 'web3') => {
+    console.log('🎯 Template selected:', appType);
+    setSelectedAppType(appType);
+    
+    // Update ChatInterface's appType
+    if (chatInterfaceRef.current) {
+      chatInterfaceRef.current.setAppType(appType);
     }
   };
 
@@ -166,17 +236,20 @@ function HomeContent() {
             onProjectGenerated={setCurrentProject}
             onGeneratingChange={setIsGenerating}
             activeAgent={activeAgent || undefined}
+            initialAppType={selectedAppType}
           />
         </section>
 
         {/* Right Section - Code/Preview */}
         <section className="w-2/3 h-screen bg-gray-50 transition-all duration-500">
           <CodeGenerator
-            currentProject={currentProject}
-            isGenerating={isGenerating}
+            currentProject={projectForPreview}
+            isGenerating={isGenerating || (!!currentProject && !projectForPreview)}
             onOpenSidebar={() => hoverSidebarRef.current?.openSidebar()}
             activeAgent={activeAgent || undefined}
             feeModelType={feeModelType}
+            selectedAppType={selectedAppType}
+            onSelectTemplate={handleTemplateSelect}
           />
         </section>
       </div>

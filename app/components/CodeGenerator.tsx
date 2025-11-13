@@ -20,6 +20,7 @@ interface GeneratedProject {
   aliasSuccess?: boolean;
   isNewDeployment?: boolean;
   hasPackageChanges?: boolean;
+  appType?: 'farcaster' | 'web3'; // Which boilerplate was used
 }
 
 interface CodeGeneratorProps {
@@ -28,9 +29,11 @@ interface CodeGeneratorProps {
   onOpenSidebar?: () => void;
   activeAgent?: EarnKit;
   feeModelType?: "free-tier" | "credit-based";
+  selectedAppType?: 'farcaster' | 'web3';
+  onSelectTemplate?: (appType: 'farcaster' | 'web3') => void;
 }
 
-export function CodeGenerator({ currentProject, isGenerating = false, onOpenSidebar, activeAgent, feeModelType }: CodeGeneratorProps) {
+export function CodeGenerator({ currentProject, isGenerating = false, onOpenSidebar, activeAgent, feeModelType, selectedAppType, onSelectTemplate }: CodeGeneratorProps) {
   const { sessionToken } = useAuthContext();
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('preview');
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -222,20 +225,17 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
             </div>
           )}
           
-          {/* Publish Button - Always show */}
-          <button
-            onClick={() => currentProject ? setShowPublishModal(true) : null}
-            disabled={!currentProject}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-              currentProject 
-                ? 'bg-black text-white hover:bg-gray-800' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-            title={currentProject ? "Publish to Farcaster" : "No project loaded"}
-          >
-            {getPublishIcon()}
-            <span>Publish</span>
-          </button>
+          {/* Publish Button - Only show for Farcaster apps */}
+          {currentProject && currentProject.appType === 'farcaster' && (
+            <button
+              onClick={() => setShowPublishModal(true)}
+              className="px-4 py-2 bg-black text-white hover:bg-gray-800 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              title="Publish to Farcaster"
+            >
+              {getPublishIcon()}
+              <span>Publish</span>
+            </button>
+          )}
         </div>
       </div>
       <CodeEditorAndPreview
@@ -243,6 +243,8 @@ export function CodeGenerator({ currentProject, isGenerating = false, onOpenSide
         isGenerating={isGenerating}
         onOpenSidebar={onOpenSidebar}
         viewMode={viewMode}
+        selectedAppType={selectedAppType}
+        onSelectTemplate={onSelectTemplate}
         onFileChange={(filePath, content) => {
           logger.log('File changed:', filePath, content.substring(0, 100));
         }}

@@ -194,14 +194,16 @@ export async function createPreview(
   projectId: string,
   files: { filename: string; content: string }[],
   accessToken: string,
-  isWeb3?: boolean,
-  skipContracts?: boolean, // NEW: Allow caller to specify if contracts already deployed
-  jobId?: string // NEW: Job ID for background deployment error reporting
+  appType?: 'farcaster' | 'web3', // Which boilerplate to use (default: 'farcaster')
+  isWeb3?: boolean, // Whether to deploy contracts (optional, can be different from appType)
+  skipContracts?: boolean, // Allow caller to specify if contracts already deployed
+  jobId?: string // Job ID for background deployment error reporting
 ): Promise<PreviewResponse> {
   logger.log(`🚀 Creating preview for project: ${projectId}`);
   logger.log(`📁 Files count: ${files.length}`);
   logger.log(`🔑 Access token: ${accessToken ? 'Present' : 'Missing'}`);
   logger.log(`🌐 Preview API Base: ${PREVIEW_API_BASE}`);
+  logger.log(`🎯 appType: ${appType || 'farcaster (default)'}`);
   logger.log(`🔧 isWeb3: ${isWeb3 !== undefined ? isWeb3 : 'not specified'}`);
   logger.log(`🔧 skipContracts: ${skipContracts !== undefined ? skipContracts : 'not specified'}`);
   logger.log(`🆔 jobId: ${jobId || 'not specified'}`);
@@ -217,20 +219,24 @@ export async function createPreview(
 
     // Skip contracts if:
     // 1. Explicitly told to skip (contracts already deployed)
-    // 2. Non-Web3 app
+    // 2. Non-Web3 app (but respect isWeb3 flag if provided)
     const shouldSkipContracts = skipContracts ?? (isWeb3 === false);
 
     const requestBody = {
       hash: projectId,
       files: filesObject,
       deployToExternal: "vercel",
-      isWeb3: isWeb3 !== undefined ? isWeb3 : true, // Default to true for backward compatibility
-      skipContracts: shouldSkipContracts, // Skip if already deployed OR non-Web3
+      appType: appType || 'farcaster', // Which boilerplate to use
+      isWeb3: isWeb3 !== undefined ? isWeb3 : undefined, // Whether to deploy contracts
+      skipContracts: shouldSkipContracts, // Skip if already deployed OR isWeb3=false
       jobId, // Pass jobId for background deployment error reporting
     };
 
     logger.log(`📤 Sending request to: ${PREVIEW_API_BASE}/deploy`);
     logger.log(`📤 Request body keys: ${Object.keys(requestBody)}`);
+    logger.log(`📤 Request appType: "${requestBody.appType}"`);
+    logger.log(`📤 Request isWeb3: ${requestBody.isWeb3}`);
+    logger.log(`📤 Request skipContracts: ${requestBody.skipContracts}`);
 
     // Make API request to create preview with extended timeout for Vercel deployment
     // Set to 7 minutes to allow first deployment to complete (typical: 4-5 min)
@@ -530,11 +536,13 @@ export async function redeployToVercel(
   projectId: string,
   files: { filename: string; content: string }[],
   accessToken: string,
+  appType?: 'farcaster' | 'web3',
   isWeb3?: boolean,
   jobId?: string
 ): Promise<PreviewResponse> {
   logger.log(`🚀 Redeploying project to Vercel: ${projectId}`);
   logger.log(`📁 Files count: ${files.length}`);
+  logger.log(`🎯 appType: ${appType || 'farcaster (default)'}`);
 
   try {
     // Convert files array to object format expected by the API
@@ -549,7 +557,8 @@ export async function redeployToVercel(
       hash: projectId,
       files: filesObject,
       deployToExternal: "vercel",
-      isWeb3: isWeb3 !== undefined ? isWeb3 : true,
+      appType: appType || 'farcaster',
+      isWeb3: isWeb3 !== undefined ? isWeb3 : undefined,
       skipContracts: true, // Skip contracts for follow-up deployments
       jobId,
     };

@@ -293,7 +293,8 @@ export async function POST(req: NextRequest) {
             hash: projectId,
             files: filesObject,
             deployToExternal: 'vercel',
-            isWeb3: true,
+            appType: project.appType || 'farcaster', // Which boilerplate to use
+            isWeb3: undefined, // Not deploying contracts
             skipContracts: true, // Contracts already deployed
             wait: false, // Don't wait for completion
           }),
