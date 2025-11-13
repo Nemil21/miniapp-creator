@@ -127,6 +127,7 @@ function HomeContent() {
         clearTimeout(previewDelayTimerRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
   const handleProjectSelect = async (project: { id: string; name: string; description?: string; appType?: 'farcaster' | 'web3'; previewUrl?: string; vercelUrl?: string; createdAt: string; updatedAt: string }) => {

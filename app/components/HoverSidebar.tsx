@@ -75,11 +75,6 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
     onNewProject();
   };
 
-  // Get project initial for bubble
-  const getProjectInitial = (name: string) => {
-    return name.charAt(0).toUpperCase();
-  };
-
   return (
     <div className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isOpen ? 'w-64' : 'w-0 border-r-0 overflow-hidden'}`}>
       {isOpen && (
