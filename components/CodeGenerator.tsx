@@ -213,11 +213,6 @@ export function CodeGenerator({
 
         {/* Right side - Link Actions, Publish Button & Balance Display */}
         <div className="flex items-center gap-3">
-          {/* Link Display with Actions - Show when project exists */}
-          <BalanceDisplay
-            activeAgent={activeAgent || (undefined as unknown as EarnKit)}
-            feeModelType={feeModelType || "credit-based"}
-          />
           {currentProject?.url && (
             <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
               {/* Link Icon */}
@@ -281,8 +276,7 @@ export function CodeGenerator({
               >
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  className="text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
                   title="Top Up Credits"
                 >
                   Top Up

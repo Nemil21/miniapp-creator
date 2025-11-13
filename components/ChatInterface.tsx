@@ -116,6 +116,60 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     const [currentPhase, setCurrentPhase] = useState<
       "requirements" | "building" | "editing"
     >("requirements");
+    
+    // Track selected template for pfp display
+    const [selectedTemplate, setSelectedTemplate] = useState<string | null>(() => {
+      if (typeof window !== "undefined") {
+        return localStorage.getItem("minidev_selected_template");
+      }
+      return null;
+    });
+
+    // Listen for template changes
+    useEffect(() => {
+      const handleStorageChange = () => {
+        if (typeof window !== "undefined") {
+          const template = localStorage.getItem("minidev_selected_template");
+          setSelectedTemplate(template);
+        }
+      };
+      
+      // Listen for storage events (when template is selected in another component)
+      window.addEventListener("storage", handleStorageChange);
+      
+      // Also check periodically in case localStorage is updated in the same window
+      const interval = setInterval(() => {
+        if (typeof window !== "undefined") {
+          const template = localStorage.getItem("minidev_selected_template");
+          if (template !== selectedTemplate) {
+            setSelectedTemplate(template);
+          }
+        }
+      }, 100);
+
+      return () => {
+        window.removeEventListener("storage", handleStorageChange);
+        clearInterval(interval);
+      };
+    }, [selectedTemplate]);
+
+    // Clear template when project is loaded
+    useEffect(() => {
+      if (currentProject && typeof window !== "undefined") {
+        localStorage.removeItem("minidev_selected_template");
+        setSelectedTemplate(null);
+      }
+    }, [currentProject]);
+
+    // Get pfp based on selected template
+    const getAgentPfp = () => {
+      if (selectedTemplate === "farcaster-miniapp") {
+        return "/farcaster.svg";
+      } else if (selectedTemplate === "base-webapp") {
+        return "/base-logo.svg";
+      }
+      return "/minidevpfp.png"; // Default
+    };
 
     // Function to scroll to bottom of chat
     const scrollToBottom = () => {
@@ -1157,8 +1211,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 {/* Profile Picture for AI (left side) */}
                 {msg.role === "ai" && (
                   <Image
-                    src="/minidevpfp.png"
-                    alt="MiniDev"
+                    src={getAgentPfp()}
+                    alt={selectedTemplate === "farcaster-miniapp" ? "Farcaster" : selectedTemplate === "base-webapp" ? "Base" : "MiniDev"}
                     width={32}
                     height={32}
                     className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
@@ -1281,8 +1335,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             {aiLoading && (
               <div className="flex gap-2 items-center justify-start">
                 <Image
-                  src="/minidevpfp.png"
-                  alt="MiniDev"
+                  src={getAgentPfp()}
+                  alt={selectedTemplate === "farcaster-miniapp" ? "Farcaster" : selectedTemplate === "base-webapp" ? "Base" : "MiniDev"}
                   width={32}
                   height={32}
                   className="w-8 h-8 rounded-full object-cover flex-shrink-0 mt-1"
@@ -1362,7 +1416,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 handleSendMessage(prompt.trim());
               }
             }}
-            className="bg-transparent text-black rounded-3xl p-2 border-2 mb-2 flex flex-col items-center gap-1"
+            className="bg-white text-black rounded-3xl p-2 border ring-0 ring-black/5 focus-within:ring-2 focus-within:ring-black/5 transition-all duration-200 mb-2 flex flex-col items-center gap-1"
           >
             {/* <input
                         value={prompt}

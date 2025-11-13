@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CodeGenerator } from '@/components/CodeGenerator';
 import { ChatInterface, ChatInterfaceRef } from '@/components/ChatInterface';
+import { CodeGenerator } from '@/components/CodeGenerator';
 import { UserProfileHeader } from '@/components/UserProfileHeader';
-import { useAuthContext } from '../contexts/AuthContext';
 import { useApiUtils } from '@/lib/apiUtils';
-import { EarnKit } from '@earnkit/earn';
 import { useProjectStore } from '@/store/useProjectStore';
-import BalanceDisplay from './BalanceDisplay';
+import { EarnKit } from '@earnkit/earn';
+import { useAuthContext } from '../contexts/AuthContext';
 
 interface GeneratedProject {
   projectId: string;
@@ -87,7 +86,7 @@ export default function HomeContent() {
       apiKey,
     });
   }, []);
-
+  
   const feeModelType: "free-tier" | "credit-based" = "credit-based";
   
   console.log('📊 HomeContent render:', {

@@ -1,7 +1,6 @@
-'use client';
+"use client";
 
-import { useMemo } from 'react';
-
+import React, { useState } from "react";
 import {
   Table,
   TableBody,
@@ -9,39 +8,230 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
+import Image from "next/image";
+import { Icons } from "./sections/icons";
 
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  previewUrl?: string;
-  vercelUrl?: string;
-  createdAt: string;
-  updatedAt: string;
+interface Row {
+  rank: number;
+  app: string;
+  creator: string;
+  url: string;
 }
 
 interface DiscoverMiniappsProps {
-  projects: Project[];
-  isLoading: boolean;
+  projects?: any[];
+  isLoading?: boolean;
 }
 
-const formatDate = (iso: string) => {
-  const date = new Date(iso);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+// Dummy data with 10 items
+const DUMMY_DATA: Record<"today" | "week" | "all", Row[]> = {
+  today: [
+    {
+      rank: 1,
+      app: "Farcaster Polls",
+      creator: "@alice",
+      url: "https://example.com/1",
+    },
+    {
+      rank: 2,
+      app: "NFT Gallery",
+      creator: "@bob",
+      url: "https://example.com/2",
+    },
+    {
+      rank: 3,
+      app: "Token Airdrop",
+      creator: "@charlie",
+      url: "https://example.com/3",
+    },
+    {
+      rank: 4,
+      app: "DeFi Dashboard",
+      creator: "@diana",
+      url: "https://example.com/4",
+    },
+    {
+      rank: 5,
+      app: "Social Feed",
+      creator: "@eve",
+      url: "https://example.com/5",
+    },
+    {
+      rank: 6,
+      app: "Voting DApp",
+      creator: "@frank",
+      url: "https://example.com/6",
+    },
+    {
+      rank: 7,
+      app: "Leaderboard",
+      creator: "@grace",
+      url: "https://example.com/7",
+    },
+    {
+      rank: 8,
+      app: "Marketplace",
+      creator: "@henry",
+      url: "https://example.com/8",
+    },
+    {
+      rank: 9,
+      app: "Staking App",
+      creator: "@ivy",
+      url: "https://example.com/9",
+    },
+    {
+      rank: 10,
+      app: "Gaming Hub",
+      creator: "@jack",
+      url: "https://example.com/10",
+    },
+  ],
+  week: [
+    {
+      rank: 1,
+      app: "Farcaster Polls",
+      creator: "@alice",
+      url: "https://example.com/1",
+    },
+    {
+      rank: 2,
+      app: "NFT Gallery",
+      creator: "@bob",
+      url: "https://example.com/2",
+    },
+    {
+      rank: 3,
+      app: "Token Airdrop",
+      creator: "@charlie",
+      url: "https://example.com/3",
+    },
+    {
+      rank: 4,
+      app: "DeFi Dashboard",
+      creator: "@diana",
+      url: "https://example.com/4",
+    },
+    {
+      rank: 5,
+      app: "Social Feed",
+      creator: "@eve",
+      url: "https://example.com/5",
+    },
+    {
+      rank: 6,
+      app: "Voting DApp",
+      creator: "@frank",
+      url: "https://example.com/6",
+    },
+    {
+      rank: 7,
+      app: "Leaderboard",
+      creator: "@grace",
+      url: "https://example.com/7",
+    },
+    {
+      rank: 8,
+      app: "Marketplace",
+      creator: "@henry",
+      url: "https://example.com/8",
+    },
+    {
+      rank: 9,
+      app: "Staking App",
+      creator: "@ivy",
+      url: "https://example.com/9",
+    },
+    {
+      rank: 10,
+      app: "Gaming Hub",
+      creator: "@jack",
+      url: "https://example.com/10",
+    },
+  ],
+  all: [
+    {
+      rank: 1,
+      app: "Farcaster Polls",
+      creator: "@alice",
+      url: "https://example.com/1",
+    },
+    {
+      rank: 2,
+      app: "NFT Gallery",
+      creator: "@bob",
+      url: "https://example.com/2",
+    },
+    {
+      rank: 3,
+      app: "Token Airdrop",
+      creator: "@charlie",
+      url: "https://example.com/3",
+    },
+    {
+      rank: 4,
+      app: "DeFi Dashboard",
+      creator: "@diana",
+      url: "https://example.com/4",
+    },
+    {
+      rank: 5,
+      app: "Social Feed",
+      creator: "@eve",
+      url: "https://example.com/5",
+    },
+    {
+      rank: 6,
+      app: "Voting DApp",
+      creator: "@frank",
+      url: "https://example.com/6",
+    },
+    {
+      rank: 7,
+      app: "Leaderboard",
+      creator: "@grace",
+      url: "https://example.com/7",
+    },
+    {
+      rank: 8,
+      app: "Marketplace",
+      creator: "@henry",
+      url: "https://example.com/8",
+    },
+    {
+      rank: 9,
+      app: "Staking App",
+      creator: "@ivy",
+      url: "https://example.com/9",
+    },
+    {
+      rank: 10,
+      app: "Gaming Hub",
+      creator: "@jack",
+      url: "https://example.com/10",
+    },
+  ],
 };
 
-const getProjectInitial = (name: string) => name.charAt(0).toUpperCase();
+const renderRankVisual = (rank: number) => {
+  if (rank === 1) {
+    return <Icons.firstIcon className="h-8 w-8" />;
+  } else if (rank === 2) {
+    return <Icons.secondIcon className="h-8 w-8" />;
+  } else if (rank === 3) {
+    return <Icons.thirdIcon className="h-8 w-8" />;
+  } else {
+    return <span className="font-semibold px-3 text-gray-500">{rank}</span>;
+  }
+};
 
-export function DiscoverMiniapps({ projects, isLoading }: DiscoverMiniappsProps) {
-  const discoverableProjects = useMemo(
-    () => projects.filter((project) => project.previewUrl || project.vercelUrl),
-    [projects],
-  );
+export function DiscoverMiniapps({
+  projects,
+  isLoading,
+}: DiscoverMiniappsProps) {
+  const [tab] = useState<"today" | "week" | "all">("today");
+  const rows = DUMMY_DATA[tab];
 
   if (isLoading) {
     return (
@@ -51,73 +241,58 @@ export function DiscoverMiniapps({ projects, isLoading }: DiscoverMiniappsProps)
     );
   }
 
-  if (discoverableProjects.length === 0) {
-    return (
-      <div className="py-6 text-center text-sm text-gray-500">
-        No live miniapps yet. Deploy one to see it here!
-      </div>
-    );
-  }
-
   return (
-    <Table className="[&_td]:align-top text-xs">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Miniapp</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead>Updated</TableHead>
-          <TableHead className="text-right"> </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {discoverableProjects.map((project) => {
-          const url = project.previewUrl || project.vercelUrl || '#';
-          const hasUrl = url !== '#';
-          return (
-            <TableRow key={project.id}>
-              <TableCell>
-                <div className="flex items-start gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-semibold">
-                    {getProjectInitial(project.name)}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900 truncate">{project.name}</div>
-                    <div className="text-[11px] text-gray-500">
-                      {project.previewUrl ? 'Preview' : project.vercelUrl ? 'Live on Vercel' : 'Not deployed'}
-                    </div>
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <p className="text-xs text-gray-600 line-clamp-2">
-                  {project.description || 'No description provided.'}
-                </p>
-              </TableCell>
-              <TableCell>
-                <span className="text-[11px] text-gray-500">{formatDate(project.updatedAt)}</span>
-              </TableCell>
-              <TableCell className="text-right">
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${
-                    hasUrl ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                  onClick={(event) => {
-                    if (!hasUrl) {
-                      event.preventDefault();
-                    }
-                  }}
-                >
-                  Try
-                </a>
-              </TableCell>
+    <div className="relative">
+      <div className="blur pointer-events-none select-none">
+        <Table className="[&_td]:align-top text-xs">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[72px]">#</TableHead>
+              <TableHead>Miniapp</TableHead>
+              <TableHead>Creator</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.rank}>
+                <TableCell>{renderRankVisual(row.rank)}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Image
+                      src="/farcaster.svg"
+                      alt="Farcaster"
+                      width={20}
+                      height={20}
+                    />
+                    <span className="font-medium">{row.app}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-gray-500">{row.creator}</span>
+                </TableCell>
+                <TableCell className="text-right">
+                  <button
+                    className="text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-2.5 py-0.5 cursor-pointer text-sm font-semibold hover:bg-gray-200 transition-colors"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                  >
+                    Try
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm">
+        <div className="text-center">
+          <p className="text-2xl font-semibold text-gray-900 mb-2">Coming Soon</p>
+          <p className="text-sm text-gray-600">We're working on something amazing</p>
+        </div>
+      </div>
+    </div>
   );
 }
-

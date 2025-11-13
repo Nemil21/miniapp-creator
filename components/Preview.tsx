@@ -46,6 +46,10 @@ export function Preview({ currentProject }: PreviewProps) {
   useEffect(() => {
     if (currentProject) {
       setSelectedTemplateId(null);
+      // Clear template ID from localStorage when project is loaded
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("minidev_selected_template");
+      }
     }
   }, [currentProject]);
 
@@ -99,7 +103,11 @@ export function Preview({ currentProject }: PreviewProps) {
                   type="button"
                   onClick={() => {
                     setSelectedTemplateId(template.id);
-                    // handleTemplateSelect(template.prompt);
+                    // Store template ID in localStorage for ChatInterface to use
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem("minidev_selected_template", template.id);
+                    }
+                    handleTemplateSelect(template.prompt);
                   }}
                   className={`group flex flex-col h-full rounded-2xl border p-5 text-left shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${
                     selectedTemplateId === template.id

@@ -45,6 +45,8 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
         refetchInterval: 1000 * 60, // Refetch every minute
     });
 
+    console.log("loki bal",balance)
+
     const handleBalanceUpdate = () => {
         // React Query will automatically refetch, but we can also trigger it manually
         refetchBalance();
@@ -62,7 +64,7 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
 
     // Show balance and top-up when authenticated and credits enabled
     return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 border">
             {hasOnlyEmbeddedWallet && (
                 <Button
                     variant="outline"
@@ -86,8 +88,7 @@ export default function BalanceDisplay({ activeAgent, feeModelType }: BalanceDis
             >
                 <Button
                     variant="outline"
-                    size="sm"
-                    className="px-3 py-1.5 text-xs font-medium border-black-20 text-black-60 hover:text-black hover:border-black-30 hover:bg-black-5 transition-colors cursor-pointer"
+                    className="text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
                 >
                     Top Up
                 </Button>
