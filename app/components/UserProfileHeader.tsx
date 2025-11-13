@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useAuthContext } from '../contexts/AuthContext';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import WalletButton from './WalletButton';
+
 
 interface UserProfileHeaderProps {
   onOpenSidebar?: () => void;
