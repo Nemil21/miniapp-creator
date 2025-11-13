@@ -164,9 +164,9 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // Get pfp based on selected template
     const getAgentPfp = () => {
       if (selectedTemplate === "farcaster-miniapp") {
-        return "/farcaster.svg";
+        return "/minidevpfpfarcaster.webp";
       } else if (selectedTemplate === "base-webapp") {
-        return "/base-logo.svg";
+        return "/minidevpfp.png";
       }
       return "/minidevpfp.png"; // Default
     };
