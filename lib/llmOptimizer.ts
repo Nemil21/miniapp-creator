@@ -123,7 +123,7 @@ farcaster-miniapp/
 │   │   ├── page.tsx                # Main app component with tabs
 │   │   ├── providers.tsx           # SDK and wallet providers
 │   │   ├── globals.css             # Global styles
-│   │   ├── favicon.ico             # App favicon
+│   │   ├── icon.svg                # App icon (use SVG for better quality)
 │   │   └── api/                    # API routes
 │   │       └── me/                 # User authentication endpoint
 │   │           └── route.ts        # Farcaster Quick Auth API
@@ -154,7 +154,6 @@ farcaster-miniapp/
 ├── package.json                    # Dependencies
 ├── next.config.ts                  # Next.js configuration
 ├── tsconfig.json                   # TypeScript configuration
-├── eslint.config.mjs               # ESLint configuration
 ├── postcss.config.mjs              # PostCSS configuration
 ├── next-env.d.ts                   # Next.js types
 ├── .gitignore                      # Git ignore file
