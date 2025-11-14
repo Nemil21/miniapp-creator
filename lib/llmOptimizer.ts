@@ -128,10 +128,50 @@ farcaster-miniapp/
 │   │       └── me/                 # User authentication endpoint
 │   │           └── route.ts        # Farcaster Quick Auth API
 │   ├── components/
-│   │   ├── ui/                     # Reusable UI components
-│   │   │   ├── Button.tsx          # Styled button component
-│   │   │   ├── Input.tsx           # Styled input component
-│   │   │   └── Tabs.tsx            # Tab navigation component
+│   │   ├── ui/                     # 43 UI components (ALL PascalCase - Critical for production!)
+│   │   │   ├── Accordion.tsx       # import from '@/components/ui/Accordion'
+│   │   │   ├── Alert.tsx           # import from '@/components/ui/Alert'
+│   │   │   ├── AlertDialog.tsx     # import from '@/components/ui/AlertDialog'
+│   │   │   ├── Avatar.tsx          # import from '@/components/ui/Avatar'
+│   │   │   ├── Badge.tsx           # import from '@/components/ui/Badge'
+│   │   │   ├── Breadcrumb.tsx      # import from '@/components/ui/Breadcrumb'
+│   │   │   ├── Button.tsx          # import from '@/components/ui/Button'
+│   │   │   ├── Card.tsx            # import from '@/components/ui/Card'
+│   │   │   ├── Checkbox.tsx        # import from '@/components/ui/Checkbox'
+│   │   │   ├── CheckboxGroup.tsx   # import from '@/components/ui/CheckboxGroup'
+│   │   │   ├── Collapsible.tsx     # import from '@/components/ui/Collapsible'
+│   │   │   ├── Combobox.tsx        # import from '@/components/ui/Combobox'
+│   │   │   ├── Dialog.tsx          # import from '@/components/ui/Dialog'
+│   │   │   ├── Field.tsx           # import from '@/components/ui/Field'
+│   │   │   ├── Fieldset.tsx        # import from '@/components/ui/Fieldset'
+│   │   │   ├── Form.tsx            # import from '@/components/ui/Form'
+│   │   │   ├── Frame.tsx           # import from '@/components/ui/Frame'
+│   │   │   ├── Group.tsx           # import from '@/components/ui/Group'
+│   │   │   ├── Input.tsx           # import from '@/components/ui/Input'
+│   │   │   ├── Label.tsx           # import from '@/components/ui/Label'
+│   │   │   ├── Menu.tsx            # import from '@/components/ui/Menu'
+│   │   │   ├── Meter.tsx           # import from '@/components/ui/Meter'
+│   │   │   ├── NumberField.tsx     # import from '@/components/ui/NumberField'
+│   │   │   ├── Pagination.tsx      # import from '@/components/ui/Pagination'
+│   │   │   ├── Popover.tsx         # import from '@/components/ui/Popover'
+│   │   │   ├── PreviewCard.tsx     # import from '@/components/ui/PreviewCard'
+│   │   │   ├── Progress.tsx        # import from '@/components/ui/Progress'
+│   │   │   ├── RadioGroup.tsx      # import from '@/components/ui/RadioGroup'
+│   │   │   ├── ScrollArea.tsx      # import from '@/components/ui/ScrollArea'
+│   │   │   ├── Select.tsx          # import from '@/components/ui/Select'
+│   │   │   ├── Separator.tsx       # import from '@/components/ui/Separator'
+│   │   │   ├── Sheet.tsx           # import from '@/components/ui/Sheet'
+│   │   │   ├── Skeleton.tsx        # import from '@/components/ui/Skeleton'
+│   │   │   ├── Slider.tsx          # import from '@/components/ui/Slider'
+│   │   │   ├── Switch.tsx          # import from '@/components/ui/Switch'
+│   │   │   ├── Table.tsx           # import from '@/components/ui/Table'
+│   │   │   ├── Tabs.tsx            # import from '@/components/ui/Tabs'
+│   │   │   ├── Textarea.tsx        # import from '@/components/ui/Textarea'
+│   │   │   ├── Toast.tsx           # import from '@/components/ui/Toast'
+│   │   │   ├── Toggle.tsx          # import from '@/components/ui/Toggle'
+│   │   │   ├── ToggleGroup.tsx     # import from '@/components/ui/ToggleGroup'
+│   │   │   ├── Toolbar.tsx         # import from '@/components/ui/Toolbar'
+│   │   │   └── Tooltip.tsx         # import from '@/components/ui/Tooltip'
 │   │   ├── auth/                   # Authentication components
 │   │   └── wallet/                 # Wallet integration
 │   │       └── ConnectWallet.tsx   # Wallet connection UI
@@ -166,7 +206,20 @@ const FARCASTER_BOILERPLATE_CONTEXT = {
   availableFeatures: {
     sdk: "@farcaster/miniapp-sdk",
     wallet: "@farcaster/miniapp-wagmi-connector",
-    ui: "Available UI components: Button, Input, ConnectWallet, Tabs",
+    ui: {
+      components: [
+        "Button", "Input", "Card", "Tabs", "Dialog", "Select", "Checkbox", "Switch",
+        "Alert", "Badge", "Tooltip", "Popover", "Sheet", "Slider", "Progress",
+        "Accordion", "Avatar", "Breadcrumb", "Combobox", "Separator", "Skeleton",
+        "Table", "Textarea", "Toggle", "Toolbar", "Menu", "RadioGroup", "Toast"
+      ],
+      importRule: "🚨 CRITICAL: ALWAYS use PascalCase imports - '@/components/ui/Button' NOT '@/components/ui/button'",
+      importExamples: {
+        correct: "import { Button } from '@/components/ui/Button'; // ✅ CORRECT - Capital B",
+        wrong: "import { Button } from '@/components/ui/button'; // ❌ WRONG - lowercase b causes production build failure"
+      },
+      note: "All component files use PascalCase (Button.tsx, Card.tsx, Input.tsx). Production builds on Linux are case-sensitive and will fail with lowercase imports."
+    },
     hooks: "useUser hook for unified user data",
     contracts:
       "Wagmi hooks: useReadContract, useWriteContract, useWaitForTransactionReceipt",
@@ -235,7 +288,20 @@ const WEB3_BOILERPLATE_CONTEXT = {
   availableFeatures: {
     wallets: "MetaMask, Coinbase Wallet (NO WalletConnect without Project ID)",
     chains: "Mainnet, Base, Base Sepolia, Optimism, Arbitrum, Polygon",
-    ui: "Button, Input, Tabs, ConnectWallet (RainbowKit)",
+    ui: {
+      components: [
+        "Button", "Input", "Card", "Tabs", "Dialog", "Select", "Checkbox", "Switch",
+        "Alert", "Badge", "Tooltip", "Popover", "Sheet", "Slider", "Progress",
+        "Accordion", "Avatar", "Breadcrumb", "Combobox", "Separator", "Skeleton",
+        "Table", "Textarea", "Toggle", "Toolbar", "Menu", "RadioGroup", "Toast"
+      ],
+      importRule: "🚨 CRITICAL: ALWAYS use PascalCase imports - '@/components/ui/Button' NOT '@/components/ui/button'",
+      importExamples: {
+        correct: "import { Button } from '@/components/ui/Button'; // ✅ CORRECT",
+        wrong: "import { Button } from '@/components/ui/button'; // ❌ WRONG - production build failure"
+      },
+      note: "All component files are PascalCase. Linux/Vercel is case-sensitive!"
+    },
     hooks: "useUser - wallet data ONLY (address, balance, ensName)",
     contracts: "useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useBalance",
   },
@@ -1085,6 +1151,13 @@ CODE GENERATION CORE RULES:
 - Mobile-first design (~375px width) with tab-based layout
 ${useUserExample}
 - Use Tabs component from @/components/ui/Tabs for navigation
+- 🚨 CRITICAL IMPORT RULE: ALWAYS use PascalCase for component imports:
+  ✅ CORRECT: import { Button } from '@/components/ui/Button';
+  ✅ CORRECT: import { Card, CardHeader } from '@/components/ui/Card';
+  ✅ CORRECT: import { Input } from '@/components/ui/Input';
+  ❌ WRONG: import { Button } from '@/components/ui/button'; // lowercase causes production build failure!
+  ❌ WRONG: import { Card } from '@/components/ui/card'; // Will fail on Linux/Vercel!
+  Note: Development may work but production (Linux) is case-sensitive and WILL FAIL with wrong case
 - Follow patch plan fields exactly (purpose, description, location, dependencies)
 - Include all required imports and implement contract interactions when specified
 - Prefer neutral colors with subtle accents, ensure good contrast and accessibility
