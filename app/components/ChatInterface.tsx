@@ -80,8 +80,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
     // Check if credits are disabled via environment variable
     const credsOff = process.env.NEXT_PUBLIC_CREDS_OFF === 'true';
     
-    // Check if user has enough credits (need 1 credit per message)
-    const hasEnoughCredits = balance ? parseInt(balance.credits) >= 1 : false; // Default to false if no balance data
+    // Check if user has enough credits (need 10 credit per message)
+    const hasEnoughCredits = balance ? parseInt(balance.credits) >= 10 : false; // Default to false if no balance data
     
     // Block chat if credits are enabled AND (no wallet OR insufficient credits)
     const shouldBlockChat = !credsOff && activeAgent && (!walletAddress || !hasEnoughCredits);
@@ -1253,7 +1253,7 @@ Please build this project with all the features and requirements discussed above
                                     <p className="font-normal text-xs">
                                         {!walletAddress 
                                             ? 'Please connect a wallet to start chatting.' 
-                                            : 'Insufficient credits. Please top up to continue chatting (1 credit per message).'}
+                                            : 'Insufficient credits. Please top up to continue chatting (10 credit per message).'}
                                     </p>
                                 </div>
                             </div>
