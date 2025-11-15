@@ -1,7 +1,7 @@
 "use client";
 import { logger } from "../../lib/logger";
 
-import { BatteryIcon, SignalHighIcon, WifiHighIcon } from "lucide-react";
+import { SignalHighIcon, WifiHighIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Icons } from "./sections/icons";
 import { TemplateSelector } from "./TemplateSelector";
