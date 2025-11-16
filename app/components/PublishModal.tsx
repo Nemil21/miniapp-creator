@@ -352,14 +352,15 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                                         <li><strong>homeUrl</strong>: Your app URL (use: <code className="bg-purple-100 px-1 rounded text-xs">{projectUrl || 'your-app-url'}</code>)</li>
                                                         <li><strong>subtitle</strong>: App subtitle</li>
                                                         <li><strong>description</strong>: Brief app description</li>
-                                                        <li><strong>splashImageUrl</strong>: Splash screen image</li>
-                                                        <li><strong>splashBackgroundColor</strong>: Background color (hex)</li>
+                                                        <li><strong>splashImageUrl</strong>: Splash screen image URL</li>
+                                                        <li><strong>splashBackgroundColor</strong>: Background color (hex-code) example: #ffffff for white</li>
                                                         <li><strong>primaryCategory</strong>: App category (e.g., games, social, etc.)</li>
                                                     </ul>
                                                 </li>
                                                 <li>Sign the manifest with your Farcaster account</li>
-                                                <li>Copy the complete JSON manifest</li>
+                                                <li>Copy the complete JSON manifest showing at the bottom of the farcaster manifest page</li>
                                                 <li>Paste it in the text area below</li>
+                                                <li>Click the Publish button to publish your changes</li>
                                             </ol>
                                         </div>
 
