@@ -1,6 +1,6 @@
 import { logger } from "../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
-import { saveChatMessage, createProject, migrateChatMessages } from "../../../lib/database";
+import { saveChatMessage, migrateChatMessages } from "../../../lib/database";
 import { authenticateRequest } from "../../../lib/auth";
 import { db, chatMessages } from "../../../db";
 import { eq } from "drizzle-orm";
@@ -13,19 +13,8 @@ interface ChatMessage {
   changedFiles?: string[];
 }
 
-interface ChatSession {
-  sessionId: string;
-  messages: ChatMessage[];
-  projectConfirmed: boolean;
-  finalRequirements?: {
-    features: string[];
-    functionality: string[];
-    targetAudience: string;
-    userFlow: string;
-  };
-}
+import { chatSessions } from "../../../lib/chatSessionManager";
 
-export const chatSessions = new Map<string, ChatSession>();
 const sessionToProjectMap = new Map<string, string>(); // Maps sessionId to projectId
 
 // Helper function to load chat messages from database and hydrate memory cache

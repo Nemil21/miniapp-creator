@@ -41,6 +41,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
     };
 
     // Validate manifest JSON
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const validateManifestJson = (jsonString: string): { valid: boolean; manifest?: unknown; error?: string } => {
         try {
             const parsed = JSON.parse(jsonString);

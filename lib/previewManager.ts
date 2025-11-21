@@ -617,7 +617,7 @@ export async function redeployToVercel(
         // Extract the actual error from deploymentError or error field
         actualError = errorJson.deploymentError || errorJson.error || errorText;
         logger.log(`📋 Extracted error from JSON response:`, actualError.substring(0, 300));
-      } catch (parseError) {
+      } catch {
         // If not JSON, use the text as-is
         logger.log(`⚠️ Could not parse error as JSON, using raw text`);
       }

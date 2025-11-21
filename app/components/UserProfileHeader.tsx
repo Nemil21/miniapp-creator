@@ -128,6 +128,7 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleDisconnectWallet = async () => {
     try {
       console.log('🔌 [Wallet] Starting disconnect process...');
@@ -139,10 +140,11 @@ export function UserProfileHeader({ onOpenSidebar }: UserProfileHeaderProps) {
         try {
           await wallet.disconnect();
           console.log('✅ [Wallet] Disconnect successful!');
-        } catch (disconnectError: any) {
+        } catch (disconnectError: unknown) {
           // MetaMask and some other wallets don't support programmatic disconnect
           // This is expected behavior for security reasons
-          if (disconnectError?.message?.includes('does not support programmatic disconnect')) {
+          const errorMessage = disconnectError instanceof Error ? disconnectError.message : '';
+          if (errorMessage.includes('does not support programmatic disconnect')) {
             console.log('ℹ️ [Wallet] Wallet requires manual disconnect from extension');
             // Still consider it a success from the app's perspective
           } else {

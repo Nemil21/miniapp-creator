@@ -240,7 +240,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
 
         loadChatMessages();
         // REMOVED currentPhase from dependencies to prevent reset loop during generation
-    }, [currentProject, sessionToken, chat.length, aiLoading, currentPhase, appType]);
+    }, [currentProject, sessionToken, chat.length, aiLoading, currentPhase, appType, chatProjectId]);
 
     // Helper function to get welcome message based on app type
     const getWelcomeMessage = (type: 'farcaster' | 'web3') => {
