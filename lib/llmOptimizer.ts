@@ -543,20 +543,24 @@ ${JSON.stringify(
       lint: "next lint",
     },
     dependencies: {
-      "@farcaster/miniapp-sdk": "^0.1.7",
-      "@farcaster/miniapp-wagmi-connector": "^1.0.0",
+      "@farcaster/miniapp-sdk": "^0.2.0",
+      "@farcaster/miniapp-wagmi-connector": "^1.1.0",
       "@farcaster/quick-auth": "^0.0.7",
-      "@rainbow-me/rainbowkit": "^2.0.0",
-      "@tanstack/react-query": "^5.83.0",
+      "@rainbow-me/rainbowkit": "^2.2.9",
+      "@react-native-async-storage/async-storage": "^1.23.1",
+      "@tanstack/react-query": "^5.90.8",
+      "@wagmi/connectors": "^6.1.4",
+      "@wagmi/core": "^2.22.1",
       "class-variance-authority": "^0.7.0",
       clsx: "^2.1.0",
-      ethers: "^6.11.0",
+      ethers: "^6.15.0",
       "lucide-react": "^0.525.0",
       next: "15.2.0",
       react: "^19.0.0",
       "react-dom": "^19.0.0",
-      viem: "^2.7.0",
-      wagmi: "^2.5.0",
+      "tailwind-merge": "^3.3.1",
+      viem: "^2.39.0",
+      wagmi: "^2.19.4",
     },
     devDependencies: {
       "@eslint/eslintrc": "^3",
@@ -566,6 +570,7 @@ ${JSON.stringify(
       "@types/react-dom": "^19",
       eslint: "^9",
       "eslint-config-next": "15.2.0",
+      "pino-pretty": "^10.0.0",
       tailwindcss: "^4",
       typescript: "^5",
     },
@@ -3086,13 +3091,8 @@ async function executeStage4InitialValidation(
   logger.log(`  - Current files: ${currentFiles.length}`);
   logger.log(`  - Project ID: ${projectId || 'None'}`);
 
-  // Skip Railway validation in production (causes 3+ min timeouts + memory failures)
-  if (process.env.NODE_ENV === 'production') {
-    logger.log("⚠️  Railway validation skipped in production - using local validation only");
-    // Jump directly to local validation
-  } else {
-    // Try Railway validation first (full validation) - development only
-    try {
+  // Try Railway validation first (full validation) - Re-enabled with Railway Pro
+  try {
     logger.log("\n🚂 Attempting Railway validation (full compilation)...");
     const railwayClient = createRailwayValidationClient();
     
@@ -3107,7 +3107,7 @@ async function executeStage4InitialValidation(
         {
           enableTypeScript: true,
           enableSolidity: true,
-          enableESLint: true,
+          enableESLint: false, // Disabled - ESLint is ignored in production builds (next.config.ts)
           enableBuild: true,
           enableRuntimeChecks: true
         },
@@ -3135,7 +3135,6 @@ async function executeStage4InitialValidation(
     }
   } catch (railwayError) {
     logger.warn("⚠️ Railway validation failed - falling back to local validation:", railwayError);
-  }
   }
 
   // Fallback to local validation (limited in serverless)
@@ -3218,7 +3217,7 @@ async function executeStage4FollowUpValidation(
         {
           enableTypeScript: true,
           enableSolidity: true,
-          enableESLint: true,
+          enableESLint: false, // Disabled - ESLint is ignored in production builds (next.config.ts)
           enableBuild: true,
           enableRuntimeChecks: true
         },

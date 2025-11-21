@@ -21,6 +21,16 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
     const [accountAssociationJson, setAccountAssociationJson] = useState('');
     const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
     
+    // Form fields for manifest
+    const [appName, setAppName] = useState('');
+    const [iconUrl, setIconUrl] = useState('');
+    const [homeUrl, setHomeUrl] = useState(projectUrl || '');
+    const [subtitle, setSubtitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [splashImageUrl, setSplashImageUrl] = useState('');
+    const [splashBackgroundColor, setSplashBackgroundColor] = useState('#ffffff');
+    const [primaryCategory, setPrimaryCategory] = useState('');
+    
     // Get authentication from context
     const { sessionToken, isAuthenticated } = useAuthContext();
 
@@ -132,19 +142,41 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         }
     };
 
-    // Handle publish with user-provided manifest
+    // Handle publish with form data
     const handlePublish = async () => {
         logger.log('handlePublish called with:', { projectId, projectUrl });
 
-        // Validate manifest JSON
-        if (!manifestJson.trim()) {
-            setError('Please paste your manifest JSON from Farcaster');
+        // Validate required form fields
+        if (!appName.trim()) {
+            setError('App name is required');
             return;
         }
-
-        const validation = validateManifestJson(manifestJson);
-        if (!validation.valid) {
-            setError(validation.error || 'Invalid manifest');
+        if (!iconUrl.trim()) {
+            setError('Icon URL is required');
+            return;
+        }
+        if (!homeUrl.trim()) {
+            setError('Home URL is required');
+            return;
+        }
+        if (!subtitle.trim()) {
+            setError('Subtitle is required');
+            return;
+        }
+        if (!description.trim()) {
+            setError('Description is required');
+            return;
+        }
+        if (!splashImageUrl.trim()) {
+            setError('Splash Image URL is required');
+            return;
+        }
+        if (!splashBackgroundColor.trim()) {
+            setError('Splash Background Color is required');
+            return;
+        }
+        if (!primaryCategory.trim()) {
+            setError('Primary Category is required');
             return;
         }
 
@@ -165,7 +197,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         setCurrentStep(2); // Move to publishing step
 
         try {
-            logger.log('📤 Sending manifest to API...');
+            logger.log('📤 Constructing and sending manifest to API...');
 
             // Check authentication
             if (!isAuthenticated || !sessionToken) {
@@ -175,6 +207,27 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
 
             logger.log('✅ Authentication verified');
 
+            // Construct manifest from form fields
+            const manifest: Record<string, unknown> = {
+                accountAssociation: null, // Will be added later in step 4
+                frame: {
+                    version: '1',
+                    name: appName.trim(),
+                    iconUrl: iconUrl.trim(),
+                    homeUrl: homeUrl.trim(),
+                    imageUrl: iconUrl.trim(), // Use iconUrl as imageUrl
+                    buttonTitle: 'Launch',
+                    subtitle: subtitle.trim(),
+                    description: description.trim(),
+                    splashImageUrl: splashImageUrl.trim(),
+                    splashBackgroundColor: splashBackgroundColor.trim(),
+                    primaryCategory: primaryCategory.trim(),
+                }
+            };
+
+            // Store manifest JSON for later use in account association step
+            setManifestJson(JSON.stringify(manifest, null, 2));
+
             const response = await fetch('/api/publish', {
                 method: 'POST',
                 headers: {
@@ -183,7 +236,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                 },
                 body: JSON.stringify({
                     projectId,
-                    manifest: validation.manifest
+                    manifest
                 })
             });
 
@@ -241,6 +294,14 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
         setAccountAssociationJson('');
         setVerificationSuccess(null);
         setIsLoading(false);
+        setAppName('');
+        setIconUrl('');
+        setHomeUrl(projectUrl || '');
+        setSubtitle('');
+        setDescription('');
+        setSplashImageUrl('');
+        setSplashBackgroundColor('#ffffff');
+        setPrimaryCategory('');
         onClose();
     };
 
@@ -256,10 +317,10 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             Publish to Farcaster Registry
                         </h2>
                         <p className="text-gray-600 mt-1">
-                            {currentStep === 1 && 'Register your app and paste the manifest'}
+                            {currentStep === 1 && 'Fill in your app details'}
                             {currentStep === 2 && 'Publishing your app...'}
                             {currentStep === 3 && 'Your app is published!'}
-                            {currentStep === 4 && 'Verify and troubleshoot your app'}
+                            {currentStep === 4 && 'Add account association'}
                         </p>
                     </div>
                     <button
@@ -298,17 +359,17 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                     </div>
                     <div className="flex items-center justify-center mt-2">
                         <span className="text-xs text-gray-600">
-                            {currentStep === 1 && 'Step 1: Register & Paste Manifest'}
+                            {currentStep === 1 && 'Step 1: App Details'}
                             {currentStep === 2 && 'Step 2: Publishing'}
                             {currentStep === 3 && 'Step 3: Complete'}
-                            {currentStep === 4 && 'Step 4: Verification & Troubleshooting'}
+                            {currentStep === 4 && 'Step 4: Account Association'}
                         </span>
                     </div>
                 </div>
 
                 {/* Content */}
                 <div className="p-6 overflow-y-auto max-h-[60vh]">
-                    {/* Step 1: Instructions and Manifest Input */}
+                    {/* Step 1: App Details Form */}
                     {currentStep === 1 && (
                         <div className="space-y-4">
                             {/* Authentication Warning */}
@@ -326,104 +387,178 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 </div>
                             )}
 
-                            {/* Instructions Section */}
+                            {/* Info Section */}
                             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                                 <div className="flex items-start gap-3">
-                                    <svg className="w-6 h-6 text-black mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-6 h-6 text-purple-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <div className="flex-1">
-                                        <h3 className="text-sm font-semibold text-black mb-2">
-                                            Register Your App on Farcaster
+                                        <h3 className="text-sm font-semibold text-purple-900 mb-2">
+                                            Fill in Your App Details
                                         </h3>
-                                        <p className="text-sm text-black mb-3">
-                                            Before publishing, you need to create and sign a manifest on the: <a href="https://farcaster.xyz/~/developers/mini-apps/manifest" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-700"> Farcaster registry</a>. This associates your app with your Farcaster account.
+                                        <p className="text-sm text-purple-900">
+                                            Enter your app information below. We&apos;ll create the farcaster.json manifest for you. After publishing, you&apos;ll need to add the account association from Farcaster to complete the setup.
                                         </p>
-                                        
-                                        <div className="space-y-2 text-sm text-black mb-3">
-                                            <p className="font-medium">Instructions:</p>
-                                            <ol className="list-decimal list-inside space-y-1 pl-2">
-                                                <li>Click the button below to open the Farcaster manifest creator</li>
-                                                 <li>Click on + New button</li>
-                                                <li>Fill in all required fields for your app:
-                                                    <ul className="list-disc list-inside pl-6 mt-1">
-                                                        <li><strong>name</strong>: Your app&apos;s name</li>
-                                                        <li><strong>iconUrl</strong>: App icon URL (512x512px recommended)</li>
-                                                        <li><strong>homeUrl</strong>: Your app URL (use: <code className="bg-purple-100 px-1 rounded text-xs">{projectUrl || 'your-app-url'}</code>)</li>
-                                                        <li><strong>subtitle</strong>: App subtitle</li>
-                                                        <li><strong>description</strong>: Brief app description</li>
-                                                        <li><strong>splashImageUrl</strong>: Splash screen image URL</li>
-                                                        <li><strong>splashBackgroundColor</strong>: Background color (hex-code) example: #ffffff for white</li>
-                                                        <li><strong>primaryCategory</strong>: App category (e.g., games, social, etc.)</li>
-                                                    </ul>
-                                                </li>
-                                                <li>Sign the manifest with your Farcaster account</li>
-                                                <li>Copy the complete JSON manifest showing at the bottom of the farcaster manifest page</li>
-                                                <li>Paste it in the text area below</li>
-                                                <li>Click the Publish button to publish your changes</li>
-                                            </ol>
-                                        </div>
-
-                                        <a
-                                            href="https://farcaster.xyz/~/developers/mini-apps/manifest"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                            </svg>
-                                            Create & Sign Manifest on Farcaster
-                                        </a>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Manifest Input */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Paste Your Signed Manifest JSON <span className="text-red-500">*</span>
-                                </label>
-                                <textarea
-                                    placeholder='{"frame": {...}, "accountAssociation": {...}}'
-                                    value={manifestJson}
-                                    onChange={(e) => {
-                                        setManifestJson(e.target.value);
-                                        setError(null); // Clear error on input
-                                    }}
-                                    rows={12}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black font-mono text-xs"
-                                    style={{ resize: 'vertical' }}
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Paste the complete manifest JSON you copied from the Farcaster registry site
-                                </p>
-                            </div>
+                            {/* Required Fields */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-900">Required Fields</h3>
+                                
+                                {/* App Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        App Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="My Awesome App"
+                                        value={appName}
+                                        onChange={(e) => {
+                                            setAppName(e.target.value);
+                                            setError(null);
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">The display name of your app</p>
+                                </div>
 
-                            {/* Your App URL Info */}
-                            {projectUrl && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                    <p className="text-xs text-blue-800">
-                                        <strong>💡 Tip:</strong> Use this URL as your <code className="bg-blue-100 px-1 rounded">homeUrl</code>:
+                                {/* Icon URL */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Icon URL <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://example.com/icon.png"
+                                        value={iconUrl}
+                                        onChange={(e) => {
+                                            setIconUrl(e.target.value);
+                                            setError(null);
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">App icon URL (512x512px recommended)</p>
+                                </div>
+
+                                {/* Home URL */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Home URL <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="url"
+                                        placeholder={projectUrl || "https://your-app.com"}
+                                        value={homeUrl}
+                                        onChange={(e) => {
+                                            setHomeUrl(e.target.value);
+                                            setError(null);
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Your app&apos;s URL {projectUrl && `(default: ${projectUrl})`}
                                     </p>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <code className="flex-1 text-xs text-blue-900 bg-blue-100 p-2 rounded break-all">
-                                            {projectUrl}
-                                        </code>
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(projectUrl);
-                                            }}
-                                            className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                                            title="Copy URL"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                            </svg>
-                                        </button>
-                                    </div>
                                 </div>
-                            )}
+                            </div>
+
+                            {/* Additional Required Fields */}
+                            <div className="space-y-4 pt-4 border-t border-gray-200">
+                                
+                                {/* Subtitle */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Subtitle <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="A brief tagline for your app"
+                                        value={subtitle}
+                                        onChange={(e) => setSubtitle(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Short tagline or subtitle</p>
+                                </div>
+
+                                {/* Description */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Description <span className="text-red-500">*</span>
+                                    </label>
+                                    <textarea
+                                        placeholder="Describe what your app does..."
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        rows={3}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Brief description of your app</p>
+                                </div>
+
+                                {/* Splash Image URL */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Splash Image URL <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://example.com/splash.png"
+                                        value={splashImageUrl}
+                                        onChange={(e) => setSplashImageUrl(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Splash screen image</p>
+                                </div>
+
+                                {/* Splash Background Color */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Splash Background Color <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="color"
+                                            value={splashBackgroundColor}
+                                            onChange={(e) => setSplashBackgroundColor(e.target.value)}
+                                            className="h-10 w-16 border border-gray-300 rounded-lg cursor-pointer"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="#ffffff"
+                                            value={splashBackgroundColor}
+                                            onChange={(e) => setSplashBackgroundColor(e.target.value)}
+                                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">Background color for splash screen (hex code)</p>
+                                </div>
+
+                                {/* Primary Category */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Primary Category <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        value={primaryCategory}
+                                        onChange={(e) => setPrimaryCategory(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-black"
+                                    >
+                                        <option value="">Select a category...</option>
+                                        <option value="games">Games</option>
+                                        <option value="social">Social</option>
+                                        <option value="defi">DeFi</option>
+                                        <option value="nft">NFT</option>
+                                        <option value="utility">Utility</option>
+                                        <option value="entertainment">Entertainment</option>
+                                        <option value="productivity">Productivity</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                    <p className="text-xs text-gray-500 mt-1">App category for discovery</p>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -477,15 +612,28 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 </div>
                             )}
 
-                            <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4 w-full">
-                                <p className="text-sm text-green-800 mb-3">
-                                    <strong>✅ What&apos;s next?</strong>
+                            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 w-full">
+                                <p className="text-sm text-blue-800 mb-3">
+                                    <strong>📝 Important: Add Account Association</strong>
                                 </p>
-                                <ul className="text-sm text-green-800 space-y-2 list-disc list-inside">
-                                    <li>Your manifest is now hosted at <code className="bg-green-100 px-1 rounded">/.well-known/farcaster.json</code></li>
-                                    <li>Your app is associated with your Farcaster account</li>
-                                    <li>Users can discover and add your mini app on Farcaster</li>
-                                    <li>Share your app URL to let users try it!</li>
+                                <p className="text-sm text-blue-800 mb-3">
+                                    Your manifest has been deployed, but you need to add the account association to link it with your Farcaster account. This is required for your app to be discoverable on Farcaster.
+                                </p>
+                                <button
+                                    onClick={() => setCurrentStep(4)}
+                                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                >
+                                    Add Account Association →
+                                </button>
+                            </div>
+
+                            <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 w-full">
+                                <p className="text-sm text-gray-700 mb-2">
+                                    <strong>✅ What&apos;s been done:</strong>
+                                </p>
+                                <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                                    <li>Manifest created with your app details</li>
+                                    <li>Deployed to <code className="bg-gray-200 px-1 rounded">/.well-known/farcaster.json</code></li>
                                 </ul>
                             </div>
                         </div>
@@ -500,12 +648,11 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </div>
-                                <h3 className="text-2xl font-semibold text-black mb-2">Verification & Troubleshooting</h3>
+                                <h3 className="text-2xl font-semibold text-black mb-2">Add Account Association</h3>
                                 <p className="text-gray-600 text-center mb-6">
-                                    Verify your app registration and fix any issues
+                                    Generate and paste your Farcaster account association to complete setup
                                 </p>
                             </div>
-
                             {error && (
                                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                                     <p className="text-sm text-red-800">{error}</p>
@@ -517,8 +664,33 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     <p className="text-sm text-green-800">{verificationSuccess}</p>
                                 </div>
                             )}
+                            {/* Domain Display for Verification */}
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Your Domain
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <code className="flex-1 text-sm text-gray-800 bg-white p-2 rounded border border-gray-300 break-all">
+                                        {getDomain() || 'your-domain.com'}
+                                    </code>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(getDomain());
+                                        }}
+                                        className="p-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                                        title="Copy domain"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Use this domain to verify your app on Farcaster
+                                </p>
+                            </div>
 
-                            {/* Verification Instructions */}
+                            {/* Account Association Instructions */}
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                 <div className="flex items-start gap-3">
                                     <svg className="w-6 h-6 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -526,39 +698,14 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                     </svg>
                                     <div className="flex-1">
                                         <h3 className="text-sm font-semibold text-blue-900 mb-2">
-                                            Verify Your App Registration
+                                            Generate Your Account Association
                                         </h3>
-                                        <p className="text-sm text-blue-900 mb-3">
-                                            Check if your app is properly associated with your Farcaster account by visiting the{' '}
-                                            <a 
-                                                href="https://farcaster.xyz/~/developers/mini-apps/manifest" 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 hover:text-blue-700 underline font-medium"
-                                            >
-                                                Farcaster manifest page
-                                            </a>.
-                                        </p>
-                                        
-                                        <div className="space-y-2 text-sm text-blue-900 mb-3">
-                                            <p className="font-medium">Steps to verify:</p>
-                                            <ol className="list-decimal list-inside space-y-1 pl-2">
-                                                <li>Go to the <a href="https://farcaster.xyz/~/developers/mini-apps/manifest" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 underline">Farcaster manifest page</a></li>
-                                                <li>Enter your domain in the verification field:
-                                                    <div className="mt-2 bg-blue-100 p-2 rounded border border-blue-300">
-                                                        <code className="text-sm text-blue-900 font-mono break-all">
-                                                            {getDomain() || 'your-domain.com'}
-                                                        </code>
-                                                    </div>
-                                                </li>
-                                                <li className="mt-2">Check the result:
-                                                    <ul className="list-disc list-inside pl-6 mt-1 space-y-1">
-                                                        <li><strong>If you see:</strong> &quot;Associated with your account&quot; - ✅ Everything is working! You&apos;re all set.</li>
-                                                        <li><strong>If you see:</strong> &quot;Account association not found&quot; - Follow the troubleshooting steps below.</li>
-                                                    </ul>
-                                                </li>
-                                            </ol>
-                                        </div>
+                                        <ol className="list-decimal list-inside space-y-1 pl-2 text-sm text-blue-900 mb-3">
+                                            <li>Click the button below to open the Farcaster manifest page</li>
+                                            <li>Click <strong>Generate account association</strong> and sign</li>
+                                            <li>Copy the entire <code className="bg-blue-100 px-1 rounded">accountAssociation</code> JSON object</li>
+                                            <li>Paste it below and click <strong>Update Account Association</strong></li>
+                                        </ol>
 
                                         <a
                                             href="https://farcaster.xyz/~/developers/mini-apps/manifest"
@@ -571,37 +718,9 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                             </svg>
                                             Verify on Farcaster
                                         </a>
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Troubleshooting Section */}
-                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <svg className="w-6 h-6 text-orange-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                    </svg>
-                                    <div className="flex-1">
-                                        <h3 className="text-sm font-semibold text-orange-900 mb-2">
-                                            Troubleshooting: Account Association Not Found
-                                        </h3>
-                                        <p className="text-sm text-orange-900 mb-3">
-                                            If the verification shows &quot;Account association not found&quot;, you need to update your account association. This happens occasionally and is easy to fix.
-                                        </p>
-                                        
-                                        <div className="space-y-2 text-sm text-orange-900 mb-3">
-                                            <p className="font-medium">How to fix:</p>
-                                            <ol className="list-decimal list-inside space-y-1 pl-2">
-                                                <li>On the Farcaster manifest page, Click on generate account association button.</li>
-                                                <li> Scan and verify, after which you&apos;ll see an <code className="bg-orange-100 px-1 rounded">&quot;accountAssociation&quot;</code> object.</li>
-                                                <li>Copy the entire <code className="bg-orange-100 px-1 rounded">accountAssociation</code> JSON (including the curly braces)</li>
-                                                <li>Paste it in the text box below</li>
-                                                <li>Click &quot;Update Account Association&quot;</li>
-                                            </ol>
-                                        </div>
-
-                                        <div className="mt-3">
-                                            <label className="block text-sm font-medium text-orange-900 mb-2">
+                                        <div className="mt-4">
+                                            <label className="block text-sm font-medium text-blue-900 mb-2">
                                                 Paste Account Association JSON <span className="text-red-500">*</span>
                                             </label>
                                             <textarea
@@ -613,18 +732,18 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                                     setVerificationSuccess(null);
                                                 }}
                                                 rows={6}
-                                                className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-black font-mono text-xs bg-white"
+                                                className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black font-mono text-xs bg-white"
                                                 style={{ resize: 'vertical' }}
                                             />
-                                            <p className="text-xs text-orange-700 mt-1">
+                                            <p className="text-xs text-blue-700 mt-1">
                                                 Copy and paste just the accountAssociation object from the Farcaster manifest page
                                             </p>
                                             
                                             <button
                                                 onClick={handleUpdateAccountAssociation}
                                                 disabled={isLoading || !accountAssociationJson.trim()}
-                                                className={`mt-3 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium transition-colors ${
-                                                    isLoading || !accountAssociationJson.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-700 cursor-pointer'
+                                                className={`mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium transition-colors ${
+                                                    isLoading || !accountAssociationJson.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700 cursor-pointer'
                                                 }`}
                                             >
                                                 {isLoading ? 'Updating...' : 'Update Account Association'}
@@ -634,12 +753,6 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 </div>
                             </div>
 
-                            {/* Info Note */}
-                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                <p className="text-xs text-gray-600">
-                                    <strong>ℹ️ Note:</strong> Most users won&apos;t need to use the troubleshooting section. If you see &quot;Associated with your account&quot; when you verify, everything is working perfectly and you can close this dialog!
-                                </p>
-                            </div>
                         </div>
                     )}
                 </div>
@@ -656,11 +769,46 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                             </button>
                             <button
                                 onClick={handlePublish}
-                                disabled={isLoading || !isAuthenticated || !manifestJson.trim()}
+                                disabled={
+                                    isLoading ||
+                                    !isAuthenticated ||
+                                    !appName.trim() ||
+                                    !iconUrl.trim() ||
+                                    !homeUrl.trim() ||
+                                    !subtitle.trim() ||
+                                    !description.trim() ||
+                                    !splashImageUrl.trim() ||
+                                    !splashBackgroundColor.trim() ||
+                                    !primaryCategory.trim()
+                                }
                                 className={`px-6 py-2 bg-black text-white rounded-lg font-medium transition-colors ${
-                                    isLoading || !isAuthenticated || !manifestJson.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'
+                                    isLoading ||
+                                    !isAuthenticated ||
+                                    !appName.trim() ||
+                                    !iconUrl.trim() ||
+                                    !homeUrl.trim() ||
+                                    !subtitle.trim() ||
+                                    !description.trim() ||
+                                    !splashImageUrl.trim() ||
+                                    !splashBackgroundColor.trim() ||
+                                    !primaryCategory.trim()
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:bg-gray-800 cursor-pointer'
                                 }`}
-                                title={!isAuthenticated ? 'Please sign in first' : !manifestJson.trim() ? 'Please paste your manifest' : 'Publish to Farcaster'}
+                                title={
+                                    !isAuthenticated
+                                        ? 'Please sign in first'
+                                        : (!appName.trim() ||
+                                           !iconUrl.trim() ||
+                                           !homeUrl.trim() ||
+                                           !subtitle.trim() ||
+                                           !description.trim() ||
+                                           !splashImageUrl.trim() ||
+                                           !splashBackgroundColor.trim() ||
+                                           !primaryCategory.trim())
+                                            ? 'Please fill in all required fields'
+                                            : 'Publish to Farcaster'
+                                }
                             >
                                 {!isAuthenticated ? 'Sign In Required' : 'Publish'}
                             </button>
@@ -677,7 +825,7 @@ export function PublishModal({ isOpen, onClose, projectUrl, projectId }: Publish
                                 onClick={() => setCurrentStep(4)}
                                 className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors cursor-pointer"
                             >
-                                Verify & Troubleshoot
+                                Add Account Association
                             </button>
                             <button
                                 onClick={handleClose}

@@ -617,6 +617,7 @@ async function executeInitialGenerationJob(
 
     logger.log(`🔧 Processing job for user: ${user.email || user.id}`);
     logger.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
+    logger.log(`💬 Conversation History in context: ${context.conversationHistory?.length || 0} messages`);
 
     // Extract user request
     const lines = prompt.split("\n");
@@ -1027,6 +1028,18 @@ async function executeInitialGenerationJob(
     let project = await getProjectById(projectId);
 
     if (!project) {
+      // IMPORTANT: Save conversation history BEFORE creating project
+      // This ensures messages are available immediately when project loads
+      let conversationMessages: Array<{ role: 'user' | 'ai'; content: string; phase?: string }> = [];
+      if (context.conversationHistory && context.conversationHistory.length > 0) {
+        logger.log(`📝 Preparing ${context.conversationHistory.length} messages for project ${projectId}`);
+        conversationMessages = context.conversationHistory.map(msg => ({
+          role: msg.role as 'user' | 'ai',
+          content: msg.content,
+          phase: msg.phase
+        }));
+      }
+      
       // Create new project
       project = await createProject(
         user.id,
@@ -1037,6 +1050,34 @@ async function executeInitialGenerationJob(
         appType // Pass appType from the generation job
       );
       logger.log(`✅ Project created in database with appType: ${appType}`);
+      
+      // Save conversation history immediately after project creation
+      // This must complete BEFORE we continue to ensure messages are in database
+      if (conversationMessages.length > 0) {
+        try {
+          logger.log(`💾 Saving ${conversationMessages.length} messages to project ${projectId} (BLOCKING)`);
+          const { saveChatMessage } = await import('./database');
+          
+          // Save all messages sequentially to ensure order
+          for (const msg of conversationMessages) {
+            await saveChatMessage(
+              projectId,
+              msg.role,
+              msg.content,
+              msg.phase,
+              undefined  // changedFiles not in history
+            );
+          }
+          
+          logger.log(`✅ All ${conversationMessages.length} conversation messages saved to database`);
+        } catch (error) {
+          logger.error('❌ CRITICAL: Failed to save conversation history:', error);
+          // This IS critical - messages must be saved
+          throw new Error(`Failed to save conversation history: ${error}`);
+        }
+      } else {
+        logger.log(`ℹ️ No conversation history to save`);
+      }
     } else {
       logger.log("ℹ️ Project already exists in database, updating files");
     }
@@ -1326,6 +1367,9 @@ async function executeFollowUpJob(
   const isWeb3 = hasContracts; // Whether contracts exist (for potential deployment)
 
   // Redeploy to Vercel with updated files
+  let deploymentFailed = false;
+  let deploymentError = '';
+  
   try {
     logger.log("\n" + "=".repeat(60));
     logger.log("🚀 REDEPLOYING TO VERCEL");
@@ -1362,13 +1406,16 @@ async function executeFollowUpJob(
       logger.log(`✅ Project deployment URL confirmed: ${previewData.vercelUrl}`);
     }
   } catch (deployError) {
+    deploymentFailed = true;
+    deploymentError = deployError instanceof Error ? deployError.message : String(deployError);
     logger.error("❌ Vercel deployment failed:", deployError);
-    // Don't fail the entire job - files are already saved to database
+    logger.error("❌ Deployment error message:", deploymentError);
     logger.warn("⚠️ Files are saved to database, but Vercel deployment failed");
+    logger.warn("⚠️ Job will be marked as FAILED due to deployment error");
   }
 
-  // Store patch for rollback (if diffs available)
-  if (hasDiffs && diffCount > 0) {
+  // Store patch for rollback (if diffs available and deployment succeeded)
+  if (!deploymentFailed && hasDiffs && diffCount > 0) {
     try {
       const resultWithDiffs = result as unknown as { diffs: Array<{ filename: string }> };
       logger.log(`📦 Storing patch with ${diffCount} diffs for rollback`);
@@ -1389,7 +1436,33 @@ async function executeFollowUpJob(
     }
   }
 
-  // Update job status to completed
+  // If deployment failed, mark job as failed
+  if (deploymentFailed) {
+    logger.error("❌ Marking follow-up job as FAILED due to deployment error");
+    
+    const errorResult = {
+      success: false,
+      projectId,
+      deploymentError,
+      deploymentFailed: true,
+      status: 'deployment_failed',
+      files: result.files.map(f => ({ filename: f.filename })),
+      diffs: hasDiffs ? (result as { diffs: unknown[] }).diffs : [],
+    };
+    
+    try {
+      await updateGenerationJobStatus(jobId, "failed", errorResult, deploymentError);
+      logger.log(`✅ Follow-up job ${jobId} marked as FAILED in database`);
+    } catch (updateError) {
+      logger.error(`❌ Failed to update job status to failed:`, updateError);
+      throw updateError;
+    }
+    
+    // Throw error to prevent any "success" messaging
+    throw new Error(`Deployment failed: ${deploymentError}`);
+  }
+
+  // Deployment succeeded - update job status to completed
   const changedFilenames = result.files.map(f => f.filename);
   const jobResult = {
     success: true,

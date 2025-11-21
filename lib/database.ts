@@ -7,6 +7,8 @@ export interface GenerationJobContext {
   prompt: string;
   existingProjectId?: string;
   useMultiStage?: boolean;
+  sessionId?: string;          // Session ID for transferring in-memory messages
+  conversationHistory?: Array<{ role: string; content: string; phase?: string; timestamp?: number }>;  // Full conversation history
   // Follow-up edit specific fields
   isFollowUp?: boolean;        // Flag to identify follow-up edits vs initial generation
   useDiffBased?: boolean;      // Whether to use diff-based pipeline

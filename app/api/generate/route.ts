@@ -554,7 +554,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const { prompt, useMultiStage = true, projectId: existingProjectId, appType = 'farcaster' } = await request.json();
+      const { prompt, useMultiStage = true, projectId: existingProjectId, sessionId, conversationHistory, appType = 'farcaster' } = await request.json();
 
       if (!prompt) {
         return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
@@ -563,6 +563,8 @@ export async function POST(request: NextRequest) {
       logger.log(`📝 Creating generation job for user: ${user.email || user.id}`);
       logger.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
       logger.log(`🎯 App Type: ${appType}`);
+      logger.log(`🔑 Session ID: ${sessionId || 'none'}`);
+      logger.log(`💬 Conversation History: ${conversationHistory?.length || 0} messages`);
 
       // Create job in database
       const job = await createGenerationJob(
@@ -572,6 +574,8 @@ export async function POST(request: NextRequest) {
           prompt,
           existingProjectId,
           useMultiStage,
+          sessionId,  // Pass session ID for message transfer
+          conversationHistory,  // Pass full conversation history
         },
         existingProjectId,
         appType  // Pass app type to determine which boilerplate to use

@@ -54,7 +54,7 @@ export interface ValidationConfig {
 const DEFAULT_CONFIG: ValidationConfig = {
   enableTypeScript: true,
   enableSolidity: true,
-  enableESLint: true,
+  enableESLint: false, // Disabled - ESLint is ignored in production builds (next.config.ts)
   enableBuild: true,
   enableRuntimeChecks: true,
   timeoutMs: 120000, // 2 minutes

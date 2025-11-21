@@ -25,7 +25,7 @@ interface ChatSession {
   };
 }
 
-const chatSessions = new Map<string, ChatSession>();
+export const chatSessions = new Map<string, ChatSession>();
 const sessionToProjectMap = new Map<string, string>(); // Maps sessionId to projectId
 
 // Helper function to load chat messages from database and hydrate memory cache
@@ -57,10 +57,15 @@ async function saveMessageToDBAndCache(
   changedFiles?: string[]
 ): Promise<void> {
   try {
-    // Save to database
-    await saveChatMessage(projectId, role, content, phase, changedFiles);
+    // Skip database save for temporary sessions (no draft project yet)
+    if (!projectId.startsWith('temp-')) {
+      // Save to database only for real projects
+      await saveChatMessage(projectId, role, content, phase, changedFiles);
+    } else {
+      logger.log(`💭 Message stored in memory only (no project yet): ${role}`);
+    }
     
-    // Update memory cache
+    // Always update memory cache
     const session = chatSessions.get(projectId);
     if (session) {
       session.messages.push({
@@ -275,60 +280,103 @@ export async function POST(request: NextRequest) {
     // If no projectId provided, we need to create one for this chat session
     if (!currentProjectId) {
       // Check if this session already has a project mapped (in-memory)
-      currentProjectId = sessionToProjectMap.get(sessionId);
+      const mappedProjectId = sessionToProjectMap.get(sessionId);
       
-      // If not in memory, check database for existing draft projects from this user
+      // If we have a mapped project, verify it's still valid (not completed)
+      if (mappedProjectId) {
+        try {
+          const projectMessages = await db.select().from(chatMessages)
+            .where(eq(chatMessages.projectId, mappedProjectId))
+            .orderBy(chatMessages.timestamp);
+          
+          const hasCompletionMessage = projectMessages.some(msg => 
+            msg.content.includes('Your miniapp has been created') || 
+            msg.content.includes('files generated') ||
+            msg.content.includes('I\'ve generated') ||
+            msg.phase === 'editing'
+          );
+          
+          if (hasCompletionMessage) {
+            logger.log(`🚫 Clearing stale mapping for session ${sessionId} - project ${mappedProjectId} is completed`);
+            sessionToProjectMap.delete(sessionId);
+          } else {
+            currentProjectId = mappedProjectId;
+            logger.log(`✅ Using mapped project ${mappedProjectId} for session ${sessionId}`);
+          }
+        } catch (error) {
+          logger.warn(`Failed to verify mapped project ${mappedProjectId}:`, error);
+          // On error, clear the mapping to be safe
+          sessionToProjectMap.delete(sessionId);
+        }
+      }
+      
+      // If not in memory (or mapping was invalid), check database for existing draft projects
+      // ONLY if this is truly a continuation (recent messages in the last 5 minutes)
       if (!currentProjectId) {
         try {
           const { getProjectsByUserId } = await import('../../../lib/database');
           const userProjects = await getProjectsByUserId(user.id);
           
-          // Look for recent draft project (created in last 24 hours, no deployment URL)
-          const recentDraft = userProjects.find((p: { 
-            vercelUrl: string | null; 
-            previewUrl: string | null; 
-            createdAt: Date | string;
-            name: string;
-          }) => {
-            if (p.vercelUrl || p.previewUrl) return false; // Skip deployed projects
-            const projectAge = Date.now() - new Date(p.createdAt).getTime();
-            const isRecent = projectAge < 24 * 60 * 60 * 1000; // Within 24 hours
-            const isDraft = p.name.startsWith('Chat Project');
-            logger.log(`Checking project: ${p.name}, age: ${projectAge}ms, isRecent: ${isRecent}, isDraft: ${isDraft}`);
-            return isRecent && isDraft;
-          });
+          // Look for VERY recent draft project that's actively being used
+          // Changed from 24 hours to 5 minutes to prevent cross-chat contamination
+          const recentDraft = await (async () => {
+            for (const p of userProjects) {
+              if (p.vercelUrl || p.previewUrl) continue; // Skip deployed projects
+              
+              // Use updatedAt (last message time) instead of createdAt for better accuracy
+              const timeSinceLastUpdate = Date.now() - new Date(p.updatedAt || p.createdAt).getTime();
+              const isActivelyUsed = timeSinceLastUpdate < 5 * 60 * 1000; // Within 5 minutes
+              const isDraft = p.name.startsWith('Chat Project');
+              
+              if (!isActivelyUsed || !isDraft) continue;
+              
+              // Additional check: Don't reuse projects that have completion messages
+              // This prevents reusing finished projects even if they're recent
+              try {
+                const projectMessages = await db.select().from(chatMessages)
+                  .where(eq(chatMessages.projectId, p.id))
+                  .orderBy(chatMessages.timestamp);
+                
+                const hasCompletionMessage = projectMessages.some(msg => 
+                  msg.content.includes('Your miniapp has been created') || 
+                  msg.content.includes('files generated') ||
+                  msg.content.includes('I\'ve generated') ||
+                  msg.phase === 'editing'
+                );
+                
+                if (hasCompletionMessage) {
+                  logger.log(`🚫 Skipping project ${p.id} - has completion messages (finished project)`);
+                  continue;
+                }
+                
+                logger.log(`✅ Found active draft project: ${p.name}, id: ${p.id}, timeSinceUpdate: ${timeSinceLastUpdate}ms`);
+                return p;
+              } catch (error) {
+                logger.warn(`Failed to check messages for project ${p.id}:`, error);
+                continue;
+              }
+            }
+            return null;
+          })();
           
           if (recentDraft) {
             currentProjectId = recentDraft.id;
             sessionToProjectMap.set(sessionId, currentProjectId);
-            logger.log(`📎 Resuming existing draft project ${currentProjectId} for session ${sessionId}`);
+            logger.log(`📎 Resuming ACTIVE draft project ${currentProjectId} for session ${sessionId} (last updated within 5 min)`);
+          } else {
+            logger.log(`🚫 No active draft found - will create new project for fresh chat`);
           }
         } catch (error) {
           logger.warn("Failed to check for existing draft projects:", error);
         }
       }
       
-      // If still no project, create one
+      // NO DRAFT PROJECTS - Messages stay in memory until user confirms building
+      // Project will be created during the generation phase with proper name
       if (!currentProjectId) {
-        try {
-          const draftProject = await createProject(
-            user.id,
-            `Chat Project ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-            "Chat conversation project",
-            undefined,
-            undefined,
-            appType // Use the user's selected app type (defaults to 'farcaster' from line 191)
-          );
-          currentProjectId = draftProject.id;
-          sessionToProjectMap.set(sessionId, currentProjectId);
-          logger.log(`🆕 Created new project ${currentProjectId} for session ${sessionId} with appType: ${appType}`);
-        } catch (error) {
-          logger.warn("Failed to create project:", error);
-          return NextResponse.json(
-            { error: "Failed to create project for chat" },
-            { status: 500 }
-          );
-        }
+        logger.log(`💬 No project yet - messages will be stored in memory until building phase`);
+        // Use sessionId as temporary identifier for in-memory messages
+        currentProjectId = `temp-${sessionId}`;
       }
     } else {
       logger.log(`📌 Using provided projectId: ${currentProjectId}`);
@@ -448,6 +496,27 @@ export async function POST(request: NextRequest) {
         aiResponse, 
         action === "confirm_project" ? "building" : "requirements"
       );
+
+      // Update project name from AI response if this is the first AI response
+      // This replaces generic "Chat Project Nov 21" with actual project name
+      if (session.messages.filter(m => m.role === 'ai').length === 0) {
+        try {
+          // Extract project name from AI response (look for quoted names or "App Concept:" patterns)
+          const nameMatch = aiResponse.match(/["']([^"']{5,50})["']|App Concept:\s*["']?([^"\n]{5,50})["']?/i);
+          if (nameMatch) {
+            const extractedName = (nameMatch[1] || nameMatch[2]).trim();
+            const { updateProject } = await import('../../../lib/database');
+            await updateProject(currentProjectId, { 
+              name: extractedName,
+              description: message.substring(0, 200)
+            });
+            logger.log(`✏️ Updated project name to: ${extractedName}`);
+          }
+        } catch (error) {
+          logger.warn('Failed to extract/update project name:', error);
+          // Non-critical - continue
+        }
+      }
 
       // Capture credits after successful operation
       if (creditEventId) {

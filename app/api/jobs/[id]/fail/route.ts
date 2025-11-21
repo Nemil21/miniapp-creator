@@ -27,9 +27,14 @@ export async function POST(
     const body = await request.json();
     const { error, logs, deploymentError } = body;
 
+    logger.log(`\n${'='.repeat(80)}`);
     logger.log(`🔄 Retroactively marking job ${jobId} as failed`);
-    logger.log(`   Error: ${error?.substring(0, 200) || 'No error message'}`);
-    logger.log(`   Logs: ${logs ? `${logs.length} chars` : 'No logs'}`);
+    logger.log(`${'='.repeat(80)}`);
+    logger.log(`📝 Received error data:`);
+    logger.log(`   - error: ${error?.substring(0, 300) || 'No error message'}`);
+    logger.log(`   - deploymentError: ${deploymentError?.substring(0, 300) || 'No deployment error'}`);
+    logger.log(`   - logs length: ${logs ? `${logs.length} chars` : 'No logs'}`);
+    logger.log(`   - logs preview: ${logs ? logs.substring(0, 200) : 'none'}`);
 
     // Create error details object
     const errorDetails = {
@@ -39,6 +44,9 @@ export async function POST(
       failedAt: new Date().toISOString()
     };
 
+    logger.log(`\n📦 Error details object to save:`);
+    logger.log(JSON.stringify(errorDetails, null, 2));
+
     // Update job status to failed
     await updateGenerationJobStatus(
       jobId,
@@ -47,7 +55,11 @@ export async function POST(
       deploymentError || error || 'Background deployment failed'
     );
 
-    logger.log(`✅ Job ${jobId} marked as failed in database`);
+    logger.log(`\n✅ Job ${jobId} marked as failed in database`);
+    logger.log(`   - Status: failed`);
+    logger.log(`   - Error field: ${deploymentError || error || 'Background deployment failed'}`);
+    logger.log(`   - Result object includes deploymentError: ${!!errorDetails.deploymentError}`);
+    logger.log(`${'='.repeat(80)}\n`);
 
     return NextResponse.json({
       success: true,

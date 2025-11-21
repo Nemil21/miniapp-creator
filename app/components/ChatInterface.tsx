@@ -167,12 +167,27 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             }
 
             if (currentProject?.projectId && sessionToken) {
-                // Set phase to 'editing' when an existing project is loaded
-                if (currentPhase !== 'editing') {
-                    logger.log('🔍 Setting phase to editing for existing project:', currentProject.projectId);
-                    setCurrentPhase('editing');
+                // Sync chatProjectId with the loaded project to ensure consistency
+                if (chatProjectId !== currentProject.projectId) {
+                    setChatProjectId(currentProject.projectId);
+                    logger.log('🔄 Synced chatProjectId with current project:', currentProject.projectId);
+                }
+                
+                // Only set phase to 'editing' if the project has been built (has files)
+                // Draft projects without files should stay in requirements/building phase
+                const hasFiles = currentProject.generatedFiles && currentProject.generatedFiles.length > 0;
+                const isDeployed = currentProject.vercelUrl || currentProject.previewUrl;
+                
+                if (hasFiles || isDeployed) {
+                    if (currentPhase !== 'editing') {
+                        logger.log('🔍 Setting phase to editing for existing project with files:', currentProject.projectId);
+                        setCurrentPhase('editing');
+                    } else {
+                        logger.log('🔍 Phase already set to editing, skipping');
+                    }
                 } else {
-                    logger.log('🔍 Phase already set to editing, skipping');
+                    logger.log('🔍 Project exists but has no files - keeping in requirements/building phase');
+                    // Don't change phase - let it stay in requirements or building
                 }
 
                 try {
@@ -197,11 +212,19 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 } catch (error) {
                     logger.warn('Failed to load chat messages:', error);
                 }
+            } else if (!currentProject && chatProjectId) {
+                // Clear chatProjectId whenever there's no current project
+                // This prevents messages from being saved to the wrong project
+                logger.log('🔄 No current project - clearing stale chatProjectId:', chatProjectId);
+                setChatProjectId('');
             } else if (!currentProject && currentPhase === 'editing') {
                 // Only reset phase if we're in editing mode and project is cleared
                 // Don't reset during building phase to avoid interrupting generation
                 logger.log('🔄 Project cleared, resetting phase to requirements');
                 setCurrentPhase('requirements');
+                // Clear chatProjectId to prevent messages from being saved to the old project
+                setChatProjectId('');
+                logger.log('🔄 Cleared chatProjectId to start fresh');
             }
 
             // Add welcome message when no project or no messages
@@ -385,23 +408,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 logger.log('🔄 Directly applying changes to existing project...');
 
                 try {
-                    // Save user message to database first
-                    if (currentProject?.projectId) {
-                        try {
-                            await fetch(`/api/projects/${currentProject.projectId}/chat`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-                                body: JSON.stringify({
-                                    role: 'user',
-                                    content: userMessage,
-                                    phase: 'editing'
-                                })
-                            });
-                            logger.log('💾 User message saved to database');
-                        } catch (error) {
-                            logger.warn('Failed to save user message to database:', error);
-                        }
-                    }
+                    // User message already saved at line 344-363, no need to save again
 
                     // Add processing message
                     const processingMessage = {
@@ -442,8 +449,15 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                         });
 
                         // Poll for job completion
-                        const result = await pollJobStatus(jobData.jobId);
-                        logger.log('✅ Edit job completed:', result);
+                        let result;
+                        try {
+                            result = await pollJobStatus(jobData.jobId);
+                            logger.log('✅ Edit job completed:', result);
+                        } catch (pollError) {
+                            // Job failed - error message already extracted in pollJobStatus
+                            logger.error('❌ Edit job failed during polling:', pollError);
+                            throw pollError; // Re-throw to be caught by outer catch
+                        }
 
                         // Update project with new URLs and timestamp to trigger iframe refresh
                         if (currentProject) {
@@ -553,7 +567,28 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
                 } catch (updateError) {
                     logger.error('Failed to apply changes:', updateError);
 
-                    const errorContent = '❌ Sorry, I encountered an error while applying the changes. Please try again.';
+                    // Extract the actual error message
+                    const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+                    logger.error('Error message to display:', errorMessage);
+                    
+                    // Format the error for display
+                    let errorContent = '❌ **Error Applying Changes**\n\n';
+                    
+                    // Check if it's a deployment/build error
+                    if (errorMessage.includes('Failed to compile') || 
+                        errorMessage.includes('Unexpected token') ||
+                        errorMessage.includes('Type error') ||
+                        errorMessage.includes('Module not found') ||
+                        errorMessage.includes('Syntax Error')) {
+                        errorContent += `Your changes were saved but deployment failed:\n\n\`\`\`\n${errorMessage.substring(0, 800)}\n\`\`\`\n\n`;
+                        errorContent += '**What to do:**\n';
+                        errorContent += '- Review the error above\n';
+                        errorContent += '- Ask me to fix the specific error\n';
+                        errorContent += '- Or describe what changes you want differently';
+                    } else {
+                        errorContent += `${errorMessage}\n\n`;
+                        errorContent += 'Please try again or rephrase your request.';
+                    }
                     
                     // Update the last AI message with error
                     setChat(prev => {
@@ -608,7 +643,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>(
             const aiResponse = data.response;
             
             // Track the project ID where chat messages are stored
-            if (data.projectId && !chatProjectId) {
+            // Always update chatProjectId when server returns a projectId to ensure sync
+            if (data.projectId && data.projectId !== chatProjectId) {
                 setChatProjectId(data.projectId);
                 logger.log('📝 Chat messages stored in project:', data.projectId);
             }
@@ -715,10 +751,18 @@ Please build this project with all the features and requirements discussed above
             // Credits are only captured server-side on successful completion
             // If the call fails, server won't capture the tracked credits
             
-            // setError(err instanceof Error ? err.message : 'An error occurred');
+            // Extract the actual error message
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            logger.error('Error message to display:', errorMessage);
+            
+            // Format the error for display
+            let errorContent = '❌ **Error**\n\n';
+            errorContent += `${errorMessage}\n\n`;
+            errorContent += 'Please try again or let me know if you need help.';
+            
             const errorMsg: ChatMessage = {
                 role: 'ai',
-                content: 'Sorry, I encountered an error. Please try again.',
+                content: errorContent,
                 phase: currentPhase,
                 timestamp: Date.now()
             };
@@ -799,15 +843,21 @@ Please build this project with all the features and requirements discussed above
                         resolve(project);
                     } else if (job.status === 'failed') {
                         clearInterval(pollInterval);
-                        logger.log('❌ Job failed, details:', {
-                            error: job.error,
-                            result: job.result,
-                            hasDeploymentError: job.result?.deploymentError,
-                            deploymentError: job.result?.deploymentError
-                        });
+                        logger.error('❌ Job failed, full job details:', JSON.stringify(job, null, 2));
+                        logger.error('❌ Job error field:', job.error);
+                        logger.error('❌ Job result field:', job.result);
+                        logger.error('❌ Job result.deploymentError:', job.result?.deploymentError);
+                        logger.error('❌ Job result.deploymentLogs:', job.result?.deploymentLogs?.substring(0, 200));
                         
                         // Try to extract detailed error message from result
-                        const errorMessage = job.result?.deploymentError || job.error || 'Job failed';
+                        // Priority: result.deploymentError > result.error > job.error > generic message
+                        const errorMessage = 
+                            job.result?.deploymentError || 
+                            job.result?.error ||
+                            job.error || 
+                            'Job failed - no error details available';
+                        
+                        logger.error('❌ Final error message to display:', errorMessage);
                         reject(new Error(errorMessage));
                     } else if (attempt >= maxAttempts) {
                         clearInterval(pollInterval);
@@ -870,6 +920,13 @@ Please build this project with all the features and requirements discussed above
                 body: JSON.stringify({
                     prompt: generationPrompt,
                     projectId: chatProjectId || undefined,  // Pass existing project ID for chat preservation
+                    sessionId: chatSessionId,  // Pass session ID for message transfer
+                    conversationHistory: chat.map(msg => ({  // Pass full conversation history
+                        role: msg.role,
+                        content: msg.content,
+                        phase: msg.phase,
+                        timestamp: msg.timestamp
+                    })),
                     appType: appType  // Pass selected app type to use correct boilerplate
                 }),
             });
@@ -1015,27 +1072,48 @@ Please build this project with all the features and requirements discussed above
             const errorMessage = err instanceof Error ? err.message : 'An error occurred';
 
             logger.error('Generation failed:', errorMessage);
+            logger.error('Full error object:', err);
             
             // Format deployment errors more clearly
             let displayMessage = errorMessage;
-            if (errorMessage.includes('Deployment failed')) {
+            
+            // Check if this is a deployment error (contains common error patterns)
+            const isDeploymentError = 
+                errorMessage.includes('Deployment failed') ||
+                errorMessage.includes('Build failed') ||
+                errorMessage.includes('Type \'') ||  // TypeScript error
+                errorMessage.includes('Module not found') ||
+                errorMessage.includes('Cannot find') ||
+                errorMessage.includes('Error:') ||
+                errorMessage.toLowerCase().includes('failed to compile') ||
+                errorMessage.toLowerCase().includes('build error');
+            
+            if (isDeploymentError) {
                 // Extract the specific error from deployment failure message
-                // Try both patterns: "Deployment failed after N attempts: error" and "Deployment failed: error"
+                // Try multiple patterns
                 const matchWithAttempts = errorMessage.match(/Deployment failed after \d+ attempts: (.+)/);
                 const matchSimple = errorMessage.match(/Deployment failed: (.+)/);
                 const match = matchWithAttempts || matchSimple;
                 
+                let deployError = errorMessage;
                 if (match) {
-                    const deployError = match[1];
-                    displayMessage = `❌ **Deployment Failed**\n\nYour app was generated successfully, but deployment to Vercel failed with the following error:\n\n\`\`\`\n${deployError.substring(0, 500)}\n\`\`\`\n\nPlease check the error above and try again. Common issues include:\n- TypeScript errors\n- Missing dependencies\n- Configuration issues`;
-                } else {
-                    // Fallback: show the full error message
-                    displayMessage = `❌ **Deployment Failed**\n\n${errorMessage}`;
+                    deployError = match[1];
                 }
+                
+                // Clean up the error message and limit length
+                const cleanError = deployError
+                    .replace(/^Error:\s*/i, '')  // Remove "Error:" prefix
+                    .trim()
+                    .substring(0, 1000);  // Increase limit to show more context
+                
+                displayMessage = `❌ **Deployment Failed**\n\nYour app was generated successfully, but deployment to Vercel failed with the following error:\n\n\`\`\`\n${cleanError}\n\`\`\`\n\n**Common fixes:**\n- Check for TypeScript errors in your code\n- Verify all dependencies are installed\n- Review configuration files (tsconfig.json, next.config.ts)\n- Check the full error message above for specific issues\n\nWould you like me to help fix this error?`;
+            } else {
+                // Non-deployment errors get simpler formatting
+                displayMessage = `❌ **Error**\n\n${errorMessage}`;
             }
             
             // setError(errorMessage);
-            const errorContent = displayMessage.includes('**Deployment Failed**') ? displayMessage : `❌ ${displayMessage}`;
+            const errorContent = displayMessage;
             const genErrorMsg: ChatMessage = {
                 role: 'ai',
                 content: errorContent,
@@ -1164,6 +1242,34 @@ Please build this project with all the features and requirements discussed above
                                 >
                                     {msg.content}
                                 </ReactMarkdown>
+                                {/* Retry button for error messages */}
+                                {msg.role === 'ai' && msg.content.includes('❌') && msg.content.includes('Error') && (
+                                    <button
+                                        onClick={() => {
+                                            // Extract the error message from the content
+                                            const errorMatch = msg.content.match(/```\n([\s\S]+?)\n```/);
+                                            const errorMessage = errorMatch ? errorMatch[1] : msg.content;
+                                            
+                                            // Set the prompt with error context
+                                            setPrompt(`The deployment failed with this error:\n\n${errorMessage}\n\nPlease fix this error.`);
+                                            
+                                            // Focus the input
+                                            setTimeout(() => {
+                                                const input = document.querySelector('textarea[placeholder*="message"]') as HTMLTextAreaElement;
+                                                if (input) {
+                                                    input.focus();
+                                                }
+                                            }, 100);
+                                        }}
+                                        className="mt-3 px-4 py-2 bg-black hover:bg-gray-800 text-white text-xs font-medium rounded-full transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={aiLoading}
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Retry - Fix This Error
+                                    </button>
+                                )}
                                 {msg.role === 'ai' && msg.changedFiles && msg.changedFiles.length > 0 && (
                                     <div className="mt-3 pt-3 border-t border-gray-200">
                                         <div className="flex items-center gap-2 mb-2">

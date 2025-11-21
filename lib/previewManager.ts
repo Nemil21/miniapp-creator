@@ -336,21 +336,51 @@ export async function createPreview(
         logger.error(`❌ Error details: ${response.error || 'Unknown error'}`);
         logger.log(`📋 Response has logs field: ${!!response.logs}`);
         logger.log(`📋 Response has output field: ${!!response.output}`);
+        logger.log(`📋 Response has stdout field: ${!!response.stdout}`);
+        logger.log(`📋 Response has stderr field: ${!!response.stderr}`);
         logger.log(`📋 Response has details field: ${!!response.details}`);
         
-        // Return deployment error info instead of throwing
-        // This allows the caller to parse errors and retry with fixes
-        const deploymentLogs = (response.logs as string) || (response.output as string) || (response.details as string) || '';
+        // Try to extract the REAL error from all available fields
+        // Priority: stderr > stdout > output > logs > details > error message
+        const stderr = (response.stderr as string) || '';
+        const stdout = (response.stdout as string) || '';
+        const output = (response.output as string) || '';
+        const logs = (response.logs as string) || '';
+        const details = (response.details as string) || '';
+        
+        // Combine all sources of error information
+        const allErrorInfo = stderr || stdout || output || logs || details || '';
+        const deploymentLogs = allErrorInfo || ((response.logs as string) || (response.output as string) || (response.details as string) || '');
+        
+        logger.log(`📋 stderr length: ${stderr.length}`);
+        logger.log(`📋 stdout length: ${stdout.length}`);
+        logger.log(`📋 output length: ${output.length}`);
+        logger.log(`📋 logs length: ${logs.length}`);
+        logger.log(`📋 Combined error info (first 500 chars):`, allErrorInfo.substring(0, 500));
         logger.log(`📋 Deployment logs length: ${deploymentLogs.length} characters`);
+        
+        // Extract the most useful error message
+        // Priority: deploymentError field > error field > combined logs
+        let finalErrorMessage = (response.deploymentError as string) || (response.error as string) || 'Unknown deployment error';
+        
+        // If error message is still generic (like "npx exited null"), use the detailed logs
+        if (finalErrorMessage.includes('npx exited') || finalErrorMessage === 'null' || finalErrorMessage.length < 20) {
+          // Use the combined error info instead
+          finalErrorMessage = allErrorInfo || finalErrorMessage;
+          logger.log(`📋 Replaced generic error with detailed logs (first 500 chars):`, finalErrorMessage.substring(0, 500));
+        } else {
+          logger.log(`📋 Using error as-is (first 500 chars):`, finalErrorMessage.substring(0, 500));
+        }
         
         const errorResponse: PreviewResponse = {
           url: `https://${projectId}.${CUSTOM_DOMAIN_BASE}`,
           status: 'deployment_failed',
           port: 3000,
-          deploymentError: response.error as string || 'Unknown deployment error',
+          deploymentError: finalErrorMessage,
           deploymentLogs,
         };
         
+        logger.error(`❌ Returning error response with deploymentError length: ${finalErrorMessage.length}`);
         return errorResponse;
       }
 
@@ -579,9 +609,20 @@ export async function redeployToVercel(
     if (!response.ok) {
       const errorText = await response.text();
       logger.error(`❌ Redeploy request failed: ${response.status} ${errorText}`);
-      throw new Error(
-        `Failed to redeploy to Vercel: ${response.status} ${errorText}`
-      );
+      
+      // Try to parse JSON error response to extract the actual error message
+      let actualError = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        // Extract the actual error from deploymentError or error field
+        actualError = errorJson.deploymentError || errorJson.error || errorText;
+        logger.log(`📋 Extracted error from JSON response:`, actualError.substring(0, 300));
+      } catch (parseError) {
+        // If not JSON, use the text as-is
+        logger.log(`⚠️ Could not parse error as JSON, using raw text`);
+      }
+      
+      throw new Error(actualError);
     }
 
     const apiResponse = await response.json() as {
