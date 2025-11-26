@@ -5,8 +5,7 @@ import { db, projects } from '../../../db';
 import { eq } from 'drizzle-orm';
 import { getUserBySessionToken, getProjectFiles } from '../../../lib/database';
 import { config } from '../../../lib/config';
-import fs from 'fs/promises';
-import path from 'path';
+
   
 // Validate manifest structure
 function validateManifest(manifest: unknown): { valid: boolean; error?: string } {
