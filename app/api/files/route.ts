@@ -9,7 +9,7 @@ import {
   updateGeneratedFile,
   deleteGeneratedFile,
 } from "../../../lib/previewManager";
-import { getProjectFiles } from "../../../lib/database";
+import { getProjectFiles, upsertProjectFile, deleteProjectFile } from "../../../lib/database";
 import { headers } from "next/headers";
 
 // GET: List files or fetch file content from generated directory
@@ -176,13 +176,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
+    // CRITICAL: Save to database FIRST - this is the source of truth for deployments
+    try {
+      await upsertProjectFile(projectId, filename, content);
+      logger.log(`✅ File saved to DATABASE: ${filename}`);
+    } catch (error) {
+      logger.error(`❌ Failed to save file to database:`, error);
+      // This is critical - fail the request if database save fails
+      return NextResponse.json({ error: "Failed to save file to database" }, { status: 500 });
+    }
+
     // Write to local filesystem (for backup and consistency)
     try {
       await updateGeneratedFile(projectId, filename, content);
       logger.log(`✅ File saved locally: ${filename}`);
     } catch (error) {
       logger.warn(`⚠️ Failed to save file locally:`, error);
-      // Don't fail the request if local save fails
+      // Don't fail the request if local save fails - database is the source of truth
     }
 
     // Update the preview with the new file (optional - may not be supported on Railway)
@@ -191,7 +201,7 @@ export async function PUT(request: NextRequest) {
       logger.log(`✅ Preview updated with file: ${filename}`);
     } catch (error) {
       logger.warn(`⚠️  Failed to update preview files (this is expected on Railway):`, error);
-      logger.log(`📁 File ${filename} has been saved locally`);
+      logger.log(`📁 File ${filename} has been saved to database and locally`);
       // Don't fail the request - preview updates are optional
     }
 
@@ -232,6 +242,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
+    // CRITICAL: Delete from database FIRST - this is the source of truth for deployments
+    try {
+      await deleteProjectFile(projectId, filename);
+      logger.log(`✅ File deleted from DATABASE: ${filename}`);
+    } catch (error) {
+      logger.error(`❌ Failed to delete file from database:`, error);
+      return NextResponse.json(
+        { error: "Failed to delete file from database" },
+        { status: 500 }
+      );
+    }
+
     // Delete from local filesystem
     // Use local generated folder for development, /tmp/generated for production
     const generatedDir = process.env.NODE_ENV === 'production' 
@@ -246,26 +268,24 @@ export async function DELETE(request: NextRequest) {
       }
     } catch (error) {
       logger.warn(`⚠️ Failed to delete file locally:`, error);
+      // Don't fail - database is the source of truth
     }
 
-    // Delete from preview
+    // Delete from preview (optional cleanup)
     try {
       await deleteGeneratedFile(projectId, filename);
       logger.log(`✅ Generated file deleted: ${filename}`);
-
-      return NextResponse.json({
-        success: true,
-        filename,
-        projectId,
-        message: "File deleted successfully",
-      });
     } catch (error) {
-      logger.error(`❌ Failed to delete generated file:`, error);
-      return NextResponse.json(
-        { error: "Failed to delete generated file" },
-        { status: 500 }
-      );
+      logger.warn(`⚠️ Failed to delete generated file:`, error);
+      // Don't fail - database is the source of truth
     }
+
+    return NextResponse.json({
+      success: true,
+      filename,
+      projectId,
+      message: "File deleted successfully",
+    });
   } catch (error) {
     logger.error("❌ Error deleting file:", error);
     return NextResponse.json(

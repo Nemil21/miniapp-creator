@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateGeneratedFile } from '../../../lib/previewManager';
 import { db, projects } from '../../../db';
 import { eq } from 'drizzle-orm';
-import { getUserBySessionToken } from '../../../lib/database';
+import { getUserBySessionToken, getProjectFiles } from '../../../lib/database';
 import { config } from '../../../lib/config';
 import fs from 'fs/promises';
 import path from 'path';
@@ -225,47 +225,16 @@ export async function POST(req: NextRequest) {
       } else {
         logger.log('🚀 Triggering full Vercel redeploy with manifest file...');
         
-        // Read all project files to include in redeploy
-        const outputDir = process.env.NODE_ENV === 'production' 
-          ? '/tmp/generated' 
-          : path.join(process.cwd(), 'generated');
-        const projectDir = path.join(outputDir, projectId);
-        const allFiles: { filename: string; content: string }[] = [];
+        // CRITICAL: Read project files from DATABASE, not filesystem
+        // This ensures user edits are included in the deployment
+        const dbFiles = await getProjectFiles(projectId);
+        logger.log(`📦 Read ${dbFiles.length} files from DATABASE for Vercel redeploy`);
         
-        async function readDir(dir: string, baseDir: string) {
-          const entries = await fs.readdir(dir, { withFileTypes: true });
-          
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(baseDir, fullPath);
-            
-            // Skip certain directories
-            if (
-              entry.name === 'node_modules' ||
-              entry.name === '.next' ||
-              entry.name === '.vercel' ||
-              entry.name === 'dist' ||
-              entry.name === 'build' ||
-              entry.name === '.git'
-            ) {
-              continue;
-            }
-            
-            if (entry.isDirectory()) {
-              await readDir(fullPath, baseDir);
-            } else {
-              try {
-                const content = await fs.readFile(fullPath, 'utf-8');
-                allFiles.push({ filename: relativePath, content });
-              } catch (readError) {
-                logger.warn(`⚠️ Failed to read file ${relativePath}:`, readError);
-              }
-            }
-          }
-        }
-        
-        await readDir(projectDir, projectDir);
-        logger.log(`📦 Read ${allFiles.length} files for Vercel redeploy`);
+        // Convert database files to the format expected by the deployment API
+        const allFiles: { filename: string; content: string }[] = dbFiles.map(f => ({
+          filename: f.filename,
+          content: f.content
+        }));
         
         // Convert files to object format for direct API call
         const filesObject: { [key: string]: string } = {};

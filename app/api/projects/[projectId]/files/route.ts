@@ -2,7 +2,7 @@ import { logger } from "../../../../../lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { createPreview } from "@/lib/previewManager";
-import { getProjectById } from "@/lib/database";
+import { getProjectById, getProjectFiles, upsertProjectFile } from "@/lib/database";
 import fs from "fs-extra";
 import path from "path";
 
@@ -51,50 +51,27 @@ export async function POST(
     // Create directory if it doesn't exist
     await fs.ensureDir(path.dirname(fullFilePath));
 
-    // Write the updated content
+    // Write the updated content to filesystem
     await fs.writeFile(fullFilePath, content, "utf-8");
-    logger.log(`✅ File updated: ${filePath}`);
+    logger.log(`✅ File updated on disk: ${filePath}`);
+
+    // CRITICAL: Also save to database to ensure it's included in deployments
+    await upsertProjectFile(projectId, filePath, content);
+    logger.log(`✅ File saved to database: ${filePath}`);
 
     // If redeploy is requested, trigger a new deployment
     if (redeploy) {
       logger.log(`🚀 Triggering redeployment for project: ${projectId}`);
 
       try {
-        // Read all files from the project directory
-        const files: { filename: string; content: string }[] = [];
-        
-        async function readDir(dir: string, baseDir: string) {
-          const entries = await fs.readdir(dir, { withFileTypes: true });
-          
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(baseDir, fullPath);
-            
-            // Skip node_modules, .next, etc.
-            if (
-              entry.name === 'node_modules' ||
-              entry.name === '.next' ||
-              entry.name === '.vercel' ||
-              entry.name === 'dist' ||
-              entry.name === 'build'
-            ) {
-              continue;
-            }
-            
-            if (entry.isDirectory()) {
-              await readDir(fullPath, baseDir);
-            } else {
-              const content = await fs.readFile(fullPath, 'utf-8');
-              files.push({
-                filename: relativePath,
-                content
-              });
-            }
-          }
-        }
-        
-        await readDir(projectDir, projectDir);
-        logger.log(`📦 Read ${files.length} files for redeployment`);
+        // CRITICAL: Read files from DATABASE, not filesystem
+        // This ensures all user edits are included in the deployment
+        const dbFiles = await getProjectFiles(projectId);
+        const files = dbFiles.map(f => ({
+          filename: f.filename,
+          content: f.content
+        }));
+        logger.log(`📦 Read ${files.length} files from DATABASE for redeployment`);
 
         // Get project's app type from database
         const project = await getProjectById(projectId);
