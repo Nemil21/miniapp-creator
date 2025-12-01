@@ -22,6 +22,13 @@ interface Project {
   updatedAt: string;
 }
 
+// Featured URLs that should appear at the top
+const FEATURED_URLS = [
+  'https://0175c0d2-6c77-4165-9884-97790dc36db8-o1b9ut3rd-earnkit.vercel.app/',
+  'https://40470a01-9306-420f-b905-c092517eb8b7-rlh4kqoue-earnkit.vercel.app/',
+  'https://9ca5beb9-5d6c-4d27-9858-9c0ac875a31b-qwppw2c27-earnkit.vercel.app/',
+];
+
 function DiscoverContent() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,8 +86,24 @@ function DiscoverContent() {
           createdAt: app.createdAt,
           updatedAt: app.updatedAt,
         }));
+
+        // Sort projects: featured URLs first, then by updatedAt (most recent first)
+        const sortedProjects = transformedProjects.sort((a, b) => {
+          const aUrl = a.appLink || a.previewUrl || a.vercelUrl || '';
+          const bUrl = b.appLink || b.previewUrl || b.vercelUrl || '';
+          
+          const aIsFeatured = FEATURED_URLS.some(url => aUrl.includes(url) || url.includes(aUrl));
+          const bIsFeatured = FEATURED_URLS.some(url => bUrl.includes(url) || url.includes(bUrl));
+          
+          // Featured projects come first
+          if (aIsFeatured && !bIsFeatured) return -1;
+          if (!aIsFeatured && bIsFeatured) return 1;
+          
+          // Within featured or non-featured groups, sort by most recent
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        });
         
-        setProjects(transformedProjects);
+        setProjects(sortedProjects);
       } catch (error) {
         console.error("Failed to load discover projects:", error);
       } finally {
