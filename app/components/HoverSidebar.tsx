@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthContext } from '../contexts/AuthContext';
 
 interface Project {
@@ -29,6 +30,7 @@ export interface HoverSidebarRef {
 export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
   function HoverSidebar({ onProjectSelect, onNewProject, isOpen, onToggle }, ref) {
   const { sessionToken } = useAuthContext();
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -75,6 +77,10 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
     onNewProject();
   };
 
+  const handleDiscover = () => {
+    router.push('/discover');
+  };
+
   return (
     <div className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isOpen ? 'w-64' : 'w-0 border-r-0 overflow-hidden'}`}>
       {isOpen && (
@@ -82,6 +88,18 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
           {/* Projects Section */}
           <div className="flex-1 overflow-y-auto py-4">
             <div className="flex flex-col items-center gap-3 p-1">
+                {/* Discover Button */}
+                <button
+                onClick={handleDiscover}
+                className="flex items-center justify-center transition-all bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 w-full mx-3 px-3 py-2"
+                title="Discover Miniapps"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <span className="ml-2 text-sm font-medium">Discover</span>
+              </button>
+              
               {/* New Project Button */}
               <button
                 onClick={handleNewProject}
@@ -93,6 +111,8 @@ export const HoverSidebar = forwardRef<HoverSidebarRef, HoverSidebarProps>(
                 </svg>
                 <span className="ml-2 text-sm font-medium">New Project</span>
               </button>
+
+            
 
               {/* Project List */}
               {isLoading ? (
