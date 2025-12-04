@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
+import { FarcasterMigrationModal } from './FarcasterMigrationModal';
 
 interface TemplateOption {
   id: string;
@@ -33,8 +35,23 @@ const templateOptions: TemplateOption[] = [
 ];
 
 export function TemplateSelector({ selectedAppType, onSelectTemplate }: TemplateSelectorProps) {
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+
+  const handleTemplateClick = (template: TemplateOption) => {
+    if (template.appType === 'farcaster') {
+      setShowMigrationModal(true);
+    } else {
+      onSelectTemplate(template.appType);
+    }
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto">
+      <FarcasterMigrationModal
+        isOpen={showMigrationModal}
+        onClose={() => setShowMigrationModal(false)}
+      />
+      
       <div className="text-center mb-8">
         <div className="mb-4 flex justify-center">
           <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center">
@@ -55,7 +72,7 @@ export function TemplateSelector({ selectedAppType, onSelectTemplate }: Template
           return (
             <button
               key={template.id}
-              onClick={() => onSelectTemplate(template.appType)}
+              onClick={() => handleTemplateClick(template)}
               className={`group relative bg-white rounded-2xl p-6 text-left transition-all duration-200 flex flex-col gap-3 ${
                 isSelected 
                   ? 'border-2 border-black shadow-lg ring-2 ring-black ring-opacity-10' 
