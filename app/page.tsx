@@ -31,7 +31,7 @@ function HomeContent() {
   const [currentProject, setCurrentProject] = useState<GeneratedProject | null>(null);
   const [projectForPreview, setProjectForPreview] = useState<GeneratedProject | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedAppType, setSelectedAppType] = useState<'farcaster' | 'web3'>('farcaster');
+  const [selectedAppType, setSelectedAppType] = useState<'farcaster' | 'web3'>('web3');
   const { sessionToken } = useAuthContext();
   const { apiCall } = useApiUtils();
   const chatInterfaceRef = useRef<ChatInterfaceRef>(null);
@@ -179,7 +179,7 @@ function HomeContent() {
     console.log('🆕 handleNewProject called - clearing current project');
     setCurrentProject(null);
     setProjectForPreview(null);
-    setSelectedAppType('farcaster'); // Reset to default
+    setSelectedAppType('web3'); // Reset to default
     
     // Clear any preview delay timer
     if (previewDelayTimerRef.current) {
